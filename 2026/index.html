@@ -1,249 +1,436 @@
 <!DOCTYPE html>
 <html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Uproszczony Kalkulator Podatkowy</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">    
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap"
+      rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
     <div class="Tax-Calculator-Wrapper">
-        <section class="calculator">
-            <div class="calculator-container">
-                <div class="copy-sidebar">
-                    <div class="copy-sidebar-toggle">
-                        <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-                            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 18l6-6-6-6"/>
-                        </svg>
-                    </div>
-                    <div class="copy-sidebar-content">
-                        <h3>Kopiuj wartości</h3>
-                        <button class="copy-button" id="copyValues">
-                            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
-                                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2"/>
-                            </svg>
-                            <span>Kopiuj do schowka</span>
-                        </button>
-                        <div class="copy-success-message" id="copySuccess">Skopiowano!</div>
-                    </div>
-                </div>
-                <h1>Uproszczony Kalkulator Podatkowy</h1>
-
-                <div class="input-section">
-                    <div class="input-group">
-                        <label>Przychód</label>
-                        <input type="text" id="revenue" value="">
-                        <span class="error-message" id="revenue-error"></span>
-                    </div>
-                    <div class="input-group">
-                        <label>Koszty</label>
-                        <input type="text" id="costs" value="">
-                        <span class="error-message" id="costs-error"></span>
-                    </div>
-                </div>
-
-                <div class="button-container">
-                    <button id="calculateButton"><span>Pokaż wyniki</span></button>
-                </div>
-
-                <div id="resultsSection" class="hidden">
-                    <div class="section" id="calculationSection">
-                        <div class="input-group">
-                            <label>Dochód</label>
-                            <input type="text" id="income" readonly>
-                        </div>
-                        <div class="input-group" id="ipBoxContainer">
-                            <label>Współczynnik IP BOX %</label>
-                            <div class="input-percentage">
-                                <input type="number" id="ipBoxCoeff" value="25" min="0" max="100" step="1" readonly>
-                            </div>
-                            <button class="edit-icon" id="ipBoxEdit" title="Edytuj">✎</button>
-                            <span class="error-message" id="ipBoxCoeff-error"></span>
-                        </div>
-                        <div class="input-group" id="jointTaxationCard">
-                            <label>Wspólne rozliczenie z małżonkiem</label>
-                            <div class="radio-group">
-                                <label><input type="radio" name="jointTaxation" value="yes"> Tak</label>
-                                <label><input type="radio" name="jointTaxation" value="no" checked> Nie</label>
-                            </div>
-                        </div>
-                        <div class="input-group" id="spouseIncomeCard">
-                            <label>Dochód małżonka</label>
-                            <input type="text" id="spouseIncome" value="0" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Wybierz stawkę ryczałtu</label>
-                            <div class="checkbox-group">
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="2" data-target="C9"> 2%</label>
-                                    <input type="text" class="rate-input" data-for="C9" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="3" data-target="D9"> 3%</label>
-                                    <input type="text" class="rate-input hidden" data-for="D9" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="5.5" data-target="E9"> 5,5%</label>
-                                    <input type="text" class="rate-input hidden" data-for="E9" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="8.5" data-target="F9"> 8,5%</label>
-                                    <input type="text" class="rate-input hidden" data-for="F9" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="8.5-12.5" data-target="G9"> 8,5% i 12,5% powyżej<br>100 000 zł</label>
-                                    <input type="text" class="rate-input hidden" data-for="G9" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="10" data-target="C11"> 10%</label>
-                                    <input type="text" class="rate-input hidden" data-for="C11" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="12" data-target="D11"> 12%</label>
-                                    <input type="text" class="rate-input hidden" data-for="D11" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="14" data-target="E11"> 14%</label>
-                                    <input type="text" class="rate-input hidden" data-for="E11" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="15" data-target="F11"> 15%</label>
-                                    <input type="text" class="rate-input hidden" data-for="F11" placeholder="przychód...">
-                                </div>
-                                <div class="checkbox-wrapper">
-                                    <label><input type="checkbox" value="17" data-target="G11"> 17%</label>
-                                    <input type="text" class="rate-input hidden" data-for="G11" placeholder="przychód...">
-                                </div>
-                            </div>
-                            <div class="multiple-rates-wrapper">
-                                <div class="multiple-rates-revenue-info">
-                                    <p>Przychód do rozdysponowania: </p>
-                                </div>
-                                <div class="multiple-rates-control">
-                                    <span class="info-tooltip">
-                                        <img src="./images/info-16.svg" alt="info"/>
-                                    </span>
-                                    <label class="toggle-label">
-                                        Wiele stawek ryczałtu
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="multipleRatesToggle">
-                                            <span class="slider"></span>
-                                        </label>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <p class="disclaimer">Poniższe należności zawierają podatek oraz składkę zdrowotną. Nie uwzględniają składek społecznych.</p>
-
-                    <h2 class="section-title">Skala Podatkowa</h2>
-                    <div class="section" id="skalaPodatkowa">
-                        <div class="input-group">
-                            <label>Skala podatkowa</label>
-                            <input type="text" id="C6" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Skala podatkowa (IP BOX)</label>
-                            <input type="text" id="F6" readonly>
-                        </div>
-                        <div class="input-group joint-taxation-card hidden">
-                            <label>Skala podatkowa <span class="helper-text">/ wspólne rozliczenie z małżonkiem</span></label>
-                            <input type="text" id="C6_joint" readonly>
-                        </div>
-                        <div class="input-group joint-taxation-card hidden">
-                            <label>Skala podatkowa (IP BOX) <span class="helper-text">/ wspólne rozliczenie z małżonkiem</span></label>
-                            <input type="text" id="F6_joint" readonly>
-                        </div>
-                    </div>
-
-                    <h2 class="section-title">Podatek liniowy</h2>
-                    <div class="section" id="podatekLiniowy">
-                        <div class="input-group">
-                            <label>Podatek liniowy</label>
-                            <input type="text" id="E6" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Podatek liniowy (IP BOX)</label>
-                            <input type="text" id="G6" readonly>
-                        </div>
-                    </div>
-
-                    <h2 class="section-title">Ryczałt</h2>
-                    <div class="section">
-                        <div id="ryczalt-message" class="ryczalt-message">Wybierz stawkę ryczałtu</div>
-                        <div class="input-group">
-                            <label>Ryczałt 2%</label>
-                            <input type="text" id="C9" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 3%</label>
-                            <input type="text" id="D9" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 5,5%</label>
-                            <input type="text" id="E9" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 8,5%</label>
-                            <input type="text" id="F9" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 8,5% i 12,5% powyżej 100 000 zł</label>
-                            <input type="text" id="G9" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 10%</label>
-                            <input type="text" id="C11" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 12%</label>
-                            <input type="text" id="D11" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 14%</label>
-                            <input type="text" id="E11" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 15%</label>
-                            <input type="text" id="F11" readonly>
-                        </div>
-                        <div class="input-group">
-                            <label>Ryczałt 17%</label>
-                            <input type="text" id="G11" readonly>
-                        </div>
-                    </div>
-                    <div id="ratesTotal" class="rates-total hidden">
-                        <div class="rates-total-content">
-                            <div id="ratesC17" class="rates-c17">
-                                <span class="rates-c17-label">Składka zdrowotna:&nbsp;</span>
-                                <span id="ratesC17Value"></span>
-                            </div>
-                            <div class="rates-sum">
-                                <span class="rates-total-label">Łącznie z składką:&nbsp;</span>
-                                <span id="ratesTotalValue"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+      <section class="calculator">
+        <div class="calculator-container">
+          <div class="copy-sidebar">
+            <div class="copy-sidebar-toggle">
+              <svg
+                class="chevron-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="24"
+                height="24">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 18l6-6-6-6" />
+              </svg>
             </div>
-        </section>
-        <section class="l-discaimer">
-            <div class="legal-disclaimer" id="legalDisclaimer">
-                <div class="legal-disclaimer-header">
-                    <svg class="legal-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
-                        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-8m0-18H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8m0-18v18m-4-8h4m-4-4h4"/>
-                    </svg>
-                    <h3>Notka prawna</h3>
-                </div>
-                <p>Uproszczony Kalkulator Podatkowy ma wyłącznie charakter informacyjny; wyniki uzyskane za jego pomocą nie są obowiązujące i nie mogą stanowić podstawy jakichkolwiek roszczeń wobec Kancelarii Mentzen Sp. z o.o. Informacje otrzymane dzięki jego wykorzystaniu nie są sugestią, poradą prawną, inwestycyjną ani doradztwem podatkowym. Faktyczna sytuacja podatnika może różnić się w poszczególnych przypadkach, szczególnie w zależności od specyficznych okoliczności faktycznych, prawnych i finansowych. Kancelaria Mentzen Sp. z o.o. nie odpowiada za jakiekolwiek straty lub szkody wynikłe z korzystania z tego narzędzia lub z nim związane.</p>
+            <div class="copy-sidebar-content">
+              <h3>Kopiuj wartości</h3>
+              <button class="copy-button" id="copyValues">
+                <svg
+                  class="copy-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20">
+                  <path
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" />
+                </svg>
+                <span>Kopiuj do schowka</span>
+              </button>
+              <div class="copy-success-message" id="copySuccess">
+                Skopiowano!
+              </div>
             </div>
-        </section>
+          </div>
+          <h1>Uproszczony Kalkulator Podatkowy</h1>
+
+          <div class="input-section">
+            <div class="input-group">
+              <label>Przychód</label>
+              <input type="text" id="revenue" value="" />
+              <span class="error-message" id="revenue-error"></span>
+            </div>
+            <div class="input-group">
+              <label>Koszty</label>
+              <input type="text" id="costs" value="" />
+              <span class="error-message" id="costs-error"></span>
+            </div>
+          </div>
+
+          <div class="button-container">
+            <button id="calculateButton"><span>Pokaż wyniki</span></button>
+          </div>
+
+          <div id="resultsSection" class="hidden">
+            <div class="section" id="calculationSection">
+              <div class="input-group">
+                <label>Dochód</label>
+                <input type="text" id="income" readonly />
+              </div>
+              <div class="input-group" id="ipBoxContainer">
+                <label>Współczynnik IP BOX %</label>
+                <div class="input-percentage">
+                  <input
+                    type="number"
+                    id="ipBoxCoeff"
+                    value="25"
+                    min="0"
+                    max="100"
+                    step="1"
+                    readonly />
+                </div>
+                <button class="edit-icon" id="ipBoxEdit" title="Edytuj">
+                  ✎
+                </button>
+                <span class="error-message" id="ipBoxCoeff-error"></span>
+              </div>
+              <div class="input-group" id="jointTaxationCard">
+                <label>Wspólne rozliczenie z małżonkiem</label>
+                <div class="radio-group">
+                  <label
+                    ><input type="radio" name="jointTaxation" value="yes" />
+                    Tak</label
+                  >
+                  <label
+                    ><input
+                      type="radio"
+                      name="jointTaxation"
+                      value="no"
+                      checked />
+                    Nie</label
+                  >
+                </div>
+              </div>
+              <div class="input-group" id="spouseIncomeCard">
+                <label>Dochód małżonka</label>
+                <input type="text" id="spouseIncome" value="0" readonly />
+              </div>
+              <div class="input-group">
+                <label>Wybierz stawkę ryczałtu</label>
+                <div class="checkbox-group">
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="2"
+                        data-target="ryczalt2" />
+                      2%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input"
+                      data-for="ryczalt2"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="3"
+                        data-target="ryczalt3" />
+                      3%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt3"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="5.5"
+                        data-target="ryczalt5_5" />
+                      5,5%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt5_5"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="8.5"
+                        data-target="ryczalt8_5" />
+                      8,5%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt8_5"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="8.5-12.5"
+                        data-target="ryczalt8_5_12_5" />
+                      8,5% i 12,5% powyżej<br />100 000 zł</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt8_5_12_5"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="10"
+                        data-target="ryczalt10" />
+                      10%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt10"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="12"
+                        data-target="ryczalt12" />
+                      12%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt12"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="14"
+                        data-target="ryczalt14" />
+                      14%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt14"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="15"
+                        data-target="ryczalt15" />
+                      15%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt15"
+                      placeholder="przychód..." />
+                  </div>
+                  <div class="checkbox-wrapper">
+                    <label
+                      ><input
+                        type="checkbox"
+                        value="17"
+                        data-target="ryczalt17" />
+                      17%</label
+                    >
+                    <input
+                      type="text"
+                      class="rate-input hidden"
+                      data-for="ryczalt17"
+                      placeholder="przychód..." />
+                  </div>
+                </div>
+                <div class="multiple-rates-wrapper">
+                  <div class="multiple-rates-revenue-info">
+                    <p>Przychód do rozdysponowania:</p>
+                  </div>
+                  <div class="multiple-rates-control">
+                    <span class="info-tooltip">
+                      <img src="./images/info-16.svg" alt="info" />
+                    </span>
+                    <label class="toggle-label">
+                      Wiele stawek ryczałtu
+                      <label class="toggle-switch">
+                        <input type="checkbox" id="multipleRatesToggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p class="disclaimer">
+              Poniższe należności zawierają podatek oraz składkę zdrowotną. Nie
+              uwzględniają składek społecznych.
+            </p>
+
+            <h2 class="section-title">Skala Podatkowa</h2>
+            <div class="section" id="skalaPodatkowa">
+              <div class="input-group">
+                <label>Skala podatkowa</label>
+                <input type="text" id="taxScale" readonly />
+              </div>
+              <div class="input-group">
+                <label>Skala podatkowa (IP BOX)</label>
+                <input type="text" id="taxScaleIpBox" readonly />
+              </div>
+              <div class="input-group joint-taxation-card hidden">
+                <label
+                  >Skala podatkowa
+                  <span class="helper-text"
+                    >/ wspólne rozliczenie z małżonkiem</span
+                  ></label
+                >
+                <input type="text" id="taxScaleJoint" readonly />
+              </div>
+              <div class="input-group joint-taxation-card hidden">
+                <label
+                  >Skala podatkowa (IP BOX)
+                  <span class="helper-text"
+                    >/ wspólne rozliczenie z małżonkiem</span
+                  ></label
+                >
+                <input type="text" id="taxScaleIpBoxJoint" readonly />
+              </div>
+            </div>
+
+            <h2 class="section-title">Podatek liniowy</h2>
+            <div class="section" id="podatekLiniowy">
+              <div class="input-group">
+                <label>Podatek liniowy</label>
+                <input type="text" id="taxLinear" readonly />
+              </div>
+              <div class="input-group">
+                <label>Podatek liniowy (IP BOX)</label>
+                <input type="text" id="taxLinearIpBox" readonly />
+              </div>
+            </div>
+
+            <h2 class="section-title">Ryczałt</h2>
+            <div class="section">
+              <div id="ryczalt-message" class="ryczalt-message">
+                Wybierz stawkę ryczałtu
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 2%</label>
+                <input type="text" id="ryczalt2" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 3%</label>
+                <input type="text" id="ryczalt3" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 5,5%</label>
+                <input type="text" id="ryczalt5_5" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 8,5%</label>
+                <input type="text" id="ryczalt8_5" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 8,5% i 12,5% powyżej 100 000 zł</label>
+                <input type="text" id="ryczalt8_5_12_5" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 10%</label>
+                <input type="text" id="ryczalt10" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 12%</label>
+                <input type="text" id="ryczalt12" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 14%</label>
+                <input type="text" id="ryczalt14" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 15%</label>
+                <input type="text" id="ryczalt15" readonly />
+              </div>
+              <div class="input-group">
+                <label>Ryczałt 17%</label>
+                <input type="text" id="ryczalt17" readonly />
+              </div>
+            </div>
+            <div id="ratesTotal" class="rates-total hidden">
+              <div class="rates-total-content">
+                <div id="ratesHealthRyczalt" class="rates-health-ryczalt">
+                  <span class="rates-health-ryczalt-label"
+                    >Składka zdrowotna:&nbsp;</span
+                  >
+                  <span id="ratesHealthRyczaltValue"></span>
+                </div>
+                <div class="rates-sum">
+                  <span class="rates-total-label"
+                    >Łącznie z składką:&nbsp;</span
+                  >
+                  <span id="ratesTotalValue"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="l-discaimer">
+        <div class="legal-disclaimer" id="legalDisclaimer">
+          <div class="legal-disclaimer-header">
+            <svg
+              class="legal-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-8m0-18H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8m0-18v18m-4-8h4m-4-4h4" />
+            </svg>
+            <h3>Notka prawna</h3>
+          </div>
+          <p>
+            Uproszczony Kalkulator Podatkowy ma wyłącznie charakter
+            informacyjny; wyniki uzyskane za jego pomocą nie są obowiązujące i
+            nie mogą stanowić podstawy jakichkolwiek roszczeń wobec Kancelarii
+            Mentzen Sp. z o.o. Informacje otrzymane dzięki jego wykorzystaniu
+            nie są sugestią, poradą prawną, inwestycyjną ani doradztwem
+            podatkowym. Faktyczna sytuacja podatnika może różnić się w
+            poszczególnych przypadkach, szczególnie w zależności od
+            specyficznych okoliczności faktycznych, prawnych i finansowych.
+            Kancelaria Mentzen Sp. z o.o. nie odpowiada za jakiekolwiek straty
+            lub szkody wynikłe z korzystania z tego narzędzia lub z nim
+            związane.
+          </p>
+        </div>
+      </section>
     </div>
+    <script src="taxConstants.js"></script>
     <script src="script.js"></script>
-    <script src="test.js"></script>
-</body>
+  </body>
 </html>

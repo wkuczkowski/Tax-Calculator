@@ -1,0 +1,28 @@
+{
+  "name": "tax-calculator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint 2026/",
+    "lint:fix": "eslint 2026/ --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hicior/Tax-Calculator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Hicior/Tax-Calculator/issues"
+  },
+  "homepage": "https://github.com/Hicior/Tax-Calculator#readme",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "globals": "^17.3.0"
+  }
+}

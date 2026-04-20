@@ -1,0 +1,145 @@
+=== DANE PODSTAWOWE ===
+Przychód: 300 000,00 zł
+Koszty: 10 000,00 zł
+Dochód: 290 000,00 zł
+Dochód małżonka: 20 000,00 zł
+Współczynnik IP BOX: 25%
+
+==================================================
+=== PODSUMOWANIE WYNIKÓW ===
+==================================================
+
+SKALA PODATKOWA:
+  Indywidualnie: 91 300,00 zł
+  Indywidualnie (IP BOX): 71 725,00 zł
+  Wspólnie z małżonkiem: 70 100,00 zł
+  Wspólnie z małżonkiem (IP BOX): 51 025,00 zł
+
+PODATEK LINIOWY:
+  Podatek liniowy: 66 631,00 zł
+  Podatek liniowy (IP BOX): 56 481,00 zł
+
+==================================================
+=== SZCZEGÓŁY OBLICZEŃ ===
+==================================================
+
+--- SKALA PODATKOWA ---
+
+Dochód: 290 000,00 zł
+
+Składka zdrowotna (9% od dochodu):
+  290 000,00 zł × 9% = 26 100,00 zł
+  Składka zdrowotna do zapłaty: 26 100,00 zł
+
+Obliczenie podatku (skala podatkowa):
+  Kwota wolna (do 30 000,00 zł): 30 000,00 zł × 0% = 0,00 zł
+  I próg 12% (30 001,00 zł - 120 000,00 zł): 90 000,00 zł × 12% = 10 800,00 zł
+  II próg 32% (120 001,00 zł - 1 000 000,00 zł): 170 000,00 zł × 32% = 54 400,00 zł
+  Suma podatku: 65 200,00 zł
+
+RAZEM (podatek + składka zdrowotna): 91 300,00 zł
+
+--- SKALA PODATKOWA (IP BOX) ---
+
+Dochód: 290 000,00 zł
+Współczynnik IP BOX: 25%
+
+Składka zdrowotna (9% od dochodu):
+  290 000,00 zł × 9% = 26 100,00 zł
+  Składka zdrowotna do zapłaty: 26 100,00 zł
+
+Obliczenie podatku (skala podatkowa z IP BOX):
+  Podział dochodu:
+    - Dochód IP BOX (25%): 72 500,00 zł
+    - Dochód pozostały (75%): 217 500,00 zł
+
+  Podatek IP BOX:
+    72 500,00 zł × 5% = 3625,00 zł
+
+  Podatek od pozostałego dochodu (skala):
+    Kwota wolna (do 30 000,00 zł): 30 000,00 zł × 0% = 0,00 zł
+    I próg 12%: 90 000,00 zł × 12% = 10 800,00 zł
+    II próg 32%: 97 500,00 zł × 32% = 31 200,00 zł
+    Suma podatku od pozostałego dochodu: 42 000,00 zł
+
+  Łączny podatek: 3625,00 zł + 42 000,00 zł = 45 625,00 zł
+
+RAZEM (podatek + składka zdrowotna): 71 725,00 zł
+
+--- SKALA PODATKOWA (WSPÓLNIE Z MAŁŻONKIEM) ---
+
+Dochód: 290 000,00 zł
+Dochód małżonka: 20 000,00 zł
+
+Składka zdrowotna (9% od dochodu):
+  290 000,00 zł × 9% = 26 100,00 zł
+  Składka zdrowotna do zapłaty: 26 100,00 zł
+
+Obliczenie podatku (skala podatkowa - wspólnie z małżonkiem):
+  Dochód małżonka: 20 000,00 zł
+  Niewykorzystane kwoty z rozliczenia małżonka:
+    - z kwoty wolnej: 10 000,00 zł
+    - z I progu (12%): 90 000,00 zł
+    - z II progu (32%): 880 000,00 zł
+  Kwota wolna (do 40 000,00 zł): 40 000,00 zł × 0% = 0,00 zł
+  I próg 12%: 180 000,00 zł × 12% = 21 600,00 zł
+  II próg 32%: 70 000,00 zł × 32% = 22 400,00 zł
+  Suma podatku: 44 000,00 zł
+
+RAZEM (podatek + składka zdrowotna): 70 100,00 zł
+
+--- SKALA PODATKOWA Z IP BOX (WSPÓLNIE Z MAŁŻONKIEM) ---
+
+Dochód: 290 000,00 zł
+Dochód małżonka: 20 000,00 zł
+Współczynnik IP BOX: 25%
+
+(Obliczenie analogiczne do skali z IP BOX, z uwzględnieniem niewykorzystanych kwot małżonka)
+
+--- PODATEK LINIOWY ---
+
+Dochód: 290 000,00 zł
+
+Składka zdrowotna (4,9% od dochodu):
+  290 000,00 zł × 4,9% = 14 210,00 zł
+  Składka zdrowotna do zapłaty: 14 210,00 zł
+  Limit odliczenia od podstawy opodatkowania: 14 100,00 zł
+  Składka do odliczenia: 14 100,00 zł
+
+Obliczenie podatku (podatek liniowy):
+  Podstawa opodatkowania: 290 000,00 zł - 14 100,00 zł = 275 900,00 zł
+  Podatek 19%: 275 900,00 zł × 19% = 52 421,00 zł
+  Suma podatku: 52 421,00 zł
+
+RAZEM (podatek + składka zdrowotna): 66 631,00 zł
+
+--- PODATEK LINIOWY (IP BOX) ---
+
+Dochód: 290 000,00 zł
+Współczynnik IP BOX: 25%
+
+Składka zdrowotna (4,9% od dochodu):
+  290 000,00 zł × 4,9% = 14 210,00 zł
+  Składka zdrowotna do zapłaty: 14 210,00 zł
+  Limit odliczenia od podstawy opodatkowania: 14 100,00 zł
+  Składka do odliczenia: 14 100,00 zł
+
+Obliczenie podatku (podatek liniowy z IP BOX):
+  Podział dochodu:
+    - Dochód IP BOX (25%): 72 500,00 zł
+    - Dochód pozostały (75%): 217 500,00 zł
+
+  Podatek IP BOX:
+    72 500,00 zł × 5% = 3625,00 zł
+
+  Podatek od pozostałego dochodu (liniowy):
+    Podstawa: 217 500,00 zł - 14 100,00 zł = 203 400,00 zł
+    203 400,00 zł × 19% = 38 646,00 zł
+
+  Łączny podatek: 3625,00 zł + 38 646,00 zł = 42 271,00 zł
+
+RAZEM (podatek + składka zdrowotna): 56 481,00 zł
+
+==================================================
+Obliczenia wykonane kalkulatorem podatkowym 2026
+Stan prawny: od 2026-02-01

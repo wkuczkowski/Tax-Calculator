@@ -1,0 +1,186 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Edge cases > linear health deduction limit (14 100) is hit at high income (revenue 600 000) 1`] = `
+{
+  "income": "600 000,00 zł",
+  "taxLinear": "140 721,00 zł",
+  "taxLinearIpBox": "119 721,00 zł",
+  "taxScale": "218 400,00 zł",
+  "taxScaleIpBox": "177 900,00 zł",
+}
+`;
+
+exports[`Edge cases > negative income (revenue < costs) still applies min health 1`] = `
+{
+  "income": "-5000,00 zł",
+  "taxLinear": "5190,48 zł",
+  "taxLinearIpBox": "5127,98 zł",
+  "taxScale": "5190,48 zł",
+  "taxScaleIpBox": "5127,98 zł",
+}
+`;
+
+exports[`IP BOX > IP BOX 50% with high income - mixed standard + IP BOX, both above solidarity threshold 1`] = `
+{
+  "income": "2 500 000,00 zł",
+  "taxLinear": "654 257,00 zł",
+  "taxLinearIpBox": "429 257,00 zł",
+  "taxScale": "1 057 400,00 zł",
+  "taxScaleIpBox": "669 900,00 zł",
+}
+`;
+
+exports[`IP BOX > IP BOX 100% - all income taxed at 5% 1`] = `
+{
+  "income": "200 000,00 zł",
+  "taxLinear": "45 938,00 zł",
+  "taxLinearIpBox": "19 800,00 zł",
+  "taxScale": "54 400,00 zł",
+  "taxScaleIpBox": "28 000,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > spouse income 0 - full quota transfer (kwota wolna + bands) 1`] = `
+{
+  "income": "200 000,00 zł",
+  "taxLinear": "45 938,00 zł",
+  "taxLinearIpBox": "38 938,00 zł",
+  "taxScale": "54 400,00 zł",
+  "taxScaleIpBox": "40 900,00 zł",
+  "taxScaleIpBoxJoint": "31 300,00 zł",
+  "taxScaleJoint": "34 800,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > spouse income 50 000 - partial 12% bracket transfer 1`] = `
+{
+  "income": "200 000,00 zł",
+  "taxLinear": "45 938,00 zł",
+  "taxLinearIpBox": "38 938,00 zł",
+  "taxScale": "54 400,00 zł",
+  "taxScaleIpBox": "40 900,00 zł",
+  "taxScaleIpBoxJoint": "34 900,00 zł",
+  "taxScaleJoint": "40 400,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > spouse income 200 000 - partial 32% bracket transfer 1`] = `
+{
+  "income": "500 000,00 zł",
+  "taxLinear": "116 821,00 zł",
+  "taxLinearIpBox": "99 321,00 zł",
+  "taxScale": "177 400,00 zł",
+  "taxScaleIpBox": "143 650,00 zł",
+  "taxScaleIpBoxJoint": "143 650,00 zł",
+  "taxScaleJoint": "177 400,00 zł",
+}
+`;
+
+exports[`Ryczałt - multiple rates mode > split 200 000 across 8.5% / 12% / 15% with 50% deduction rebuild 1`] = `
+{
+  "income": "200 000,00 zł",
+  "ratesHealthRyczalt": "9966,96 zł",
+  "ratesTotal": "30 897,82 zł",
+  "ryczalt12": "7801,98 zł",
+  "ryczalt15": "6752,48 zł",
+  "ryczalt8_5": "6376,40 zł",
+  "taxLinear": "45 938,00 zł",
+  "taxLinearIpBox": "38 938,00 zł",
+  "taxScale": "54 400,00 zł",
+  "taxScaleIpBox": "40 900,00 zł",
+}
+`;
+
+exports[`Ryczałt - single rate per revenue band > 8.5%/12.5% mixed split at 100 000 threshold (revenue 250 000) 1`] = `
+{
+  "income": "250 000,00 zł",
+  "ryczalt8_5_12_5": "36 594,03 zł",
+  "taxLinear": "57 422,50 zł",
+  "taxLinearIpBox": "48 672,50 zł",
+  "taxScale": "74 900,00 zł",
+  "taxScaleIpBox": "58 025,00 zł",
+}
+`;
+
+exports[`Ryczałt - single rate per revenue band > high band (revenue 500 000, mult 1.8) - rate 15% 1`] = `
+{
+  "income": "500 000,00 zł",
+  "ryczalt15": "91 594,94 zł",
+  "taxLinear": "116 821,00 zł",
+  "taxLinearIpBox": "99 321,00 zł",
+  "taxScale": "177 400,00 zł",
+  "taxScaleIpBox": "143 650,00 zł",
+}
+`;
+
+exports[`Ryczałt - single rate per revenue band > low band (revenue 50 000, mult 0.6) - rate 8.5% 1`] = `
+{
+  "income": "50 000,00 zł",
+  "ryczalt8_5": "9976,04 zł",
+  "taxLinear": "13 704,29 zł",
+  "taxLinearIpBox": "11 954,29 zł",
+  "taxScale": "7590,48 zł",
+  "taxScaleIpBox": "6715,48 zł",
+}
+`;
+
+exports[`Ryczałt - single rate per revenue band > mid band (revenue 200 000, mult 1.0) - rate 12% 1`] = `
+{
+  "income": "200 000,00 zł",
+  "ryczalt12": "33 368,94 zł",
+  "taxLinear": "45 938,00 zł",
+  "taxLinearIpBox": "38 938,00 zł",
+  "taxScale": "54 400,00 zł",
+  "taxScaleIpBox": "40 900,00 zł",
+}
+`;
+
+exports[`Tax brackets > income above solidarity threshold (revenue 1 500 000) exercises 4% solidarity in scale, linear, and IP BOX paths 1`] = `
+{
+  "income": "1 500 000,00 zł",
+  "taxLinear": "375 257,00 zł",
+  "taxLinearIpBox": "307 757,00 zł",
+  "taxScale": "607 400,00 zł",
+  "taxScaleIpBox": "491 150,00 zł",
+}
+`;
+
+exports[`Tax brackets > income below tax-free quota uses min health for both scale and linear 1`] = `
+{
+  "income": "25 000,00 zł",
+  "taxLinear": "8954,29 zł",
+  "taxLinearIpBox": "8079,29 zł",
+  "taxScale": "5190,48 zł",
+  "taxScaleIpBox": "5502,98 zł",
+}
+`;
+
+exports[`Tax brackets > income deep in the 32% bracket (revenue 300 000, costs 10 000) 1`] = `
+{
+  "income": "290 000,00 zł",
+  "taxLinear": "66 631,00 zł",
+  "taxLinearIpBox": "56 481,00 zł",
+  "taxScale": "91 300,00 zł",
+  "taxScaleIpBox": "71 725,00 zł",
+}
+`;
+
+exports[`Tax brackets > income exactly at tax-free amount (30 000) - boundary 1`] = `
+{
+  "income": "30 000,00 zł",
+  "taxLinear": "9904,29 zł",
+  "taxLinearIpBox": "8854,29 zł",
+  "taxScale": "5190,48 zł",
+  "taxScaleIpBox": "5565,48 zł",
+}
+`;
+
+exports[`Tax brackets > income exactly at the 12% threshold (120 000) - boundary 1`] = `
+{
+  "income": "120 000,00 zł",
+  "taxLinear": "27 562,80 zł",
+  "taxLinearIpBox": "23 362,80 zł",
+  "taxScale": "21 600,00 zł",
+  "taxScaleIpBox": "19 500,00 zł",
+}
+`;

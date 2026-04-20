@@ -46,4 +46,23 @@ export default [
       },
     },
   },
+  // Config for tests - ESM modules running under Vitest/Node
+  {
+    files: ["2026/tests/**/*.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+        describe: "readonly",
+        it: "readonly",
+        test: "readonly",
+        expect: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        vi: "readonly",
+      },
+    },
+  },
 ];

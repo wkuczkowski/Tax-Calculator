@@ -9,7 +9,9 @@
   },
   "packageManager": "npm@11.12.1",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:update": "vitest run -u",
     "lint": "eslint 2026/",
     "lint:fix": "eslint 2026/ --fix"
   },
@@ -27,6 +29,8 @@
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
-    "globals": "^17.3.0"
+    "globals": "^17.3.0",
+    "jsdom": "^29.0.2",
+    "vitest": "^4.1.4"
   }
 }

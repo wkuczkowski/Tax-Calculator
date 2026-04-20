@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TAX_CONSTANTS > derived constants match the recorded baseline 1`] = `
+{
+  "EFFECTIVE_IPBOX_PLUS_HEALTH": 0.099,
+  "EFFECTIVE_LINEAR_RATE": 0.239,
+  "EFFECTIVE_LINEAR_RATE_SOLIDARITY": 0.27899999999999997,
+  "PIT_RATE_SOLIDARITY": 0.36,
+  "TAX_BAND_12": 90000,
+  "TAX_BAND_32": 880000,
+}
+`;
+
+exports[`TAX_CONSTANTS > matches the recorded baseline 1`] = `
+{
+  "ASSUME_FULL_YEAR_FROM_FEB": true,
+  "AVG_SALARY_Q4_PREV": 9228.64,
+  "EFFECTIVE_FROM": "2026-02-01",
+  "HEALTH_RATE_LINEAR": 0.049,
+  "HEALTH_RATE_RYCZALT": 0.09,
+  "HEALTH_RATE_SCALE": 0.09,
+  "IP_BOX_RATE": 0.05,
+  "LINEAR_HEALTH_DEDUCTION_LIMIT": 14100,
+  "LINEAR_PIT_RATE": 0.19,
+  "MIN_WAGE": 4806,
+  "PIT_RATE_12": 0.12,
+  "PIT_RATE_32": 0.32,
+  "RYCZALT_8_5_THRESHOLD": 100000,
+  "RYCZALT_BASE_MULT_HIGH": 1.8,
+  "RYCZALT_BASE_MULT_LOW": 0.6,
+  "RYCZALT_BASE_MULT_MID": 1,
+  "RYCZALT_HEALTH_DEDUCTION_FACTOR": 0.5,
+  "RYCZALT_RATE_10": 0.1,
+  "RYCZALT_RATE_12": 0.12,
+  "RYCZALT_RATE_12_5": 0.125,
+  "RYCZALT_RATE_14": 0.14,
+  "RYCZALT_RATE_15": 0.15,
+  "RYCZALT_RATE_17": 0.17,
+  "RYCZALT_RATE_2": 0.02,
+  "RYCZALT_RATE_3": 0.03,
+  "RYCZALT_RATE_5_5": 0.055,
+  "RYCZALT_RATE_8_5": 0.085,
+  "RYCZALT_REVENUE_THRESHOLD_HIGH": 300000,
+  "RYCZALT_REVENUE_THRESHOLD_LOW": 60000,
+  "SOLIDARITY_RATE": 0.04,
+  "SOLIDARITY_THRESHOLD": 1000000,
+  "TAX_DECREASING_AMOUNT": 3600,
+  "TAX_FREE_AMOUNT": 30000,
+  "TAX_THRESHOLD_12": 120000,
+}
+`;
+
+exports[`taxMath helpers > min health contributions match the recorded baseline 1`] = `
+{
+  "annual": 5190.48,
+  "linearMinThresholdAnnual": 105928.16,
+  "linearMinThresholdMonthly": 8827.35,
+  "monthly": 432.54,
+}
+`;
+
+exports[`taxMath helpers > ryczałt health contributions across all 3 revenue bands match baseline 1`] = `
+{
+  "revenue_100000": {
+    "annual": 9966.96,
+    "monthly": 830.58,
+    "multiplier": 1,
+  },
+  "revenue_400000": {
+    "annual": 17940.48,
+    "monthly": 1495.04,
+    "multiplier": 1.8,
+  },
+  "revenue_50000": {
+    "annual": 5980.2,
+    "monthly": 498.35,
+    "multiplier": 0.6,
+  },
+}
+`;

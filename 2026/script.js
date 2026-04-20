@@ -1047,8 +1047,6 @@
    */
   function getScaleTaxJointBreakdown(income, spouseIncome, healthScale) {
     const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
@@ -1129,8 +1127,6 @@
     const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
     const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-    const minHealth = taxMath.getMinHealthAnnual();
-    const minHealthThreshold = taxMath.getMinHealthThresholdLinearAnnual();
 
     let text = `\nObliczenie podatku (podatek liniowy):\n`;
 

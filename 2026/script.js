@@ -115,62 +115,148 @@
   /* ==================================================
      Tax Calculation Functions
   ================================================== */
-  function calculateSpouseFreeQuota0(spouseIncome) {
-    return spouseIncome <= TAX_CONSTANTS.TAX_FREE_AMOUNT
-      ? TAX_CONSTANTS.TAX_FREE_AMOUNT - spouseIncome
-      : 0;
+  function getScalePitDetails(income) {
+    const taxableIncome = Math.max(income, 0);
+    const taxFreeAmount = TAX_CONSTANTS.TAX_FREE_AMOUNT;
+    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
+    const inTaxFree = Math.min(taxableIncome, taxFreeAmount);
+    const in12Bracket = Math.min(
+      Math.max(taxableIncome - taxFreeAmount, 0),
+      TAX_BAND_12
+    );
+    const in32Bracket = Math.max(taxableIncome - threshold12, 0);
+    const tax12 = taxMath.round2(in12Bracket * TAX_CONSTANTS.PIT_RATE_12);
+    const tax32 = taxMath.round2(in32Bracket * TAX_CONSTANTS.PIT_RATE_32);
+    const totalPit = taxMath.round2(tax12 + tax32);
+
+    return {
+      taxableIncome,
+      inTaxFree,
+      in12Bracket,
+      in32Bracket,
+      tax12,
+      tax32,
+      totalPit,
+    };
   }
-  function calculateSpouseFreeQuota12(spouseIncome) {
-    if (spouseIncome <= TAX_CONSTANTS.TAX_THRESHOLD_12) {
-      if (spouseIncome <= TAX_CONSTANTS.TAX_FREE_AMOUNT) return TAX_BAND_12;
-      return TAX_BAND_12 - (spouseIncome - TAX_CONSTANTS.TAX_FREE_AMOUNT);
-    }
-    return 0;
+
+  function getSolidarityLevyDetails(baseIncome) {
+    const solidarityBase = Math.max(baseIncome, 0);
+    const threshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
+    const aboveThreshold = Math.max(solidarityBase - threshold, 0);
+    const levy = taxMath.round2(aboveThreshold * TAX_CONSTANTS.SOLIDARITY_RATE);
+
+    return {
+      solidarityBase,
+      threshold,
+      aboveThreshold,
+      levy,
+    };
   }
-  function calculateSpouseFreeQuota32(spouseIncome) {
-    if (spouseIncome <= TAX_CONSTANTS.SOLIDARITY_THRESHOLD) {
-      if (spouseIncome <= TAX_CONSTANTS.TAX_THRESHOLD_12) return TAX_BAND_32;
-      return TAX_BAND_32 - (spouseIncome - TAX_CONSTANTS.TAX_THRESHOLD_12);
-    }
-    return 0;
+
+  function calculateScalePitOnly(income) {
+    return getScalePitDetails(income).totalPit;
   }
-  function calculateTaxWithSpouse(
+
+  function calculateSolidarityLevy(baseIncome) {
+    return getSolidarityLevyDetails(baseIncome).levy;
+  }
+
+  function calculateJointScalePitOnly(income, spouseIncome) {
+    const jointIncome = taxMath.round2(income + spouseIncome);
+    const halfIncome = taxMath.round2(jointIncome / 2);
+    return taxMath.round2(calculateScalePitOnly(halfIncome) * 2);
+  }
+
+  function calculateScaleTaxTotal(income, healthScale) {
+    return taxMath.round2(
+      calculateScalePitOnly(income) +
+        calculateSolidarityLevy(income) +
+        healthScale
+    );
+  }
+
+  function calculateJointScaleTaxTotal(income, spouseIncome, healthScale) {
+    return taxMath.round2(
+      calculateJointScalePitOnly(income, spouseIncome) +
+        calculateSolidarityLevy(income) +
+        calculateSolidarityLevy(spouseIncome) +
+        healthScale
+    );
+  }
+
+  function getLinearPitDetails(baseIncome) {
+    const pitBase = Math.max(baseIncome, 0);
+    const pit = taxMath.round2(pitBase * TAX_CONSTANTS.LINEAR_PIT_RATE);
+
+    return {
+      pitBase,
+      pit,
+    };
+  }
+
+  function calculateLinearPitOnly(baseIncome) {
+    return getLinearPitDetails(baseIncome).pit;
+  }
+
+  function calculateLinearTaxTotal(income, healthLinearDeduction, healthLinear) {
+    const pitBase = Math.max(income - healthLinearDeduction, 0);
+    return taxMath.round2(
+      calculateLinearPitOnly(pitBase) +
+        calculateSolidarityLevy(pitBase) +
+        healthLinear
+    );
+  }
+
+  function calculateLinearIpBoxTaxTotal(
     income,
-    jointTaxation,
+    ipBoxCoeff,
+    healthLinearDeduction,
+    healthLinear
+  ) {
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
+    const ipBoxPit = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    const standardPitBase = Math.max(regularIncome - healthLinearDeduction, 0);
+
+    return taxMath.round2(
+      ipBoxPit +
+        calculateLinearPitOnly(standardPitBase) +
+        calculateSolidarityLevy(standardPitBase) +
+        healthLinear
+    );
+  }
+
+  function getIpBoxIncomeSplit(income, ipBoxCoeff) {
+    const ipBoxIncome = taxMath.round2(income * ipBoxCoeff);
+    const regularIncome = taxMath.round2(income - ipBoxIncome);
+    return { ipBoxIncome, regularIncome };
+  }
+
+  function calculateScaleIpBoxTaxTotal(income, ipBoxCoeff, healthScale) {
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
+    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    return taxMath.round2(
+      ipBoxTax +
+        calculateScalePitOnly(regularIncome) +
+        calculateSolidarityLevy(regularIncome) +
+        healthScale
+    );
+  }
+
+  function calculateJointScaleIpBoxTaxTotal(
+    income,
     spouseIncome,
+    ipBoxCoeff,
     healthScale
   ) {
-    const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const band12 = TAX_BAND_12;
-    const band32 = TAX_BAND_32;
-    const rate12 = TAX_CONSTANTS.PIT_RATE_12;
-    const rate32 = TAX_CONSTANTS.PIT_RATE_32;
-    const rateSolidarity = PIT_RATE_SOLIDARITY;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
-
-    if (!jointTaxation) {
-      return (
-        Math.min(income, taxFree) * 0 +
-        Math.min(Math.max(income - taxFree, 0), band12) * rate12 +
-        Math.min(Math.max(income - taxFree - band12, 0), band32) * rate32 +
-        Math.max(income - solidarityThreshold, 0) * rateSolidarity +
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
+    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    return taxMath.round2(
+      ipBoxTax +
+        calculateJointScalePitOnly(regularIncome, spouseIncome) +
+        calculateSolidarityLevy(regularIncome) +
+        calculateSolidarityLevy(spouseIncome) +
         healthScale
-      );
-    }
-    const J11 = calculateSpouseFreeQuota0(spouseIncome);
-    const K11 = calculateSpouseFreeQuota12(spouseIncome);
-    const L11 = calculateSpouseFreeQuota32(spouseIncome);
-    return (
-      Math.min(income, taxFree + J11) * 0 +
-      Math.min(Math.max(income - (taxFree + J11), 0), band12 + K11) * rate12 +
-      Math.min(
-        Math.max(income - (taxFree + J11) - (band12 + K11), 0),
-        band32 + L11
-      ) *
-        rate32 +
-      Math.max(income - (taxFree + J11) - (band12 + K11) - (band32 + L11), 0) *
-        rateSolidarity +
-      healthScale
     );
   }
 
@@ -257,124 +343,52 @@
     }
     setCalculationValue("healthRyczaltDeduction", healthRyczaltDeduction);
 
-    let J3 = income * (1 - ipBoxCoeff);
+    const jointTaxationEnabled =
+      document.querySelector('input[name="jointTaxation"]:checked').value === "yes";
+    const spouseIncome = jointTaxationEnabled
+      ? parsePLN(document.getElementById("spouseIncome").value)
+      : 0;
 
     // Calculate tax values for individual and joint taxation
-    let taxScale = calculateTaxWithSpouse(
+    let taxScale = calculateScaleTaxTotal(
       income,
-      false,
-      0,
       getCalculationValue("healthScale")
     );
     document.getElementById("taxScale").value = formatPLN(taxScale);
-    if (
-      document.querySelector('input[name="jointTaxation"]:checked').value ===
-      "yes"
-    ) {
-      let taxScaleJoint = calculateTaxWithSpouse(
+    if (jointTaxationEnabled) {
+      let taxScaleJoint = calculateJointScaleTaxTotal(
         income,
-        true,
-        parsePLN(document.getElementById("spouseIncome").value),
+        spouseIncome,
         getCalculationValue("healthScale")
       );
       document.getElementById("taxScaleJoint").value = formatPLN(taxScaleJoint);
     }
 
-    let taxLinear;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
-
-    // Calculate PIT for linear tax (separate from health contribution)
-    const taxBase = Math.max(income - healthLinearDeduction, 0);
-    let linearPit = 0;
-
-    if (taxBase > solidarityThreshold) {
-      // PIT with solidarity tax above threshold
-      linearPit =
-        solidarityThreshold * TAX_CONSTANTS.LINEAR_PIT_RATE +
-        (taxBase - solidarityThreshold) *
-          (TAX_CONSTANTS.LINEAR_PIT_RATE + TAX_CONSTANTS.SOLIDARITY_RATE);
-    } else {
-      linearPit = taxBase * TAX_CONSTANTS.LINEAR_PIT_RATE;
-    }
-
-    // Total = PIT + health contribution (health already calculated on full income)
-    taxLinear = linearPit + healthLinear;
+    let taxLinear = calculateLinearTaxTotal(
+      income,
+      healthLinearDeduction,
+      healthLinear
+    );
     document.getElementById("taxLinear").value = formatPLN(taxLinear);
 
-    let taxScaleIpBox =
-      income * ipBoxCoeff * TAX_CONSTANTS.IP_BOX_RATE +
-      Math.min(J3, TAX_CONSTANTS.TAX_FREE_AMOUNT) * 0 +
-      Math.min(Math.max(J3 - TAX_CONSTANTS.TAX_FREE_AMOUNT, 0), TAX_BAND_12) *
-        TAX_CONSTANTS.PIT_RATE_12 +
-      Math.min(Math.max(J3 - TAX_CONSTANTS.TAX_THRESHOLD_12, 0), TAX_BAND_32) *
-        TAX_CONSTANTS.PIT_RATE_32 +
-      Math.max(J3 - TAX_CONSTANTS.SOLIDARITY_THRESHOLD, 0) *
-        PIT_RATE_SOLIDARITY +
-      getCalculationValue("healthScale");
+    let taxScaleIpBox = calculateScaleIpBoxTaxTotal(
+      income,
+      ipBoxCoeff,
+      getCalculationValue("healthScale")
+    );
     document.getElementById("taxScaleIpBox").value = formatPLN(taxScaleIpBox);
-    if (
-      document.querySelector('input[name="jointTaxation"]:checked').value ===
-      "yes"
-    ) {
-      const spouseIncome = parsePLN(
-        document.getElementById("spouseIncome").value
+    if (jointTaxationEnabled) {
+      let taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
+        income,
+        spouseIncome,
+        ipBoxCoeff,
+        getCalculationValue("healthScale")
       );
-      const J11 = calculateSpouseFreeQuota0(spouseIncome);
-      const K11 = calculateSpouseFreeQuota12(spouseIncome);
-      const L11 = calculateSpouseFreeQuota32(spouseIncome);
-      const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-      const band12 = TAX_BAND_12;
-      const band32 = TAX_BAND_32;
-      let taxScaleIpBoxJoint =
-        income * ipBoxCoeff * TAX_CONSTANTS.IP_BOX_RATE +
-        Math.min(J3, taxFree + J11) * 0 +
-        Math.min(Math.max(J3 - (taxFree + J11), 0), band12 + K11) *
-          TAX_CONSTANTS.PIT_RATE_12 +
-        Math.min(
-          Math.max(J3 - (taxFree + J11) - (band12 + K11), 0),
-          band32 + L11
-        ) *
-          TAX_CONSTANTS.PIT_RATE_32 +
-        Math.max(J3 - (taxFree + J11) - (band12 + K11) - (band32 + L11), 0) *
-          PIT_RATE_SOLIDARITY +
-        getCalculationValue("healthScale");
       document.getElementById("taxScaleIpBoxJoint").value =
         formatPLN(taxScaleIpBoxJoint);
     }
 
-    function calculateLinearIpBox(
-      income,
-      ipBoxCoeff,
-      healthLinearDeduction,
-      healthLinear
-    ) {
-      const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
-
-      const ipBoxIncome = income * ipBoxCoeff;
-      const standardIncome = income * (1 - ipBoxCoeff);
-      const standardTaxBase = Math.max(
-        standardIncome - healthLinearDeduction,
-        0
-      );
-
-      // IP BOX PIT (5% only, health is calculated separately on full income)
-      const ipBoxPit = ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE;
-
-      // Standard PIT (19% + solidarity if applicable)
-      let standardPit = 0;
-      if (standardTaxBase > solidarityThreshold) {
-        standardPit =
-          solidarityThreshold * TAX_CONSTANTS.LINEAR_PIT_RATE +
-          (standardTaxBase - solidarityThreshold) *
-            (TAX_CONSTANTS.LINEAR_PIT_RATE + TAX_CONSTANTS.SOLIDARITY_RATE);
-      } else {
-        standardPit = standardTaxBase * TAX_CONSTANTS.LINEAR_PIT_RATE;
-      }
-
-      // Total = IP BOX PIT + Standard PIT + Health (health on full income)
-      return ipBoxPit + standardPit + healthLinear;
-    }
-    let taxLinearIpBox = calculateLinearIpBox(
+    let taxLinearIpBox = calculateLinearIpBoxTaxTotal(
       income,
       ipBoxCoeff,
       healthLinearDeduction,
@@ -979,62 +993,55 @@
   function getScaleTaxBreakdown(income, healthScale) {
     const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
     const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
+    const pitDetails = getScalePitDetails(income);
+    const levyDetails = getSolidarityLevyDetails(income);
 
     let text = `\nObliczenie podatku (skala podatkowa):\n`;
 
     // Tax-free amount
-    const inTaxFree = Math.min(income, taxFree);
     text += `  Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
-      inTaxFree
+      pitDetails.inTaxFree
     )} × 0% = 0,00 zł\n`;
 
     // 12% bracket
-    let tax12 = 0;
-    if (income > taxFree) {
-      const in12Bracket = Math.min(income - taxFree, threshold12 - taxFree);
-      tax12 = taxMath.round2(in12Bracket * rate12);
+    if (pitDetails.in12Bracket > 0) {
       text += `  I próg ${formatPercentPL(rate12)} (${formatNumberPL(
         taxFree + 1
       )} - ${formatNumberPL(threshold12)}): ${formatNumberPL(
-        in12Bracket
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(tax12)}\n`;
+        pitDetails.in12Bracket
+      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(pitDetails.tax12)}\n`;
     }
 
     // 32% bracket
-    let tax32 = 0;
-    if (income > threshold12) {
-      const in32Bracket = Math.min(
-        income - threshold12,
-        solidarityThreshold - threshold12
-      );
-      tax32 = taxMath.round2(in32Bracket * rate32);
+    if (pitDetails.in32Bracket > 0) {
       text += `  II próg ${formatPercentPL(rate32)} (${formatNumberPL(
         threshold12 + 1
-      )} - ${formatNumberPL(solidarityThreshold)}): ${formatNumberPL(
-        in32Bracket
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(tax32)}\n`;
+      )} i więcej): ${formatNumberPL(
+        pitDetails.in32Bracket
+      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(pitDetails.tax32)}\n`;
     }
 
-    // Solidarity tax
-    let taxSolidarity = 0;
-    if (income > solidarityThreshold) {
-      const inSolidarity = income - solidarityThreshold;
-      taxSolidarity = taxMath.round2(inSolidarity * rateSolidarity);
+    if (levyDetails.levy > 0) {
+      text += `  Suma podatku wg skali: ${formatNumberPL(pitDetails.totalPit)}\n`;
       text += `  Danina solidarnościowa ${formatPercentPL(
         rateSolidarity
-      )} (powyżej ${formatNumberPL(solidarityThreshold)}): ${formatNumberPL(
-        inSolidarity
+      )} (liczona odrębnie, powyżej ${formatNumberPL(
+        levyDetails.threshold
+      )}): ${formatNumberPL(
+        levyDetails.aboveThreshold
       )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        taxSolidarity
+        levyDetails.levy
       )}\n`;
     }
 
-    const totalTax = taxMath.round2(tax12 + tax32 + taxSolidarity);
-    text += `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
+    const totalTax = taxMath.round2(pitDetails.totalPit + levyDetails.levy);
+    text +=
+      levyDetails.levy > 0
+        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
+        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
 
     const total = taxMath.round2(totalTax + healthScale);
     text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
@@ -1047,74 +1054,199 @@
    */
   function getScaleTaxJointBreakdown(income, spouseIncome, healthScale) {
     const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
+    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-
-    const J11 = calculateSpouseFreeQuota0(spouseIncome);
-    const K11 = calculateSpouseFreeQuota12(spouseIncome);
-    const L11 = calculateSpouseFreeQuota32(spouseIncome);
+    const jointIncome = taxMath.round2(income + spouseIncome);
+    const halfIncome = taxMath.round2(jointIncome / 2);
+    const halfPitDetails = getScalePitDetails(halfIncome);
+    const yourLevyDetails = getSolidarityLevyDetails(income);
+    const spouseLevyDetails = getSolidarityLevyDetails(spouseIncome);
+    const jointPit = taxMath.round2(halfPitDetails.totalPit * 2);
+    const totalTax = taxMath.round2(
+      jointPit + yourLevyDetails.levy + spouseLevyDetails.levy
+    );
 
     let text = `\nObliczenie podatku (skala podatkowa - wspólnie z małżonkiem):\n`;
     text += `  Dochód małżonka: ${formatNumberPL(spouseIncome)}\n`;
+    text += `  Łączny dochód: ${formatNumberPL(income)} + ${formatNumberPL(
+      spouseIncome
+    )} = ${formatNumberPL(jointIncome)}\n`;
+    text += `  Połowa łącznego dochodu: ${formatNumberPL(
+      jointIncome
+    )} : 2 = ${formatNumberPL(halfIncome)}\n`;
+    text += `  Podatek od połowy łącznego dochodu:\n`;
+    text += `    Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
+      halfPitDetails.inTaxFree
+    )} × 0% = 0,00 zł\n`;
 
-    // Explain spouse quota transfer
-    if (J11 > 0 || K11 > 0 || L11 > 0) {
-      text += `  Niewykorzystane kwoty z rozliczenia małżonka:\n`;
-      if (J11 > 0) text += `    - z kwoty wolnej: ${formatNumberPL(J11)}\n`;
-      if (K11 > 0) text += `    - z I progu (12%): ${formatNumberPL(K11)}\n`;
-      if (L11 > 0) text += `    - z II progu (32%): ${formatNumberPL(L11)}\n`;
+    if (halfPitDetails.in12Bracket > 0) {
+      text += `    I próg ${formatPercentPL(rate12)} (${formatNumberPL(
+        taxFree + 1
+      )} - ${formatNumberPL(threshold12)}): ${formatNumberPL(
+        halfPitDetails.in12Bracket
+      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(
+        halfPitDetails.tax12
+      )}\n`;
     }
 
-    // Extended tax-free amount
-    const extendedTaxFree = taxFree + J11;
-    const inTaxFree = Math.min(income, extendedTaxFree);
-    text += `  Kwota wolna (do ${formatNumberPL(
-      extendedTaxFree
-    )}): ${formatNumberPL(inTaxFree)} × 0% = 0,00 zł\n`;
-
-    // Extended 12% bracket
-    let tax12 = 0;
-    const band12Extended = TAX_BAND_12 + K11;
-    if (income > extendedTaxFree) {
-      const in12Bracket = Math.min(income - extendedTaxFree, band12Extended);
-      tax12 = taxMath.round2(in12Bracket * rate12);
-      text += `  I próg ${formatPercentPL(rate12)}: ${formatNumberPL(
-        in12Bracket
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(tax12)}\n`;
+    if (halfPitDetails.in32Bracket > 0) {
+      text += `    II próg ${formatPercentPL(rate32)} (${formatNumberPL(
+        threshold12 + 1
+      )} i więcej): ${formatNumberPL(
+        halfPitDetails.in32Bracket
+      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(
+        halfPitDetails.tax32
+      )}\n`;
     }
 
-    // Extended 32% bracket
-    let tax32 = 0;
-    const band32Extended = TAX_BAND_32 + L11;
-    if (income > extendedTaxFree + band12Extended) {
-      const in32Bracket = Math.min(
-        income - extendedTaxFree - band12Extended,
-        band32Extended
-      );
-      tax32 = taxMath.round2(in32Bracket * rate32);
-      text += `  II próg ${formatPercentPL(rate32)}: ${formatNumberPL(
-        in32Bracket
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(tax32)}\n`;
-    }
+    text += `  Podatek od połowy dochodu: ${formatNumberPL(
+      halfPitDetails.totalPit
+    )}\n`;
+    text += `  Podatek wspólny od skali: ${formatNumberPL(
+      halfPitDetails.totalPit
+    )} × 2 = ${formatNumberPL(jointPit)}\n`;
 
-    // Solidarity tax
-    let taxSolidarity = 0;
-    if (income > extendedTaxFree + band12Extended + band32Extended) {
-      const inSolidarity =
-        income - extendedTaxFree - band12Extended - band32Extended;
-      taxSolidarity = taxMath.round2(inSolidarity * rateSolidarity);
-      text += `  Danina solidarnościowa ${formatPercentPL(
+    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
+      text += `  Danina solidarnościowa (liczona odrębnie dla każdego z małżonków):\n`;
+    }
+    if (yourLevyDetails.levy > 0) {
+      text += `    Danina solidarnościowa ${formatPercentPL(
         rateSolidarity
-      )}: ${formatNumberPL(inSolidarity)} × ${formatPercentPL(
-        rateSolidarity
-      )} = ${formatNumberPL(taxSolidarity)}\n`;
+      )} po Twojej stronie: ${formatNumberPL(
+        yourLevyDetails.aboveThreshold
+      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
+        yourLevyDetails.levy
+      )}\n`;
     }
-
-    const totalTax = taxMath.round2(tax12 + tax32 + taxSolidarity);
-    text += `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
+    if (spouseLevyDetails.levy > 0) {
+      text += `    Danina solidarnościowa ${formatPercentPL(
+        rateSolidarity
+      )} po stronie małżonka: ${formatNumberPL(
+        spouseLevyDetails.aboveThreshold
+      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
+        spouseLevyDetails.levy
+      )}\n`;
+    }
 
     const total = taxMath.round2(totalTax + healthScale);
+    text +=
+      yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0
+        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
+        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
+    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+
+    return text;
+  }
+
+  function getIpBoxScaleJointBreakdown(
+    income,
+    spouseIncome,
+    ipBoxCoeff,
+    healthScale
+  ) {
+    const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
+    const jointRegularIncome = taxMath.round2(regularIncome + spouseIncome);
+    const halfJointRegularIncome = taxMath.round2(jointRegularIncome / 2);
+    const halfPitDetails = getScalePitDetails(halfJointRegularIncome);
+    const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
+    const yourLevyDetails = getSolidarityLevyDetails(regularIncome);
+    const spouseLevyDetails = getSolidarityLevyDetails(spouseIncome);
+    const jointScalePit = taxMath.round2(halfPitDetails.totalPit * 2);
+    const totalTax = taxMath.round2(
+      ipBoxTax + jointScalePit + yourLevyDetails.levy + spouseLevyDetails.levy
+    );
+    const total = taxMath.round2(totalTax + healthScale);
+
+    let text = `\nObliczenie podatku (skala podatkowa z IP BOX - wspólnie z małżonkiem):\n`;
+    text += `  Podział dochodu:\n`;
+    text += `    - Dochód IP BOX (${ipBoxCoeff * 100}%): ${formatNumberPL(
+      ipBoxIncome
+    )}\n`;
+    text += `    - Dochód pozostały (${(1 - ipBoxCoeff) * 100}%): ${formatNumberPL(
+      regularIncome
+    )}\n`;
+    text += `  Dochód małżonka: ${formatNumberPL(spouseIncome)}\n`;
+    text += `  Łączny dochód opodatkowany skalą: ${formatNumberPL(
+      regularIncome
+    )} + ${formatNumberPL(spouseIncome)} = ${formatNumberPL(
+      jointRegularIncome
+    )}\n`;
+    text += `  Połowa dochodu opodatkowanego skalą: ${formatNumberPL(
+      jointRegularIncome
+    )} : 2 = ${formatNumberPL(halfJointRegularIncome)}\n`;
+    text += `\n  Podatek IP BOX:\n`;
+    text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
+      ipBoxRate
+    )} = ${formatNumberPL(ipBoxTax)}\n`;
+    text += `\n  Podatek od połowy dochodu opodatkowanego skalą:\n`;
+    text += `    Kwota wolna (do ${formatNumberPL(
+      TAX_CONSTANTS.TAX_FREE_AMOUNT
+    )}): ${formatNumberPL(halfPitDetails.inTaxFree)} × 0% = 0,00 zł\n`;
+
+    if (halfPitDetails.in12Bracket > 0) {
+      text += `    I próg ${formatPercentPL(
+        TAX_CONSTANTS.PIT_RATE_12
+      )}: ${formatNumberPL(halfPitDetails.in12Bracket)} × ${formatPercentPL(
+        TAX_CONSTANTS.PIT_RATE_12
+      )} = ${formatNumberPL(halfPitDetails.tax12)}\n`;
+    }
+
+    if (halfPitDetails.in32Bracket > 0) {
+      text += `    II próg ${formatPercentPL(
+        TAX_CONSTANTS.PIT_RATE_32
+      )}: ${formatNumberPL(halfPitDetails.in32Bracket)} × ${formatPercentPL(
+        TAX_CONSTANTS.PIT_RATE_32
+      )} = ${formatNumberPL(halfPitDetails.tax32)}\n`;
+    }
+
+    text += `  Podatek od połowy dochodu: ${formatNumberPL(
+      halfPitDetails.totalPit
+    )}\n`;
+    text += `  Podatek wspólny od części skalowej: ${formatNumberPL(
+      halfPitDetails.totalPit
+    )} × 2 = ${formatNumberPL(jointScalePit)}\n`;
+
+    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
+      text += `\n  Danina solidarnościowa (liczona odrębnie dla każdego z małżonków):\n`;
+    }
+    if (yourLevyDetails.levy > 0) {
+      text += `    Danina solidarnościowa ${formatPercentPL(
+        TAX_CONSTANTS.SOLIDARITY_RATE
+      )} po Twojej stronie: ${formatNumberPL(
+        yourLevyDetails.aboveThreshold
+      )} × ${formatPercentPL(
+        TAX_CONSTANTS.SOLIDARITY_RATE
+      )} = ${formatNumberPL(yourLevyDetails.levy)}\n`;
+    }
+    if (spouseLevyDetails.levy > 0) {
+      text += `    Danina solidarnościowa ${formatPercentPL(
+        TAX_CONSTANTS.SOLIDARITY_RATE
+      )} po stronie małżonka: ${formatNumberPL(
+        spouseLevyDetails.aboveThreshold
+      )} × ${formatPercentPL(
+        TAX_CONSTANTS.SOLIDARITY_RATE
+      )} = ${formatNumberPL(spouseLevyDetails.levy)}\n`;
+    }
+
+    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
+      text += `\n  Łączny podatek i danina: ${formatNumberPL(
+        ipBoxTax
+      )} + ${formatNumberPL(jointScalePit)}`;
+      if (yourLevyDetails.levy > 0) {
+        text += ` + ${formatNumberPL(yourLevyDetails.levy)}`;
+      }
+      if (spouseLevyDetails.levy > 0) {
+        text += ` + ${formatNumberPL(spouseLevyDetails.levy)}`;
+      }
+      text += ` = ${formatNumberPL(totalTax)}\n`;
+    } else {
+      text += `\n  Łączny podatek: ${formatNumberPL(
+        ipBoxTax
+      )} + ${formatNumberPL(jointScalePit)} = ${formatNumberPL(totalTax)}\n`;
+    }
     text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
@@ -1125,49 +1257,42 @@
    */
   function getLinearTaxBreakdown(income, healthLinear, healthDeduction) {
     const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
 
     let text = `\nObliczenie podatku (podatek liniowy):\n`;
 
     const taxBase = Math.max(income - healthDeduction, 0);
+    const pitDetails = getLinearPitDetails(taxBase);
+    const levyDetails = getSolidarityLevyDetails(taxBase);
     text += `  Podstawa opodatkowania: ${formatNumberPL(
       income
     )} - ${formatNumberPL(healthDeduction)} = ${formatNumberPL(taxBase)}\n`;
 
-    let linearTax = 0;
-    let solidarityTax = 0;
-
-    if (taxBase > solidarityThreshold) {
-      const baseBeforeSolidarity = solidarityThreshold;
-      const baseInSolidarity = taxBase - solidarityThreshold;
-      linearTax = taxMath.round2(baseBeforeSolidarity * linearRate);
-      solidarityTax = taxMath.round2(
-        baseInSolidarity * (linearRate + rateSolidarity)
-      );
-      text += `  Podatek ${formatPercentPL(linearRate)} (do ${formatNumberPL(
-        solidarityThreshold
-      )}): ${formatNumberPL(baseBeforeSolidarity)} × ${formatPercentPL(
-        linearRate
-      )} = ${formatNumberPL(linearTax)}\n`;
-      text += `  Podatek ${formatPercentPL(
-        linearRate + rateSolidarity
-      )} (powyżej ${formatNumberPL(
-        solidarityThreshold
-      )}, w tym danina solidarnościowa): ${formatNumberPL(
-        baseInSolidarity
-      )} × ${formatPercentPL(linearRate + rateSolidarity)} = ${formatNumberPL(
-        solidarityTax
+    if (pitDetails.pitBase > 0) {
+      text += `  Podatek liniowy ${formatPercentPL(linearRate)}: ${formatNumberPL(
+        pitDetails.pitBase
+      )} × ${formatPercentPL(linearRate)} = ${formatNumberPL(
+        pitDetails.pit
       )}\n`;
-    } else {
-      linearTax = taxMath.round2(taxBase * linearRate);
-      text += `  Podatek ${formatPercentPL(linearRate)}: ${formatNumberPL(
-        taxBase
-      )} × ${formatPercentPL(linearRate)} = ${formatNumberPL(linearTax)}\n`;
     }
 
-    const totalTax = taxMath.round2(linearTax + solidarityTax);
-    text += `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
+    if (levyDetails.levy > 0) {
+      text += `  Danina solidarnościowa ${formatPercentPL(
+        rateSolidarity
+      )} (liczona odrębnie, powyżej ${formatNumberPL(
+        levyDetails.threshold
+      )}): ${formatNumberPL(
+        levyDetails.aboveThreshold
+      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
+        levyDetails.levy
+      )}\n`;
+    }
+
+    const totalTax = taxMath.round2(pitDetails.pit + levyDetails.levy);
+    text +=
+      levyDetails.levy > 0
+        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
+        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
 
     const total = taxMath.round2(totalTax + healthLinear);
     text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
@@ -1180,15 +1305,12 @@
    */
   function getIpBoxScaleBreakdown(income, ipBoxCoeff, healthScale) {
     const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
-    const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-
-    const ipBoxIncome = taxMath.round2(income * ipBoxCoeff);
-    const regularIncome = taxMath.round2(income * (1 - ipBoxCoeff));
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
+    const regularPitDetails = getScalePitDetails(regularIncome);
+    const levyDetails = getSolidarityLevyDetails(regularIncome);
 
     let text = `\nObliczenie podatku (skala podatkowa z IP BOX):\n`;
     text += `  Podział dochodu:\n`;
@@ -1209,55 +1331,56 @@
     // Regular income tax (scale)
     text += `\n  Podatek od pozostałego dochodu (skala):\n`;
 
-    const inTaxFree = Math.min(regularIncome, taxFree);
-    text += `    Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
-      inTaxFree
+    text += `    Kwota wolna (do ${formatNumberPL(
+      TAX_CONSTANTS.TAX_FREE_AMOUNT
+    )}): ${formatNumberPL(
+      regularPitDetails.inTaxFree
     )} × 0% = 0,00 zł\n`;
 
-    let tax12 = 0;
-    if (regularIncome > taxFree) {
-      const in12Bracket = Math.min(
-        regularIncome - taxFree,
-        threshold12 - taxFree
-      );
-      tax12 = taxMath.round2(in12Bracket * rate12);
+    if (regularPitDetails.in12Bracket > 0) {
       text += `    I próg ${formatPercentPL(rate12)}: ${formatNumberPL(
-        in12Bracket
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(tax12)}\n`;
-    }
-
-    let tax32 = 0;
-    if (regularIncome > threshold12) {
-      const in32Bracket = Math.min(
-        regularIncome - threshold12,
-        solidarityThreshold - threshold12
-      );
-      tax32 = taxMath.round2(in32Bracket * rate32);
-      text += `    II próg ${formatPercentPL(rate32)}: ${formatNumberPL(
-        in32Bracket
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(tax32)}\n`;
-    }
-
-    let taxSolidarity = 0;
-    if (regularIncome > solidarityThreshold) {
-      const inSolidarity = regularIncome - solidarityThreshold;
-      taxSolidarity = taxMath.round2(inSolidarity * rateSolidarity);
-      text += `    Danina solidarnościowa: ${formatNumberPL(
-        inSolidarity
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        taxSolidarity
+        regularPitDetails.in12Bracket
+      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(
+        regularPitDetails.tax12
       )}\n`;
     }
 
-    const regularTax = taxMath.round2(tax12 + tax32 + taxSolidarity);
-    text += `    Suma podatku od pozostałego dochodu: ${formatNumberPL(
-      regularTax
+    if (regularPitDetails.in32Bracket > 0) {
+      text += `    II próg ${formatPercentPL(rate32)}: ${formatNumberPL(
+        regularPitDetails.in32Bracket
+      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(
+        regularPitDetails.tax32
+      )}\n`;
+    }
+
+    text += `    Suma podatku od pozostałego dochodu wg skali: ${formatNumberPL(
+      regularPitDetails.totalPit
     )}\n`;
 
-    const totalTax = taxMath.round2(ipBoxTax + regularTax);
-    text += `\n  Łączny podatek: ${formatNumberPL(ipBoxTax)} + ${formatNumberPL(
-      regularTax
-    )} = ${formatNumberPL(totalTax)}\n`;
+    if (levyDetails.levy > 0) {
+      text += `    Danina solidarnościowa: ${formatNumberPL(
+        levyDetails.aboveThreshold
+      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
+        levyDetails.levy
+      )}\n`;
+    }
+
+    const totalTax = taxMath.round2(
+      ipBoxTax + regularPitDetails.totalPit + levyDetails.levy
+    );
+    if (levyDetails.levy > 0) {
+      text += `\n  Łączny podatek i danina: ${formatNumberPL(
+        ipBoxTax
+      )} + ${formatNumberPL(regularPitDetails.totalPit)} + ${formatNumberPL(
+        levyDetails.levy
+      )} = ${formatNumberPL(totalTax)}\n`;
+    } else {
+      text += `\n  Łączny podatek: ${formatNumberPL(
+        ipBoxTax
+      )} + ${formatNumberPL(regularPitDetails.totalPit)} = ${formatNumberPL(
+        totalTax
+      )}\n`;
+    }
 
     const total = taxMath.round2(totalTax + healthScale);
     text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
@@ -1276,12 +1399,12 @@
   ) {
     const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
     const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
-    const solidarityThreshold = TAX_CONSTANTS.SOLIDARITY_THRESHOLD;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
 
-    const ipBoxIncome = taxMath.round2(income * ipBoxCoeff);
-    const regularIncome = taxMath.round2(income * (1 - ipBoxCoeff));
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(income, ipBoxCoeff);
     const taxBase = Math.max(regularIncome - healthDeduction, 0);
+    const pitDetails = getLinearPitDetails(taxBase);
+    const levyDetails = getSolidarityLevyDetails(taxBase);
 
     let text = `\nObliczenie podatku (podatek liniowy z IP BOX):\n`;
     text += `  Podział dochodu:\n`;
@@ -1305,34 +1428,36 @@
       healthDeduction
     )} = ${formatNumberPL(taxBase)}\n`;
 
-    let regularTax = 0;
-    let solidarityTax = 0;
-
-    if (taxBase > solidarityThreshold) {
-      const baseBeforeSolidarity = solidarityThreshold;
-      const baseInSolidarity = taxBase - solidarityThreshold;
-      regularTax = taxMath.round2(baseBeforeSolidarity * linearRate);
-      solidarityTax = taxMath.round2(
-        baseInSolidarity * (linearRate + rateSolidarity)
-      );
-      text += `    Podatek ${formatPercentPL(linearRate)} (do ${formatNumberPL(
-        solidarityThreshold
-      )}): ${formatNumberPL(regularTax)}\n`;
-      text += `    + danina solidarnościowa: ${formatNumberPL(
-        solidarityTax
-      )}\n`;
-    } else {
-      regularTax = taxMath.round2(taxBase * linearRate);
-      text += `    ${formatNumberPL(taxBase)} × ${formatPercentPL(
+    if (pitDetails.pitBase > 0) {
+      text += `    Podatek liniowy ${formatPercentPL(linearRate)}: ${formatNumberPL(
+        taxBase
+      )} × ${formatPercentPL(
         linearRate
-      )} = ${formatNumberPL(regularTax)}\n`;
+      )} = ${formatNumberPL(pitDetails.pit)}\n`;
     }
 
-    const totalRegularTax = taxMath.round2(regularTax + solidarityTax);
+    if (levyDetails.levy > 0) {
+      text += `    Danina solidarnościowa ${formatPercentPL(
+        rateSolidarity
+      )}: ${formatNumberPL(levyDetails.aboveThreshold)} × ${formatPercentPL(
+        rateSolidarity
+      )} = ${formatNumberPL(levyDetails.levy)}\n`;
+    }
+
+    const totalRegularTax = taxMath.round2(pitDetails.pit + levyDetails.levy);
     const totalTax = taxMath.round2(ipBoxTax + totalRegularTax);
-    text += `\n  Łączny podatek: ${formatNumberPL(ipBoxTax)} + ${formatNumberPL(
-      totalRegularTax
-    )} = ${formatNumberPL(totalTax)}\n`;
+    text +=
+      levyDetails.levy > 0
+        ? `\n  Łączny podatek i danina: ${formatNumberPL(
+            ipBoxTax
+          )} + ${formatNumberPL(pitDetails.pit)} + ${formatNumberPL(
+            levyDetails.levy
+          )} = ${formatNumberPL(totalTax)}\n`
+        : `\n  Łączny podatek: ${formatNumberPL(
+            ipBoxTax
+          )} + ${formatNumberPL(totalRegularTax)} = ${formatNumberPL(
+            totalTax
+          )}\n`;
 
     const total = taxMath.round2(totalTax + healthLinear);
     text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
@@ -1585,8 +1710,14 @@
         text += `\n--- SKALA PODATKOWA Z IP BOX (WSPÓLNIE Z MAŁŻONKIEM) ---\n`;
         text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
         text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n`;
-        text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n`;
-        text += `\n(Obliczenie analogiczne do skali z IP BOX, z uwzględnieniem niewykorzystanych kwot małżonka)\n`;
+        text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
+        text += healthScaleData.text;
+        text += getIpBoxScaleJointBreakdown(
+          incomeNum,
+          spouseIncomeNum,
+          ipBoxCoeffNum,
+          healthScaleData.healthScale
+        );
       }
     }
 

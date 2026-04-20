@@ -100,6 +100,27 @@ describe("IP BOX", () => {
     expect(calc.readOutputs()).toMatchSnapshot();
     calc.close();
   });
+
+  it("IP BOX 50% at 1 500 000 keeps the levy separate from linear PIT", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(1500000);
+    calc.setCosts(0);
+    calc.setIpBox(50);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
+});
+
+describe("Linear tax high income", () => {
+  it("income 1 200 000 keeps the linear levy outside the 19% PIT line", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(1200000);
+    calc.setCosts(0);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
 });
 
 describe("Joint taxation with spouse", () => {
@@ -128,6 +149,50 @@ describe("Joint taxation with spouse", () => {
     calc.setRevenue(500000);
     calc.setCosts(0);
     calc.setJointTaxation(true, 200000);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
+
+  it("joint taxation uses MF formula for 290 000 income, spouse 80 000, IP BOX 25%", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(290000);
+    calc.setCosts(0);
+    calc.setIpBox(25);
+    calc.setJointTaxation(true, 80000);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
+
+  it("joint taxation keeps the solidarity levy individual when only one spouse exceeds 1 000 000", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(1500000);
+    calc.setCosts(0);
+    calc.setIpBox(0);
+    calc.setJointTaxation(true, 0);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
+
+  it("joint taxation does not average away the solidarity levy for unequal high incomes", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(1200000);
+    calc.setCosts(0);
+    calc.setIpBox(0);
+    calc.setJointTaxation(true, 900000);
+    calc.calculate();
+    expect(calc.readOutputs()).toMatchSnapshot();
+    calc.close();
+  });
+
+  it("joint taxation with IP BOX excludes the IP BOX portion from the solidarity levy base", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(1500000);
+    calc.setCosts(0);
+    calc.setIpBox(50);
+    calc.setJointTaxation(true, 0);
     calc.calculate();
     expect(calc.readOutputs()).toMatchSnapshot();
     calc.close();

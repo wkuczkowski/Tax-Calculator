@@ -20,6 +20,16 @@ exports[`Edge cases > negative income (revenue < costs) still applies min health
 }
 `;
 
+exports[`IP BOX > IP BOX 50% at 1 500 000 keeps the levy separate from linear PIT 1`] = `
+{
+  "income": "1 500 000,00 zł",
+  "taxLinear": "375 257,00 zł",
+  "taxLinearIpBox": "250 821,00 zł",
+  "taxScale": "607 400,00 zł",
+  "taxScaleIpBox": "384 900,00 zł",
+}
+`;
+
 exports[`IP BOX > IP BOX 50% with high income - mixed standard + IP BOX, both above solidarity threshold 1`] = `
 {
   "income": "2 500 000,00 zł",
@@ -37,6 +47,54 @@ exports[`IP BOX > IP BOX 100% - all income taxed at 5% 1`] = `
   "taxLinearIpBox": "19 800,00 zł",
   "taxScale": "54 400,00 zł",
   "taxScaleIpBox": "28 000,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > joint taxation does not average away the solidarity levy for unequal high incomes 1`] = `
+{
+  "income": "1 200 000,00 zł",
+  "taxLinear": "291 557,00 zł",
+  "taxLinearIpBox": "291 557,00 zł",
+  "taxScale": "472 400,00 zł",
+  "taxScaleIpBox": "472 400,00 zł",
+  "taxScaleIpBoxJoint": "732 800,00 zł",
+  "taxScaleJoint": "732 800,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > joint taxation keeps the solidarity levy individual when only one spouse exceeds 1 000 000 1`] = `
+{
+  "income": "1 500 000,00 zł",
+  "taxLinear": "375 257,00 zł",
+  "taxLinearIpBox": "375 257,00 zł",
+  "taxScale": "607 400,00 zł",
+  "taxScaleIpBox": "607 400,00 zł",
+  "taxScaleIpBoxJoint": "579 800,00 zł",
+  "taxScaleJoint": "579 800,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > joint taxation uses MF formula for 290 000 income, spouse 80 000, IP BOX 25% 1`] = `
+{
+  "income": "290 000,00 zł",
+  "taxLinear": "66 631,00 zł",
+  "taxLinearIpBox": "56 481,00 zł",
+  "taxScale": "91 300,00 zł",
+  "taxScaleIpBox": "71 725,00 zł",
+  "taxScaleIpBoxJoint": "69 725,00 zł",
+  "taxScaleJoint": "89 300,00 zł",
+}
+`;
+
+exports[`Joint taxation with spouse > joint taxation with IP BOX excludes the IP BOX portion from the solidarity levy base 1`] = `
+{
+  "income": "1 500 000,00 zł",
+  "taxLinear": "375 257,00 zł",
+  "taxLinearIpBox": "250 821,00 zł",
+  "taxScale": "607 400,00 zł",
+  "taxScaleIpBox": "384 900,00 zł",
+  "taxScaleIpBoxJoint": "357 300,00 zł",
+  "taxScaleJoint": "579 800,00 zł",
 }
 `;
 
@@ -59,8 +117,8 @@ exports[`Joint taxation with spouse > spouse income 50 000 - partial 12% bracket
   "taxLinearIpBox": "38 938,00 zł",
   "taxScale": "54 400,00 zł",
   "taxScaleIpBox": "40 900,00 zł",
-  "taxScaleIpBoxJoint": "34 900,00 zł",
-  "taxScaleJoint": "40 400,00 zł",
+  "taxScaleIpBoxJoint": "37 300,00 zł",
+  "taxScaleJoint": "42 800,00 zł",
 }
 `;
 
@@ -71,8 +129,18 @@ exports[`Joint taxation with spouse > spouse income 200 000 - partial 32% bracke
   "taxLinearIpBox": "99 321,00 zł",
   "taxScale": "177 400,00 zł",
   "taxScaleIpBox": "143 650,00 zł",
-  "taxScaleIpBoxJoint": "143 650,00 zł",
-  "taxScaleJoint": "177 400,00 zł",
+  "taxScaleIpBoxJoint": "180 050,00 zł",
+  "taxScaleJoint": "213 800,00 zł",
+}
+`;
+
+exports[`Linear tax high income > income 1 200 000 keeps the linear levy outside the 19% PIT line 1`] = `
+{
+  "income": "1 200 000,00 zł",
+  "taxLinear": "291 557,00 zł",
+  "taxLinearIpBox": "242 121,00 zł",
+  "taxScale": "472 400,00 zł",
+  "taxScaleIpBox": "383 400,00 zł",
 }
 `;
 

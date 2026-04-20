@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
@@ -15,47 +15,6 @@
     <div class="Tax-Calculator-Wrapper">
       <section class="calculator">
         <div class="calculator-container">
-          <div class="copy-sidebar">
-            <div class="copy-sidebar-toggle">
-              <svg
-                class="chevron-icon"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                width="24"
-                height="24">
-                <path
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 18l6-6-6-6" />
-              </svg>
-            </div>
-            <div class="copy-sidebar-content">
-              <h3>Kopiuj wartości</h3>
-              <button class="copy-button" id="copyValues">
-                <svg
-                  class="copy-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  height="20">
-                  <path
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" />
-                </svg>
-                <span>Kopiuj do schowka</span>
-              </button>
-              <div class="copy-success-message" id="copySuccess">
-                Skopiowano!
-              </div>
-            </div>
-          </div>
           <h1>Uproszczony Kalkulator Podatkowy</h1>
 
           <div class="input-section">
@@ -116,7 +75,16 @@
                 </div>
               </div>
               <div class="input-group" id="spouseIncomeCard">
-                <label>Dochód małżonka</label>
+                <label
+                  >Dochód małżonka<span
+                    class="field-tooltip"
+                    data-tooltip="Dochód małżonka wpływa tylko na wspólne wyliczenie PIT według skali. Nie obejmuje składki zdrowotnej ani innych obciążeń po stronie małżonka."
+                    aria-label="Więcej informacji"
+                    role="img"
+                    tabindex="0"
+                    ><img src="./images/info-16.svg" alt="info"
+                  /></span>
+                </label>
                 <input type="text" id="spouseIncome" value="0" readonly />
               </div>
               <div class="input-group">
@@ -284,8 +252,9 @@
             </div>
 
             <p class="disclaimer">
-              Poniższe należności zawierają podatek oraz składkę zdrowotną. Nie
-              uwzględniają składek społecznych.
+              Poniższe należności zawierają podatek oraz składkę zdrowotną
+              podatnika. Nie uwzględniają składek społecznych ani obciążeń
+              publicznoprawnych po stronie małżonka.
             </p>
 
             <h2 class="section-title">Skala Podatkowa</h2>
@@ -390,6 +359,252 @@
                   >
                   <span id="ratesTotalValue"></span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="copy-fab"
+            id="copyFab"
+            aria-label="Pokaż obliczenia"
+            hidden>
+            <svg
+              class="copy-fab-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="4" y="2" width="16" height="20" rx="2.5" ry="2.5" />
+              <rect
+                x="7"
+                y="5.5"
+                width="10"
+                height="3.5"
+                rx="0.6"
+                ry="0.6"
+                stroke-width="1.6" />
+              <path d="M8 13h.01" />
+              <path d="M12 13h.01" />
+              <path d="M16 13h.01" />
+              <path d="M8 17h.01" />
+              <path d="M12 17h.01" />
+              <path d="M16 17h.01" />
+            </svg>
+            <span class="copy-fab-tooltip">Pokaż obliczenia</span>
+          </button>
+
+          <button
+            type="button"
+            class="info-fab"
+            id="infoFab"
+            aria-label="Założenia kalkulatora">
+            <svg
+              class="info-fab-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="11" x2="12" y2="16.5" />
+              <circle
+                cx="12"
+                cy="7.75"
+                r="0.6"
+                fill="currentColor"
+                stroke="none" />
+            </svg>
+            <span class="copy-fab-tooltip info-fab-tooltip"
+              >Założenia kalkulatora</span
+            >
+          </button>
+
+          <div
+            class="copy-modal"
+            id="copyModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="copyModalTitle"
+            aria-hidden="true"
+            hidden>
+            <div class="copy-modal-backdrop" data-copy-modal-close></div>
+            <div class="copy-modal-card" role="document">
+              <header class="copy-modal-header">
+                <h3 id="copyModalTitle">Podgląd wyników</h3>
+                <button
+                  type="button"
+                  class="copy-modal-close"
+                  aria-label="Zamknij"
+                  data-copy-modal-close>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </header>
+              <div class="copy-modal-body">
+                <pre class="copy-modal-preview" id="copyPreview"></pre>
+              </div>
+              <footer class="copy-modal-footer">
+                <button
+                  type="button"
+                  class="copy-modal-btn copy-modal-btn-secondary"
+                  id="copyModalCloseBtn"
+                  data-copy-modal-close>
+                  Zamknij
+                </button>
+                <button
+                  type="button"
+                  class="copy-modal-btn copy-modal-btn-primary"
+                  id="copyModalCopy">
+                  <svg
+                    class="copy-modal-btn-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect
+                      x="4"
+                      y="2"
+                      width="16"
+                      height="20"
+                      rx="2.5"
+                      ry="2.5" />
+                    <rect
+                      x="7"
+                      y="5.5"
+                      width="10"
+                      height="3.5"
+                      rx="0.6"
+                      ry="0.6"
+                      stroke-width="1.6" />
+                    <path d="M8 13h.01" />
+                    <path d="M12 13h.01" />
+                    <path d="M16 13h.01" />
+                    <path d="M8 17h.01" />
+                    <path d="M12 17h.01" />
+                    <path d="M16 17h.01" />
+                  </svg>
+                  <span class="copy-modal-btn-label">Kopiuj do schowka</span>
+                </button>
+              </footer>
+            </div>
+          </div>
+
+          <div
+            class="copy-modal info-modal"
+            id="infoModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="infoModalTitle"
+            aria-hidden="true"
+            hidden>
+            <div class="copy-modal-backdrop" data-info-modal-close></div>
+            <div class="copy-modal-card" role="document">
+              <header class="copy-modal-header">
+                <h3 id="infoModalTitle">
+                  Założenia Uproszczonego Kalkulatora Podatkowego
+                </h3>
+                <button
+                  type="button"
+                  class="copy-modal-close"
+                  aria-label="Zamknij"
+                  data-info-modal-close>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    aria-hidden="true">
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </header>
+              <div class="copy-modal-body info-modal-body">
+                <div class="info-modal-content" id="infoModalContent"></div>
+              </div>
+              <footer class="copy-modal-footer">
+                <button
+                  type="button"
+                  class="copy-modal-btn copy-modal-btn-secondary"
+                  data-info-modal-close>
+                  Zamknij
+                </button>
+              </footer>
+            </div>
+          </div>
+
+          <div
+            class="copy-toast"
+            id="copyToast"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden>
+            <div class="copy-toast-card">
+              <div class="copy-toast-icon" aria-hidden="true">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 52 52"
+                  width="56"
+                  height="56">
+                  <circle
+                    class="copy-toast-circle"
+                    cx="26"
+                    cy="26"
+                    r="24"
+                    fill="none"
+                    stroke="#16a34a"
+                    stroke-width="2.5" />
+                  <path
+                    class="copy-toast-check"
+                    d="M14.5 27.5l7.5 7.5 16-18"
+                    fill="none"
+                    stroke="#16a34a"
+                    stroke-width="3.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round" />
+                </svg>
+              </div>
+              <div class="copy-toast-text">
+                <strong class="copy-toast-title">Skopiowano!</strong>
+                <span class="copy-toast-subtitle"
+                  >Wyniki znajdują się w schowku</span
+                >
               </div>
             </div>
           </div>

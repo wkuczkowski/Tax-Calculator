@@ -1,3 +1,4 @@
 package-lock.json
 .cursorignore
 node_modules/
+*.txt

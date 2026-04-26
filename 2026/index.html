@@ -501,7 +501,7 @@
             <span class="results-block-meta">PIT + składka zdrowotna</span>
           </header>
 
-          <div class="comparison" id="compareScale">
+          <div class="comparison" id="comparePit">
             <div class="results-row input-group" data-variant="taxScale">
               <span class="results-row-label">Skala podatkowa</span>
               <span class="results-row-tag">12% / 32%</span>
@@ -588,10 +588,6 @@
                 readonly
                 tabindex="-1" />
             </div>
-            <div
-              class="results-row-divider"
-              role="presentation"
-              aria-hidden="true"></div>
             <div class="results-row input-group" data-variant="taxLinear">
               <span class="results-row-label">Podatek liniowy</span>
               <span class="results-row-tag">19%</span>
@@ -609,25 +605,6 @@
               <span class="results-row-bar"><span data-bar></span></span>
               <input id="taxLinearIpBox" type="text" readonly tabindex="-1" />
             </div>
-          </div>
-        </section>
-
-        <section class="results-block" aria-labelledby="compareRyczaltTitle">
-          <header class="results-block-head">
-            <h3 id="compareRyczaltTitle" class="results-block-title">
-              Ryczałt
-            </h3>
-            <span class="results-block-meta">PIT + składka zdrowotna</span>
-          </header>
-
-          <p
-            id="ryczalt-message"
-            class="ryczalt-message"
-            data-show-when="empty">
-            Wybierz przynajmniej jedną stawkę, aby zobaczyć wynik.
-          </p>
-
-          <div class="comparison" id="compareRyczalt">
             <div class="results-row input-group" data-variant="ryczalt2">
               <span class="results-row-label">Ryczałt 2%</span>
               <span class="results-row-tag" data-revenue-tag></span>
@@ -691,16 +668,16 @@
               <span class="results-row-bar"><span data-bar></span></span>
               <input id="ryczalt17" type="text" readonly tabindex="-1" />
             </div>
-          </div>
 
-          <div id="ratesTotal" class="rates-total hidden">
-            <div class="rates-total-row">
-              <span>Składka zdrowotna (rocznie)</span>
-              <span id="ratesHealthRyczaltValue"></span>
-            </div>
-            <div class="rates-total-row rates-total-sum">
-              <span>Łącznie PIT + składka zdrowotna</span>
-              <span id="ratesTotalValue"></span>
+            <div id="ratesTotal" class="rates-total hidden">
+              <div class="rates-total-row">
+                <span>Składka zdrowotna (rocznie)</span>
+                <span id="ratesHealthRyczaltValue"></span>
+              </div>
+              <div class="rates-total-row rates-total-sum">
+                <span>Łącznie PIT + składka zdrowotna</span>
+                <span id="ratesTotalValue"></span>
+              </div>
             </div>
           </div>
         </section>

@@ -16,7 +16,6 @@
     ryczaltCheckboxes: document.querySelectorAll(
       '.checkbox-group input[type="checkbox"]',
     ),
-    ryczaltMessage: document.getElementById("ryczalt-message"),
     jointTaxationRadios: document.querySelectorAll(
       'input[name="jointTaxation"]',
     ),
@@ -91,21 +90,13 @@
     input.style.removeProperty("--rate-input-width");
   }
 
-  const PIT_SCALE_VARIANT_IDS = [
+  const PIT_VARIANT_IDS = [
     "taxScale",
     "taxScaleIpBox",
     "taxScaleJoint",
     "taxScaleIpBoxJoint",
-  ];
-
-  const PIT_LINEAR_VARIANT_IDS = [
     "taxLinear",
     "taxLinearIpBox",
-  ];
-
-  const PIT_VARIANT_IDS = [
-    ...PIT_SCALE_VARIANT_IDS,
-    ...PIT_LINEAR_VARIANT_IDS,
   ];
 
   const RYCZALT_VARIANT_IDS = [
@@ -119,6 +110,11 @@
     "ryczalt14",
     "ryczalt15",
     "ryczalt17",
+  ];
+
+  const COMPARISON_VARIANT_IDS = [
+    ...PIT_VARIANT_IDS,
+    ...RYCZALT_VARIANT_IDS,
   ];
 
   /* ==================================================
@@ -439,15 +435,6 @@
       DOM.revenueInfoText.textContent = `Przychód do rozdysponowania: ${formatPLN(
         remainingRevenue,
       )}`;
-    }
-  }
-
-  function updateRyczaltMessage() {
-    const anyChecked = Array.from(DOM.ryczaltCheckboxes).some(
-      (cb) => cb.checked,
-    );
-    if (DOM.ryczaltMessage) {
-      DOM.ryczaltMessage.style.display = anyChecked ? "none" : "block";
     }
   }
 
@@ -799,30 +786,38 @@
     return { id, value, row };
   }
 
+  function getVisibleRatesTotalVariant() {
+    const row = document.getElementById("ratesTotal");
+    const valueElement = document.getElementById("ratesTotalValue");
+    if (!row || !valueElement || row.classList.contains("hidden")) return null;
+
+    const value = parsePLN(valueElement.textContent || "");
+    if (!Number.isFinite(value)) return null;
+
+    return { id: "ratesTotal", value, row };
+  }
+
   function sortPitComparisonRows() {
-    const container = document.getElementById("compareScale");
-    const divider = container
-      ? container.querySelector(".results-row-divider")
-      : null;
-    if (!container || !divider) return;
+    const container = document.getElementById("comparePit");
+    if (!container) return;
 
-    const sortGroup = (ids, placeRow) => {
-      ids
-        .map((id, index) => {
-          const variant = getVisibleResultVariant(id);
-          return variant ? { ...variant, index } : null;
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.value - b.value || a.index - b.index)
-        .forEach(placeRow);
-    };
+    const visibleVariants = COMPARISON_VARIANT_IDS.map((id, index) => {
+      const variant = getVisibleResultVariant(id);
+      return variant ? { ...variant, index } : null;
+    }).filter(Boolean);
+    const ratesTotalVariant = getVisibleRatesTotalVariant();
+    if (ratesTotalVariant) {
+      visibleVariants.push({
+        ...ratesTotalVariant,
+        index: COMPARISON_VARIANT_IDS.length,
+      });
+    }
 
-    sortGroup(PIT_SCALE_VARIANT_IDS, ({ row }) => {
-      container.insertBefore(row, divider);
-    });
-    sortGroup(PIT_LINEAR_VARIANT_IDS, ({ row }) => {
-      container.appendChild(row);
-    });
+    visibleVariants
+      .sort((a, b) => a.value - b.value || a.index - b.index)
+      .forEach(({ row }) => {
+        container.appendChild(row);
+      });
   }
 
   /* ==================================================
@@ -849,22 +844,17 @@
       // share (without health). The user-meaningful ryczałt cost is the
       // aggregated "Łącznie PIT + składka zdrowotna". Compare that as one option,
       // but only once the user actually allocated some revenue to a rate.
-      const ratesTotalEl = document.getElementById("ratesTotal");
-      const ratesTotalValueEl = document.getElementById("ratesTotalValue");
       let allocatedRevenue = 0;
       document.querySelectorAll(".rate-input.show").forEach((input) => {
         allocatedRevenue += parsePLN(input.value) || 0;
       });
+      const ratesTotalVariant = getVisibleRatesTotalVariant();
       if (
-        ratesTotalEl &&
-        ratesTotalValueEl &&
-        !ratesTotalEl.classList.contains("hidden") &&
-        allocatedRevenue > 0
+        ratesTotalVariant &&
+        allocatedRevenue > 0 &&
+        ratesTotalVariant.value > 0
       ) {
-        const value = parsePLN(ratesTotalValueEl.textContent || "");
-        if (Number.isFinite(value) && value > 0) {
-          variants.push({ id: "ratesTotal", value, row: ratesTotalEl });
-        }
+        variants.push(ratesTotalVariant);
       }
     } else {
       RYCZALT_VARIANT_IDS.forEach(collectVariant);
@@ -955,7 +945,6 @@
       const targetGroup = targetInput.closest(".input-group");
       targetGroup.style.display = checkbox.checked ? "grid" : "none";
     });
-    updateRyczaltMessage();
 
     const jointTaxationSelected = document.querySelector(
       'input[name="jointTaxation"]:checked',
@@ -1020,7 +1009,6 @@
       targetInput.value = formatPLN(0);
     });
     document.getElementById("ratesTotal").classList.add("hidden");
-    updateRyczaltMessage();
     calculate();
     DOM.revenueInput.focus();
   }
@@ -1206,7 +1194,6 @@
         targetInput.value = formatPLN(0);
       }
 
-      updateRyczaltMessage();
       calculate();
       if (multipleRatesEnabled) updateRemainingRevenue();
     });
@@ -2728,7 +2715,6 @@
       if (group) group.style.display = "none";
     }
   });
-  updateRyczaltMessage();
   // run an initial calculation so the income field shows 0,00 and rank state is stable
   calculate();
 })();

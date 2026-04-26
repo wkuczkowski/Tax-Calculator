@@ -1479,33 +1479,6 @@ input.error {
   background: var(--best-bar);
 }
 
-/* sub-group divider inside a comparison block
-   (e.g. between "Skala" rows and "Liniowy" rows) —
-   a thicker hairline that visually marks the start of the
-   "Podatek liniowy" group. Negative top margin overlaps the
-   previous row's 1px bottom border so the result is one clean line. */
-.results-row-divider {
-  height: 0;
-  padding: 0;
-  margin: -1px 0 0;
-  border: none;
-  border-top: 2px solid var(--line-3);
-  background: transparent;
-  pointer-events: none;
-}
-
-/* ryczałt placeholder */
-.ryczalt-message {
-  padding: 22px;
-  font-size: 13px;
-  color: var(--ink-3);
-  text-align: center;
-  font-style: italic;
-  background: var(--surface-alt);
-  border-top: 1px dashed var(--line);
-  margin-top: -1px;
-}
-
 /* multi-rate total */
 .rates-total {
   padding: 14px 22px;

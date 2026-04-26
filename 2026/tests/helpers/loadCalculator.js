@@ -116,6 +116,13 @@ export function loadCalculator() {
   }
 
   function setIpBox(percent) {
+    const radio = document.querySelector(
+      'input[name="ipBoxEnabled"][value="yes"]'
+    );
+    if (radio && !radio.checked) {
+      radio.checked = true;
+      radio.dispatchEvent(new window.Event("change", { bubbles: true }));
+    }
     const el = $("#ipBoxCoeff");
     el.removeAttribute("readonly");
     el.value = String(percent);

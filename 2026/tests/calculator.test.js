@@ -54,6 +54,7 @@ describe("Tax brackets", () => {
     const calc = loadCalculator();
     calc.setRevenue(1500000);
     calc.setCosts(0);
+    calc.setIpBox(25);
     calc.calculate();
     expect(calc.readOutputs()).toMatchSnapshot();
     calc.close();

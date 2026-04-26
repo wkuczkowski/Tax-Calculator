@@ -8,8 +8,11 @@
     revenueInput: document.getElementById("revenue"),
     costsInput: document.getElementById("costs"),
     ipBoxCoeffInput: document.getElementById("ipBoxCoeff"),
+    ipBoxRange: document.getElementById("ipBoxRange"),
     ipBoxEdit: document.getElementById("ipBoxEdit"),
     ipBoxContainer: document.getElementById("ipBoxContainer"),
+    ipBoxEnabledRadios: document.querySelectorAll('input[name="ipBoxEnabled"]'),
+    ipBoxReveal: document.getElementById("ipBoxReveal"),
     ryczaltCheckboxes: document.querySelectorAll(
       '.checkbox-group input[type="checkbox"]',
     ),
@@ -22,6 +25,7 @@
     multipleRatesToggle: document.getElementById("multipleRatesToggle"),
     rateInputs: document.querySelectorAll(".rate-input"),
     revenueInfoText: document.querySelector(".multiple-rates-revenue-info p"),
+    resetBtn: document.getElementById("resetBtn"),
     copyFab: document.getElementById("copyFab"),
     copyModal: document.getElementById("copyModal"),
     copyModalCard: document.querySelector(".copy-modal-card"),
@@ -31,17 +35,101 @@
     infoFab: document.getElementById("infoFab"),
     infoModal: document.getElementById("infoModal"),
     infoModalContent: document.getElementById("infoModalContent"),
+    bestCard: document.getElementById("bestCard"),
+    bestCardTitle: document.getElementById("bestCardTitle"),
+    bestCardAmount: document.getElementById("bestCardAmount"),
+    bestCardSavings: document.getElementById("bestCardSavings"),
+    breakdownDetails: document.getElementById("breakdownDetails"),
+    breakdownPre: document.getElementById("breakdownPre"),
   };
+
+  /* ==================================================
+     Variant labels (used by best-card + ranking)
+  ================================================== */
+  const VARIANT_LABELS = {
+    taxScale: "Skala podatkowa",
+    taxScaleIpBox: "Skala podatkowa + IP BOX",
+    taxScaleJoint: "Skala podatkowa wspólnie z małżonkiem",
+    taxScaleIpBoxJoint: "Skala podatkowa + IP BOX wspólnie z małżonkiem",
+    taxLinear: "Podatek liniowy",
+    taxLinearIpBox: "Podatek liniowy + IP BOX",
+    ryczalt2: "Ryczałt 2%",
+    ryczalt3: "Ryczałt 3%",
+    ryczalt5_5: "Ryczałt 5,5%",
+    ryczalt8_5: "Ryczałt 8,5%",
+    ryczalt8_5_12_5: "Ryczałt 8,5% / 12,5%",
+    ryczalt10: "Ryczałt 10%",
+    ryczalt12: "Ryczałt 12%",
+    ryczalt14: "Ryczałt 14%",
+    ryczalt15: "Ryczałt 15%",
+    ryczalt17: "Ryczałt 17%",
+    ratesTotal: "Ryczałt łącznie",
+  };
+
+  const RATE_INPUT_MIN_WIDTH = 96;
+  const RATE_INPUT_MAX_WIDTH = 190;
+  const RATE_INPUT_CHAR_WIDTH = 8.5;
+  const RATE_INPUT_HORIZONTAL_SPACE = 30;
+
+  function resizeRateInput(input) {
+    if (!input) return;
+
+    const text = input.value || input.placeholder || "";
+    const contentWidth =
+      Array.from(text).length * RATE_INPUT_CHAR_WIDTH +
+      RATE_INPUT_HORIZONTAL_SPACE;
+    const width = Math.min(
+      RATE_INPUT_MAX_WIDTH,
+      Math.max(RATE_INPUT_MIN_WIDTH, Math.ceil(contentWidth)),
+    );
+
+    input.style.setProperty("--rate-input-width", `${width}px`);
+  }
+
+  function resetRateInputWidth(input) {
+    if (!input) return;
+    input.style.removeProperty("--rate-input-width");
+  }
+
+  const PIT_SCALE_VARIANT_IDS = [
+    "taxScale",
+    "taxScaleIpBox",
+    "taxScaleJoint",
+    "taxScaleIpBoxJoint",
+  ];
+
+  const PIT_LINEAR_VARIANT_IDS = [
+    "taxLinear",
+    "taxLinearIpBox",
+  ];
+
+  const PIT_VARIANT_IDS = [
+    ...PIT_SCALE_VARIANT_IDS,
+    ...PIT_LINEAR_VARIANT_IDS,
+  ];
+
+  const RYCZALT_VARIANT_IDS = [
+    "ryczalt2",
+    "ryczalt3",
+    "ryczalt5_5",
+    "ryczalt8_5",
+    "ryczalt8_5_12_5",
+    "ryczalt10",
+    "ryczalt12",
+    "ryczalt14",
+    "ryczalt15",
+    "ryczalt17",
+  ];
 
   /* ==================================================
      Shared Variables & Calculation Value Getters/Setters
   ================================================== */
   const contributionValues = {
-    healthLinear: 0, // Składka zdrowotna - podatek liniowy
-    healthRyczalt: 0, // Składka zdrowotna - ryczałt
-    healthScale: 0, // Składka zdrowotna - skala podatkowa
-    healthLinearDeduction: 0, // Efektywna składka zdrowotna do odliczenia - podatek liniowy
-    healthRyczaltDeduction: 0, // Efektywna składka zdrowotna do odliczenia - ryczałt
+    healthLinear: 0,
+    healthRyczalt: 0,
+    healthScale: 0,
+    healthLinearDeduction: 0,
+    healthRyczaltDeduction: 0,
   };
 
   function setCalculationValue(id, value) {
@@ -66,6 +154,10 @@
     return parseFloat(value.replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
   }
 
+  function selectInputValue(e) {
+    e.target.select();
+  }
+
   /* ==================================================
      Validation Functions
   ================================================== */
@@ -73,25 +165,24 @@
     const input = document.getElementById(fieldName);
     const errorElement = document.getElementById(`${fieldName}-error`);
     let isValid = true;
-    input.classList.remove("error");
+    if (input) input.classList.remove("error");
     if (errorElement) {
       errorElement.textContent = "";
       errorElement.classList.remove("visible");
     }
     const numericValue = parsePLN(value);
     if (isNaN(numericValue)) {
-      if (errorElement)
-        errorElement.textContent = "Proszę wprowadzić prawidłową kwotę";
+      if (errorElement) errorElement.textContent = "Wprowadź prawidłową kwotę.";
       isValid = false;
     } else if (numericValue < 0) {
-      if (errorElement) errorElement.textContent = "Kwota nie może być ujemna";
+      if (errorElement) errorElement.textContent = "Kwota nie może być ujemna.";
       isValid = false;
     } else if (numericValue > 999999999) {
-      if (errorElement) errorElement.textContent = "Kwota jest zbyt duża";
+      if (errorElement) errorElement.textContent = "Kwota jest zbyt duża.";
       isValid = false;
     }
     if (!isValid) {
-      input.classList.add("error");
+      if (input) input.classList.add("error");
       if (errorElement) errorElement.classList.add("visible");
     }
     return isValid;
@@ -101,24 +192,27 @@
     const numValue = parseFloat(value);
     let isValid = true;
     DOM.ipBoxCoeffInput.classList.remove("error");
-    errorElement.textContent = "";
-    errorElement.classList.remove("visible");
+    if (errorElement) {
+      errorElement.textContent = "";
+      errorElement.classList.remove("visible");
+    }
     if (isNaN(numValue) || value === "") {
-      errorElement.textContent = "Proszę wprowadzić wartość";
+      if (errorElement) errorElement.textContent = "Wpisz wartość 0–100.";
       isValid = false;
     } else if (numValue < 0 || numValue > 100) {
-      errorElement.textContent = "Wartość musi być między 0 a 100";
+      if (errorElement)
+        errorElement.textContent = "Wartość musi być w zakresie 0–100.";
       isValid = false;
     }
     if (!isValid) {
       DOM.ipBoxCoeffInput.classList.add("error");
-      errorElement.classList.add("visible");
+      if (errorElement) errorElement.classList.add("visible");
     }
     return isValid;
   }
 
   /* ==================================================
-     Tax Calculation Functions
+     Tax Calculation Functions  (UNCHANGED — financial logic)
   ================================================== */
   function getScalePitDetails(income) {
     const taxableIncome = Math.max(income, 0);
@@ -281,14 +375,52 @@
   /* ==================================================
      UI Update Functions
   ================================================== */
-  function makeIpBoxReadonly() {
-    if (!DOM.ipBoxCoeffInput.hasAttribute("readonly")) {
-      DOM.ipBoxCoeffInput.setAttribute("readonly", "");
-      DOM.ipBoxCoeffInput.classList.remove("editable");
-      DOM.ipBoxEdit.textContent = "✎";
-      if (validateIpBoxCoeff(DOM.ipBoxCoeffInput.value)) calculate();
-    }
+  function syncIpBoxRange() {
+    if (!DOM.ipBoxRange) return;
+    const value = parseFloat(DOM.ipBoxCoeffInput.value);
+    const safe = isNaN(value) ? 0 : Math.max(0, Math.min(100, value));
+    DOM.ipBoxRange.value = String(safe);
+    DOM.ipBoxRange.style.setProperty("--ipbox-fill", safe + "%");
   }
+
+  function isIpBoxEnabled() {
+    const checked = document.querySelector(
+      'input[name="ipBoxEnabled"]:checked',
+    );
+    return !!checked && checked.value === "yes";
+  }
+
+  function isJointTaxationEnabled() {
+    const checked = document.querySelector(
+      'input[name="jointTaxation"]:checked',
+    );
+    return !!checked && checked.value === "yes";
+  }
+
+  function clearIpBoxResultFields() {
+    document.getElementById("taxScaleIpBox").value = "";
+    document.getElementById("taxScaleIpBoxJoint").value = "";
+    document.getElementById("taxLinearIpBox").value = "";
+  }
+
+  /* Compute visibility of conditional result rows.
+     A row carrying both .joint-taxation-card and .ipbox-card is visible only
+     when BOTH toggles are on. The shared .show class encodes the final
+     answer so CSS stays simple. */
+  function updateConditionalRowsVisibility() {
+    const ipBoxOn = isIpBoxEnabled();
+    const jointOn = isJointTaxationEnabled();
+    document
+      .querySelectorAll(".joint-taxation-card, .ipbox-card")
+      .forEach((row) => {
+        const requiresJoint = row.classList.contains("joint-taxation-card");
+        const requiresIpBox = row.classList.contains("ipbox-card");
+        const visible =
+          (!requiresJoint || jointOn) && (!requiresIpBox || ipBoxOn);
+        row.classList.toggle("show", visible);
+      });
+  }
+
   function updateRemainingRevenue() {
     const totalRevenue = parsePLN(DOM.revenueInput.value);
     const rateInputsShown = document.querySelectorAll(".rate-input.show");
@@ -297,8 +429,9 @@
       if (input.value) usedRevenue += parsePLN(input.value);
     });
     const difference = usedRevenue - totalRevenue;
+    if (!DOM.revenueInfoText) return;
     if (difference > 0) {
-      DOM.revenueInfoText.innerHTML = `<span style="color: var(--app-error)">Przekroczono przychód o: ${formatPLN(
+      DOM.revenueInfoText.innerHTML = `<span style="color: var(--error)">Przekroczono przychód o ${formatPLN(
         difference,
       )}</span>`;
     } else {
@@ -309,48 +442,50 @@
     }
   }
 
+  function updateRyczaltMessage() {
+    const anyChecked = Array.from(DOM.ryczaltCheckboxes).some(
+      (cb) => cb.checked,
+    );
+    if (DOM.ryczaltMessage) {
+      DOM.ryczaltMessage.style.display = anyChecked ? "none" : "block";
+    }
+  }
+
   /* ==================================================
      Main Calculation Function
   ================================================== */
   function calculate() {
-    // Retrieve and parse input values
     const rawRevenue = DOM.revenueInput.value;
     const rawCosts = DOM.costsInput.value;
-    let revenue =
+    const revenue =
       parseFloat(rawRevenue.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
-    let costs =
+    const costs =
       parseFloat(rawCosts.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
-    let income = revenue - costs;
+    const income = revenue - costs;
 
-    // Update displayed income value only, don't reformat revenue and costs
-    // which would move the cursor position
     document.getElementById("income").value = formatPLN(income);
 
-    let ipBoxCoeff = parseFloat(DOM.ipBoxCoeffInput.value) / 100;
+    const ipBoxCoeff = parseFloat(DOM.ipBoxCoeffInput.value) / 100;
     const healthContribLimit = TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT;
 
-    // Składka zdrowotna dla podatku liniowego
-    let healthLinear = taxMath.calculateHealthLinear(income);
+    const healthLinear = taxMath.calculateHealthLinear(income);
     setCalculationValue("healthLinear", healthLinear);
 
-    // Składka zdrowotna dla ryczałtu (na podstawie przychodu)
-    let healthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
+    const healthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
     setCalculationValue("healthRyczalt", healthRyczalt);
 
-    // Składka zdrowotna dla skali podatkowej
-    let healthScale = taxMath.calculateHealthScale(income);
+    const healthScale = taxMath.calculateHealthScale(income);
     setCalculationValue("healthScale", healthScale);
-    let healthLinearDeduction = Math.min(healthLinear, healthContribLimit);
+    const healthLinearDeduction = Math.min(healthLinear, healthContribLimit);
     setCalculationValue("healthLinearDeduction", healthLinearDeduction);
 
-    // Składka zdrowotna do odliczenia dla ryczałtu
     let healthRyczaltDeduction;
     if (DOM.multipleRatesToggle.checked) {
       let totalAllocatedRevenue = 0;
       document.querySelectorAll(".rate-input.show").forEach((input) => {
         totalAllocatedRevenue += parsePLN(input.value) || 0;
       });
-      let ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
+      const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
         totalAllocatedRevenue,
       );
       healthRyczaltDeduction =
@@ -368,14 +503,13 @@
       ? parsePLN(document.getElementById("spouseIncome").value)
       : 0;
 
-    // Calculate tax values for individual and joint taxation
-    let taxScale = calculateScaleTaxTotal(
+    const taxScale = calculateScaleTaxTotal(
       income,
       getCalculationValue("healthScale"),
     );
     document.getElementById("taxScale").value = formatPLN(taxScale);
     if (jointTaxationEnabled) {
-      let taxScaleJoint = calculateJointScaleTaxTotal(
+      const taxScaleJoint = calculateJointScaleTaxTotal(
         income,
         spouseIncome,
         getCalculationValue("healthScale"),
@@ -383,44 +517,51 @@
       document.getElementById("taxScaleJoint").value = formatPLN(taxScaleJoint);
     }
 
-    let taxLinear = calculateLinearTaxTotal(
+    const taxLinear = calculateLinearTaxTotal(
       income,
       healthLinearDeduction,
       healthLinear,
     );
     document.getElementById("taxLinear").value = formatPLN(taxLinear);
 
-    let taxScaleIpBox = calculateScaleIpBoxTaxTotal(
-      income,
-      ipBoxCoeff,
-      getCalculationValue("healthScale"),
-    );
-    document.getElementById("taxScaleIpBox").value = formatPLN(taxScaleIpBox);
-    if (jointTaxationEnabled) {
-      let taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
+    const ipBoxEnabled = isIpBoxEnabled();
+    if (ipBoxEnabled) {
+      const taxScaleIpBox = calculateScaleIpBoxTaxTotal(
         income,
-        spouseIncome,
         ipBoxCoeff,
         getCalculationValue("healthScale"),
       );
-      document.getElementById("taxScaleIpBoxJoint").value =
-        formatPLN(taxScaleIpBoxJoint);
+      document.getElementById("taxScaleIpBox").value = formatPLN(taxScaleIpBox);
+      if (jointTaxationEnabled) {
+        const taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
+          income,
+          spouseIncome,
+          ipBoxCoeff,
+          getCalculationValue("healthScale"),
+        );
+        document.getElementById("taxScaleIpBoxJoint").value =
+          formatPLN(taxScaleIpBoxJoint);
+      } else {
+        document.getElementById("taxScaleIpBoxJoint").value = "";
+      }
+
+      const taxLinearIpBox = calculateLinearIpBoxTaxTotal(
+        income,
+        ipBoxCoeff,
+        healthLinearDeduction,
+        healthLinear,
+      );
+      document.getElementById("taxLinearIpBox").value =
+        formatPLN(taxLinearIpBox);
+    } else {
+      clearIpBoxResultFields();
     }
 
-    let taxLinearIpBox = calculateLinearIpBoxTaxTotal(
-      income,
-      ipBoxCoeff,
-      healthLinearDeduction,
-      healthLinear,
-    );
-    document.getElementById("taxLinearIpBox").value = formatPLN(taxLinearIpBox);
-
-    let allocatedRevenues = {};
+    const allocatedRevenues = {};
     if (DOM.multipleRatesToggle.checked) {
       const rateInputsVisible = document.querySelectorAll(".rate-input.show");
       rateInputsVisible.forEach((input) => {
-        const allocatedValue = parsePLN(input.value) || 0;
-        allocatedRevenues[input.dataset.for] = allocatedValue;
+        allocatedRevenues[input.dataset.for] = parsePLN(input.value) || 0;
       });
     }
 
@@ -435,9 +576,8 @@
       return revenue;
     }
 
-    // Calculate Ryczałt values
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt2") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -448,7 +588,7 @@
       document.getElementById("ryczalt2").value = formatPLN(ryczalt2);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt3") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -459,7 +599,7 @@
       document.getElementById("ryczalt3").value = formatPLN(ryczalt3);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt5_5") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -470,7 +610,7 @@
       document.getElementById("ryczalt5_5").value = formatPLN(ryczalt5_5);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt8_5") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -481,12 +621,12 @@
       document.getElementById("ryczalt8_5").value = formatPLN(ryczalt8_5);
     }
     {
-      let allocated = getAllocatedOrFullRateValue("ryczalt8_5_12_5");
+      const allocated = getAllocatedOrFullRateValue("ryczalt8_5_12_5");
       let ryczalt8_5_12_5;
       const ryczalt85Threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
       const rate85 = TAX_CONSTANTS.RYCZALT_RATE_8_5;
       const rate125 = TAX_CONSTANTS.RYCZALT_RATE_12_5;
-      const taxAt85Threshold = ryczalt85Threshold * rate85; // 8500
+      const taxAt85Threshold = ryczalt85Threshold * rate85;
 
       if (allocated <= ryczalt85Threshold) {
         ryczalt8_5_12_5 =
@@ -511,7 +651,7 @@
         formatPLN(ryczalt8_5_12_5);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt10") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -522,7 +662,7 @@
       document.getElementById("ryczalt10").value = formatPLN(ryczalt10);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt12") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -533,7 +673,7 @@
       document.getElementById("ryczalt12").value = formatPLN(ryczalt12);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt14") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -544,7 +684,7 @@
       document.getElementById("ryczalt14").value = formatPLN(ryczalt14);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt15") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -555,7 +695,7 @@
       document.getElementById("ryczalt15").value = formatPLN(ryczalt15);
     }
     {
-      let base = Math.max(
+      const base = Math.max(
         getAllocatedOrFullRateValue("ryczalt17") -
           getCalculationValue("healthRyczaltDeduction"),
         0,
@@ -567,6 +707,9 @@
     }
 
     updateRatesTotal();
+    updateRevenueTags(revenue, allocatedRevenues);
+    rankAndSummarize(revenue, income);
+    refreshBreakdownIfOpen();
   }
 
   /* ==================================================
@@ -597,25 +740,12 @@
       totalAllocatedRevenue += parsePLN(input.value) || 0;
     });
 
-    // Użyj tej samej funkcji co w calculate() dla spójności
-    let ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
+    const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
       totalAllocatedRevenue,
     );
 
-    const rateIds = [
-      "ryczalt2",
-      "ryczalt3",
-      "ryczalt5_5",
-      "ryczalt8_5",
-      "ryczalt8_5_12_5",
-      "ryczalt10",
-      "ryczalt12",
-      "ryczalt14",
-      "ryczalt15",
-      "ryczalt17",
-    ];
     let total = 0;
-    rateIds.forEach((id) => {
+    RYCZALT_VARIANT_IDS.forEach((id) => {
       const input = document.getElementById(id);
       if (input && input.closest(".input-group").style.display !== "none") {
         total += parsePLN(input.value);
@@ -628,47 +758,271 @@
   }
 
   /* ==================================================
+     Per-row revenue tags (helps multi-rate readability)
+  ================================================== */
+  function updateRevenueTags(revenue, allocatedRevenues) {
+    RYCZALT_VARIANT_IDS.forEach((id) => {
+      const row = document.querySelector(`.results-row[data-variant="${id}"]`);
+      if (!row) return;
+      const tagEl = row.querySelector("[data-revenue-tag]");
+      if (!tagEl) return;
+      if (DOM.multipleRatesToggle.checked) {
+        const allocated = allocatedRevenues[id] || 0;
+        tagEl.textContent = allocated
+          ? `od ${formatPLN(allocated)} przychodu`
+          : "";
+      } else {
+        tagEl.textContent = revenue ? `od ${formatPLN(revenue)} przychodu` : "";
+      }
+    });
+  }
+
+  function getVisibleResultVariant(id) {
+    const input = document.getElementById(id);
+    if (!input) return null;
+    const row = input.closest(".input-group");
+    if (!row) return null;
+
+    const inlineHidden = row.style.display === "none";
+    const computedHidden =
+      !inlineHidden &&
+      typeof window !== "undefined" &&
+      window.getComputedStyle &&
+      window.getComputedStyle(row).display === "none";
+    if (inlineHidden || computedHidden) return null;
+
+    const raw = (input.value || "").trim();
+    if (!raw) return null;
+    const value = parsePLN(raw);
+    if (!Number.isFinite(value)) return null;
+
+    return { id, value, row };
+  }
+
+  function sortPitComparisonRows() {
+    const container = document.getElementById("compareScale");
+    const divider = container
+      ? container.querySelector(".results-row-divider")
+      : null;
+    if (!container || !divider) return;
+
+    const sortGroup = (ids, placeRow) => {
+      ids
+        .map((id, index) => {
+          const variant = getVisibleResultVariant(id);
+          return variant ? { ...variant, index } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.value - b.value || a.index - b.index)
+        .forEach(placeRow);
+    };
+
+    sortGroup(PIT_SCALE_VARIANT_IDS, ({ row }) => {
+      container.insertBefore(row, divider);
+    });
+    sortGroup(PIT_LINEAR_VARIANT_IDS, ({ row }) => {
+      container.appendChild(row);
+    });
+  }
+
+  /* ==================================================
+     Rank visible variants & populate the best card
+  ================================================== */
+  function rankAndSummarize(revenue, income) {
+    const isMultiRate = !!(
+      DOM.multipleRatesToggle && DOM.multipleRatesToggle.checked
+    );
+    const variants = [];
+
+    const collectVariant = (id) => {
+      const variant = getVisibleResultVariant(id);
+      if (!variant) return;
+      const { value } = variant;
+      if (value <= 0) return;
+      variants.push(variant);
+    };
+
+    PIT_VARIANT_IDS.forEach(collectVariant);
+
+    if (isMultiRate) {
+      // in multi-rate mode the per-rate field shows only that rate's PIT
+      // share (without health). The user-meaningful ryczałt cost is the
+      // aggregated "Łącznie PIT + składka zdrowotna". Compare that as one option,
+      // but only once the user actually allocated some revenue to a rate.
+      const ratesTotalEl = document.getElementById("ratesTotal");
+      const ratesTotalValueEl = document.getElementById("ratesTotalValue");
+      let allocatedRevenue = 0;
+      document.querySelectorAll(".rate-input.show").forEach((input) => {
+        allocatedRevenue += parsePLN(input.value) || 0;
+      });
+      if (
+        ratesTotalEl &&
+        ratesTotalValueEl &&
+        !ratesTotalEl.classList.contains("hidden") &&
+        allocatedRevenue > 0
+      ) {
+        const value = parsePLN(ratesTotalValueEl.textContent || "");
+        if (Number.isFinite(value) && value > 0) {
+          variants.push({ id: "ratesTotal", value, row: ratesTotalEl });
+        }
+      }
+    } else {
+      RYCZALT_VARIANT_IDS.forEach(collectVariant);
+    }
+
+    document
+      .querySelectorAll(".results-row, #ratesTotal")
+      .forEach((r) => r.classList.remove("is-best"));
+    document
+      .querySelectorAll(".results-row [data-bar]")
+      .forEach((b) => (b.style.width = "0%"));
+
+    sortPitComparisonRows();
+
+    const meaningful = revenue > 0 || income !== 0;
+
+    if (!variants.length || !meaningful) {
+      DOM.bestCard.dataset.state = "empty";
+      DOM.bestCardTitle.textContent = "—";
+      DOM.bestCardAmount.textContent = "—";
+      DOM.bestCardSavings.textContent =
+        "Wprowadź dane, aby zobaczyć najkorzystniejszy wariant.";
+      return;
+    }
+
+    const sorted = [...variants].sort((a, b) => a.value - b.value);
+    const best = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    const second = sorted[1];
+
+    best.row.classList.add("is-best");
+
+    const maxVal = Math.max(...variants.map((v) => v.value), 1);
+    variants.forEach((v) => {
+      const bar = v.row.querySelector("[data-bar]");
+      if (!bar) return;
+      const pct = maxVal > 0 ? (v.value / maxVal) * 100 : 0;
+      bar.style.width = pct.toFixed(1) + "%";
+    });
+
+    DOM.bestCard.dataset.state = "ranked";
+    DOM.bestCardTitle.textContent = VARIANT_LABELS[best.id] || best.id;
+    DOM.bestCardAmount.textContent = formatPLN(best.value);
+
+    if (second && second.value > best.value) {
+      const delta = second.value - best.value;
+      DOM.bestCardSavings.innerHTML =
+        `<strong>−${formatPLN(delta)}</strong>` +
+        ` vs. drugi najlepszy wariant (${VARIANT_LABELS[second.id] || second.id})`;
+    } else if (worst && worst.value > best.value) {
+      const delta = worst.value - best.value;
+      DOM.bestCardSavings.innerHTML = `<strong>−${formatPLN(delta)}</strong> vs. najwyższy wariant`;
+    } else {
+      DOM.bestCardSavings.textContent =
+        "Tylko jeden widoczny wariant — wybierz więcej, aby porównać.";
+    }
+  }
+
+  /* ==================================================
+     Inline breakdown auto-update when <details> is open
+  ================================================== */
+  function refreshBreakdownIfOpen() {
+    if (!DOM.breakdownDetails || !DOM.breakdownPre) return;
+    if (DOM.breakdownDetails.open) {
+      DOM.breakdownPre.textContent = getFormattedValues();
+    }
+  }
+
+  /* ==================================================
      Event Handlers
   ================================================== */
   function handleCalculate() {
     const isRevenueValid = validateInput(DOM.revenueInput.value, "revenue");
     const isCostsValid = validateInput(DOM.costsInput.value, "costs");
-    const isIpBoxValid = validateIpBoxCoeff(DOM.ipBoxCoeffInput.value);
+    const isIpBoxValid = isIpBoxEnabled()
+      ? validateIpBoxCoeff(DOM.ipBoxCoeffInput.value)
+      : true;
 
     if (isRevenueValid && isCostsValid && isIpBoxValid) {
-      // Format the input values on initial calculation
       DOM.revenueInput.value = formatPLN(parsePLN(DOM.revenueInput.value));
       DOM.costsInput.value = formatPLN(parsePLN(DOM.costsInput.value));
-
       calculate();
-      DOM.resultsSection.classList.remove("hidden");
-      DOM.calculateButton.style.display = "none";
-      if (DOM.copyFab) DOM.copyFab.hidden = false;
-      document
-        .querySelector(".input-section")
-        .scrollIntoView({ behavior: "smooth" });
-      document.getElementById("legalDisclaimer").classList.add("show");
     }
 
     DOM.ryczaltCheckboxes.forEach((checkbox) => {
       const targetId = checkbox.dataset.target;
       const targetInput = document.getElementById(targetId);
       const targetGroup = targetInput.closest(".input-group");
-      targetGroup.style.display = checkbox.checked ? "flex" : "none";
+      targetGroup.style.display = checkbox.checked ? "grid" : "none";
     });
-    const anyChecked = Array.from(DOM.ryczaltCheckboxes).some(
-      (cb) => cb.checked,
-    );
-    DOM.ryczaltMessage.style.display = anyChecked ? "none" : "block";
+    updateRyczaltMessage();
 
     const jointTaxationSelected = document.querySelector(
       'input[name="jointTaxation"]:checked',
     ).value;
     if (jointTaxationSelected === "no") {
-      DOM.spouseIncomeCard.classList.add("inactive");
+      DOM.spouseIncomeCard.classList.remove("is-revealed");
       DOM.spouseIncomeInput.setAttribute("readonly", "");
       DOM.spouseIncomeInput.value = formatPLN(0);
     }
+  }
+
+  /* ==================================================
+     Reset
+  ================================================== */
+  function resetAll() {
+    DOM.revenueInput.value = "";
+    DOM.costsInput.value = "";
+    document.getElementById("revenue-error").textContent = "";
+    document.getElementById("revenue-error").classList.remove("visible");
+    document.getElementById("costs-error").textContent = "";
+    document.getElementById("costs-error").classList.remove("visible");
+    DOM.revenueInput.classList.remove("error");
+    DOM.costsInput.classList.remove("error");
+
+    DOM.ipBoxCoeffInput.value = "25";
+    syncIpBoxRange();
+    document.getElementById("ipBoxCoeff-error").textContent = "";
+    document.getElementById("ipBoxCoeff-error").classList.remove("visible");
+    DOM.ipBoxCoeffInput.classList.remove("error");
+
+    document.querySelector('input[name="ipBoxEnabled"][value="no"]').checked =
+      true;
+    if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.remove("is-revealed");
+    clearIpBoxResultFields();
+
+    document.querySelector('input[name="jointTaxation"][value="no"]').checked =
+      true;
+    DOM.spouseIncomeCard.classList.remove("is-revealed");
+    DOM.spouseIncomeInput.setAttribute("readonly", "");
+    DOM.spouseIncomeInput.value = formatPLN(0);
+    updateConditionalRowsVisibility();
+
+    DOM.multipleRatesToggle.checked = false;
+    document.querySelector(".multiple-rates-revenue-info").style.display =
+      "none";
+    document.querySelector(".multiple-rates-wrapper").style.justifyContent =
+      "flex-end";
+    DOM.ryczaltCheckboxes.forEach((cb) => {
+      cb.checked = false;
+      const targetId = cb.dataset.target;
+      const targetInput = document.getElementById(targetId);
+      const targetGroup = targetInput.closest(".input-group");
+      targetGroup.style.display = "none";
+      const rateInput = cb
+        .closest(".checkbox-wrapper")
+        .querySelector(".rate-input");
+      if (rateInput) {
+        rateInput.classList.remove("show");
+        rateInput.value = "";
+        resetRateInputWidth(rateInput);
+      }
+      targetInput.value = formatPLN(0);
+    });
+    document.getElementById("ratesTotal").classList.add("hidden");
+    updateRyczaltMessage();
+    calculate();
+    DOM.revenueInput.focus();
   }
 
   /* ==================================================
@@ -676,152 +1030,157 @@
   ================================================== */
   DOM.calculateButton.addEventListener("click", handleCalculate);
 
+  [
+    DOM.revenueInput,
+    DOM.costsInput,
+    DOM.ipBoxCoeffInput,
+    DOM.spouseIncomeInput,
+  ].forEach((input) => {
+    input.addEventListener("focus", selectInputValue);
+    input.addEventListener("click", selectInputValue);
+  });
+
   DOM.revenueInput.addEventListener("input", (e) => {
     const isValid = validateInput(e.target.value, "revenue");
-    if (!DOM.resultsSection.classList.contains("hidden") && isValid) {
-      // Store cursor position before calculation
+    if (isValid) {
       const cursorPos = e.target.selectionStart;
       const originalValue = e.target.value;
-
-      // Perform calculation
       calculate();
-
-      // Don't reformat during typing, restore original value
       e.target.value = originalValue;
-
-      // Restore cursor position
       e.target.setSelectionRange(cursorPos, cursorPos);
     }
     if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
   });
   DOM.revenueInput.addEventListener("blur", (e) => {
+    if (e.target.value === "") return;
     const originalValue = parsePLN(e.target.value);
     e.target.value = formatPLN(originalValue);
-    // Recalculate when focus leaves the field to ensure correct results
-    if (!DOM.resultsSection.classList.contains("hidden")) calculate();
+    calculate();
     if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
   });
+
   DOM.costsInput.addEventListener("input", (e) => {
     const isValid = validateInput(e.target.value, "costs");
-    if (!DOM.resultsSection.classList.contains("hidden") && isValid) {
-      // Store cursor position before calculation
+    if (isValid) {
       const cursorPos = e.target.selectionStart;
       const originalValue = e.target.value;
-
-      // Perform calculation
       calculate();
-
-      // Don't reformat during typing, restore original value
       e.target.value = originalValue;
-
-      // Restore cursor position
       e.target.setSelectionRange(cursorPos, cursorPos);
     }
   });
   DOM.costsInput.addEventListener("blur", (e) => {
+    if (e.target.value === "") return;
     const originalValue = parsePLN(e.target.value);
     e.target.value = formatPLN(originalValue);
-    // Recalculate when focus leaves the field to ensure correct results
-    if (!DOM.resultsSection.classList.contains("hidden")) calculate();
+    calculate();
   });
+
+  /* IP BOX: number input + range slider stay in sync */
   DOM.ipBoxCoeffInput.addEventListener("input", (e) => {
-    if (
-      !e.target.hasAttribute("readonly") &&
-      validateIpBoxCoeff(e.target.value) &&
-      !DOM.resultsSection.classList.contains("hidden")
-    ) {
+    if (validateIpBoxCoeff(e.target.value)) {
+      syncIpBoxRange();
       calculate();
     }
   });
-  DOM.ipBoxEdit.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isCurrentlyReadOnly = DOM.ipBoxCoeffInput.hasAttribute("readonly");
-    if (isCurrentlyReadOnly) {
-      DOM.ipBoxCoeffInput.removeAttribute("readonly");
-      DOM.ipBoxCoeffInput.classList.add("editable");
-      DOM.ipBoxEdit.textContent = "✓";
-      DOM.ipBoxCoeffInput.focus();
-    } else {
-      makeIpBoxReadonly();
+  DOM.ipBoxCoeffInput.addEventListener("blur", () => {
+    if (validateIpBoxCoeff(DOM.ipBoxCoeffInput.value)) {
+      syncIpBoxRange();
     }
   });
-  DOM.ipBoxCoeffInput.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("click", (e) => {
-    if (!DOM.ipBoxContainer.contains(e.target)) makeIpBoxReadonly();
+  if (DOM.ipBoxRange) {
+    DOM.ipBoxRange.addEventListener("input", (e) => {
+      DOM.ipBoxCoeffInput.value = e.target.value;
+      syncIpBoxRange();
+      validateIpBoxCoeff(DOM.ipBoxCoeffInput.value);
+      calculate();
+    });
+  }
+
+  /* IP BOX: Tak/Nie toggle reveals the slider and the IP BOX result rows */
+  DOM.ipBoxEnabledRadios.forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      if (e.target.value === "yes") {
+        if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.add("is-revealed");
+        syncIpBoxRange();
+      } else {
+        if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.remove("is-revealed");
+        document.getElementById("ipBoxCoeff-error").textContent = "";
+        document.getElementById("ipBoxCoeff-error").classList.remove("visible");
+        DOM.ipBoxCoeffInput.classList.remove("error");
+        clearIpBoxResultFields();
+      }
+      updateConditionalRowsVisibility();
+      calculate();
+    });
   });
+
   DOM.jointTaxationRadios.forEach((radio) => {
     radio.addEventListener("change", (e) => {
       DOM.spouseIncomeCard.classList.remove("shake");
-      const jointTaxationCards = document.querySelectorAll(
-        ".joint-taxation-card",
-      );
       if (e.target.value === "yes") {
-        DOM.spouseIncomeCard.classList.remove("inactive");
+        DOM.spouseIncomeCard.classList.add("is-revealed");
         DOM.spouseIncomeInput.removeAttribute("readonly");
         DOM.spouseIncomeInput.value = "";
-        DOM.spouseIncomeInput.placeholder = "wartość...";
+        DOM.spouseIncomeInput.placeholder = "0,00";
         DOM.spouseIncomeCard.classList.add("shake");
-        jointTaxationCards.forEach((card) => card.classList.add("show"));
         setTimeout(() => {
           DOM.spouseIncomeCard.classList.remove("shake");
         }, 500);
-        if (!DOM.resultsSection.classList.contains("hidden")) {
-          calculate();
-        }
+        DOM.spouseIncomeInput.focus();
       } else {
-        DOM.spouseIncomeCard.classList.add("inactive");
+        DOM.spouseIncomeCard.classList.remove("is-revealed");
         DOM.spouseIncomeInput.setAttribute("readonly", "");
         DOM.spouseIncomeInput.value = formatPLN(0);
         DOM.spouseIncomeInput.placeholder = "";
-        jointTaxationCards.forEach((card) => card.classList.remove("show"));
-        if (!DOM.resultsSection.classList.contains("hidden")) calculate();
       }
+      updateConditionalRowsVisibility();
+      calculate();
     });
   });
+
   DOM.spouseIncomeInput.addEventListener("input", (e) => {
-    if (!DOM.spouseIncomeCard.classList.contains("inactive")) {
+    if (DOM.spouseIncomeCard.classList.contains("is-revealed")) {
       const isValid = validateInput(e.target.value, "spouseIncome");
-      if (!DOM.resultsSection.classList.contains("hidden") && isValid)
-        calculate();
+      if (isValid) calculate();
     }
   });
   DOM.spouseIncomeInput.addEventListener("blur", (e) => {
-    if (!DOM.spouseIncomeCard.classList.contains("inactive")) {
+    if (DOM.spouseIncomeCard.classList.contains("is-revealed")) {
       e.target.value = formatPLN(parsePLN(e.target.value));
     }
   });
-  document
-    .getElementById("multipleRatesToggle")
-    .addEventListener("change", function (e) {
-      const isEnabled = e.target.checked;
-      const rateInputs = document.querySelectorAll(".rate-input");
-      const revenueInfo = document.querySelector(
-        ".multiple-rates-revenue-info",
-      );
-      const wrapper = document.querySelector(".multiple-rates-wrapper");
 
-      revenueInfo.style.display = isEnabled ? "block" : "none";
-      wrapper.style.justifyContent = isEnabled ? "space-between" : "flex-end";
+  DOM.multipleRatesToggle.addEventListener("change", function (e) {
+    const isEnabled = e.target.checked;
+    const rateInputs = document.querySelectorAll(".rate-input");
+    const revenueInfo = document.querySelector(".multiple-rates-revenue-info");
+    const wrapper = document.querySelector(".multiple-rates-wrapper");
 
-      rateInputs.forEach((input) => {
-        const wrapper = input.closest(".checkbox-wrapper");
-        const checkbox = wrapper.querySelector('input[type="checkbox"]');
-        const targetId = checkbox.dataset.target;
-        const targetInput = document.getElementById(targetId);
-        if (isEnabled && checkbox.checked) {
-          input.classList.add("show");
-          input.value = "";
-          targetInput.value = formatPLN(0);
-        } else {
-          input.classList.remove("show");
-          input.value = "";
-          if (!isEnabled && checkbox.checked) calculate();
-        }
-      });
-      if (isEnabled) updateRemainingRevenue();
-      else if (!DOM.resultsSection.classList.contains("hidden")) calculate();
-      updateRatesTotal();
+    revenueInfo.style.display = isEnabled ? "block" : "none";
+    wrapper.style.justifyContent = isEnabled ? "space-between" : "flex-end";
+
+    rateInputs.forEach((input) => {
+      const wrap = input.closest(".checkbox-wrapper");
+      const checkbox = wrap.querySelector('input[type="checkbox"]');
+      const targetId = checkbox.dataset.target;
+      const targetInput = document.getElementById(targetId);
+      if (isEnabled && checkbox.checked) {
+        input.classList.add("show");
+        input.value = "";
+        resizeRateInput(input);
+        targetInput.value = formatPLN(0);
+      } else {
+        input.classList.remove("show");
+        input.value = "";
+        resetRateInputWidth(input);
+      }
     });
+    if (isEnabled) updateRemainingRevenue();
+    calculate();
+    updateRatesTotal();
+  });
+
   DOM.ryczaltCheckboxes.forEach((checkbox) => {
     checkbox.addEventListener("change", function () {
       const targetId = this.dataset.target;
@@ -832,57 +1191,68 @@
       const multipleRatesEnabled = DOM.multipleRatesToggle.checked;
 
       if (this.checked) {
-        targetGroup.style.display = "flex";
+        targetGroup.style.display = "grid";
         if (multipleRatesEnabled) {
           rateInput.classList.add("show");
           rateInput.value = "";
+          resizeRateInput(rateInput);
           targetInput.value = formatPLN(0);
         }
       } else {
         targetGroup.style.display = "none";
         rateInput.classList.remove("show");
         rateInput.value = "";
+        resetRateInputWidth(rateInput);
         targetInput.value = formatPLN(0);
       }
 
-      const anyChecked = Array.from(DOM.ryczaltCheckboxes).some(
-        (cb) => cb.checked,
-      );
-      DOM.ryczaltMessage.style.display = anyChecked ? "none" : "block";
-
-      if (!DOM.resultsSection.classList.contains("hidden")) {
-        calculate();
-      }
-      if (multipleRatesEnabled) {
-        updateRemainingRevenue();
-      }
+      updateRyczaltMessage();
+      calculate();
+      if (multipleRatesEnabled) updateRemainingRevenue();
     });
   });
+
   document.querySelectorAll(".rate-input").forEach((input) => {
+    resizeRateInput(input);
     input.addEventListener("input", (e) => {
+      resizeRateInput(e.target);
       if (!e.target.value) return;
       const isValid = validateInput(e.target.value, e.target.dataset.for);
-      if (!DOM.resultsSection.classList.contains("hidden") && isValid)
-        calculate();
+      if (isValid) calculate();
       if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("blur", (e) => {
       if (e.target.value) {
         e.target.value = formatPLN(parsePLN(e.target.value));
+        resizeRateInput(e.target);
         updateRemainingRevenue();
       }
     });
     input.addEventListener("focus", (e) => {
       e.target.select();
     });
+    input.addEventListener("click", (e) => {
+      selectInputValue(e);
+      e.stopPropagation();
+    });
   });
-  /* ==================================================
-     Clipboard Calculation Breakdown Functions
-  ================================================== */
 
-  /**
-   * Helper to format number in Polish locale (e.g., 150 000,00 zł)
-   */
+  if (DOM.resetBtn) {
+    DOM.resetBtn.addEventListener("click", resetAll);
+  }
+
+  /* breakdown details: render content the moment the user opens it */
+  if (DOM.breakdownDetails) {
+    DOM.breakdownDetails.addEventListener("toggle", () => {
+      if (DOM.breakdownDetails.open && DOM.breakdownPre) {
+        DOM.breakdownPre.textContent = getFormattedValues();
+      }
+    });
+  }
+
+  /* ==================================================
+     Clipboard / Breakdown text builders (UNCHANGED)
+  ================================================== */
   function formatNumberPL(value) {
     return (
       new Intl.NumberFormat("pl-PL", {
@@ -892,16 +1262,10 @@
     );
   }
 
-  /**
-   * Helper to format percentage in Polish locale (e.g., 9%)
-   */
   function formatPercentPL(value) {
     return (value * 100).toLocaleString("pl-PL") + "%";
   }
 
-  /**
-   * Get health contribution breakdown for scale tax
-   */
   function getHealthScaleBreakdown(income) {
     const minHealth = taxMath.getMinHealthAnnual();
     const calculatedHealth = taxMath.round2(
@@ -926,9 +1290,6 @@
     return { text, healthScale };
   }
 
-  /**
-   * Get health contribution breakdown for linear tax
-   */
   function getHealthLinearBreakdown(income) {
     const minHealth = taxMath.getMinHealthAnnual();
     const calculatedHealth = taxMath.round2(
@@ -959,9 +1320,6 @@
     return { text, healthLinear, healthDeduction };
   }
 
-  /**
-   * Get health contribution breakdown for ryczałt
-   */
   function getHealthRyczaltBreakdown(revenue) {
     const avgSalary = TAX_CONSTANTS.AVG_SALARY_Q4_PREV;
     const healthRate = TAX_CONSTANTS.HEALTH_RATE_RYCZALT;
@@ -972,7 +1330,6 @@
       annualHealth * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR,
     );
 
-    // Determine threshold description
     let thresholdDesc;
     if (revenue <= TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW) {
       thresholdDesc = `do ${formatNumberPL(
@@ -1003,9 +1360,6 @@
     return { text, annualHealth, deduction };
   }
 
-  /**
-   * Get scale tax calculation breakdown (without joint taxation)
-   */
   function getScaleTaxBreakdown(income, healthScale) {
     const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
     const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
@@ -1016,13 +1370,10 @@
     const levyDetails = getSolidarityLevyDetails(income);
 
     let text = `\nObliczenie podatku (skala podatkowa):\n`;
-
-    // Tax-free amount
     text += `  Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
       pitDetails.inTaxFree,
     )} × 0% = 0,00 zł\n`;
 
-    // 12% bracket
     if (pitDetails.in12Bracket > 0) {
       text += `  I próg ${formatPercentPL(rate12)} (${formatNumberPL(
         taxFree + 1,
@@ -1031,7 +1382,6 @@
       )} × ${formatPercentPL(rate12)} = ${formatNumberPL(pitDetails.tax12)}\n`;
     }
 
-    // 32% bracket
     if (pitDetails.in32Bracket > 0) {
       text += `  II próg ${formatPercentPL(rate32)} (${formatNumberPL(
         threshold12 + 1,
@@ -1060,14 +1410,11 @@
         : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
 
     const total = taxMath.round2(totalTax + healthScale);
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
 
-  /**
-   * Get scale tax calculation breakdown with joint taxation
-   */
   function getScaleTaxJointBreakdown(income, spouseIncome, healthScale) {
     const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
     const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
@@ -1151,7 +1498,7 @@
       yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0
         ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
         : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
@@ -1266,14 +1613,11 @@
         ipBoxTax,
       )} + ${formatNumberPL(jointScalePit)} = ${formatNumberPL(totalTax)}\n`;
     }
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
 
-  /**
-   * Get linear tax calculation breakdown
-   */
   function getLinearTaxBreakdown(income, healthLinear, healthDeduction) {
     const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
     const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
@@ -1316,14 +1660,11 @@
         : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
 
     const total = taxMath.round2(totalTax + healthLinear);
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
 
-  /**
-   * Get IP BOX scale tax calculation breakdown
-   */
   function getIpBoxScaleBreakdown(income, ipBoxCoeff, healthScale) {
     const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
@@ -1345,14 +1686,12 @@
       (1 - ipBoxCoeff) * 100
     }%): ${formatNumberPL(regularIncome)}\n`;
 
-    // IP BOX tax
     const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
     text += `\n  Podatek IP BOX:\n`;
     text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
       ipBoxRate,
     )} = ${formatNumberPL(ipBoxTax)}\n`;
 
-    // Regular income tax (scale)
     text += `\n  Podatek od pozostałego dochodu (skala):\n`;
 
     text += `    Kwota wolna (do ${formatNumberPL(
@@ -1405,14 +1744,11 @@
     }
 
     const total = taxMath.round2(totalTax + healthScale);
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
 
-  /**
-   * Get IP BOX linear tax calculation breakdown
-   */
   function getIpBoxLinearBreakdown(
     income,
     ipBoxCoeff,
@@ -1440,14 +1776,12 @@
       (1 - ipBoxCoeff) * 100
     }%): ${formatNumberPL(regularIncome)}\n`;
 
-    // IP BOX tax
     const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
     text += `\n  Podatek IP BOX:\n`;
     text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
       ipBoxRate,
     )} = ${formatNumberPL(ipBoxTax)}\n`;
 
-    // Regular income tax (linear)
     text += `\n  Podatek od pozostałego dochodu (liniowy):\n`;
     text += `    Podstawa (PIT liniowy): ${formatNumberPL(
       regularIncome,
@@ -1491,14 +1825,11 @@
           )}\n`;
 
     const total = taxMath.round2(totalTax + healthLinear);
-    text += `\nRAZEM (podatek + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
 
     return text;
   }
 
-  /**
-   * Get ryczałt calculation breakdown for a single rate
-   */
   function getRyczaltBreakdown(
     revenue,
     rate,
@@ -1524,7 +1855,7 @@
 
     if (!isMultipleRates) {
       const total = taxMath.round2(tax + healthAnnual);
-      text += `\nRAZEM (ryczałt + składka zdrowotna): ${formatNumberPL(
+      text += `\nRAZEM (PIT + składka zdrowotna zdrowotna): ${formatNumberPL(
         total,
       )}\n`;
     }
@@ -1532,9 +1863,6 @@
     return text;
   }
 
-  /**
-   * Get ryczałt 8.5%/12.5% calculation breakdown (mixed rate)
-   */
   function getRyczalt85125Breakdown(
     revenue,
     healthDeduction,
@@ -1585,7 +1913,7 @@
 
     if (!isMultipleRates) {
       const total = taxMath.round2(tax + healthAnnual);
-      text += `\nRAZEM (ryczałt + składka zdrowotna): ${formatNumberPL(
+      text += `\nRAZEM (PIT + składka zdrowotna zdrowotna): ${formatNumberPL(
         total,
       )}\n`;
     }
@@ -1594,22 +1922,22 @@
   }
 
   function getFormattedValues() {
-    // Parse input values
     const revenueNum = parsePLN(DOM.revenueInput.value);
     const costsNum = parsePLN(DOM.costsInput.value);
     const incomeNum = revenueNum - costsNum;
-    const ipBoxCoeffNum = parseFloat(DOM.ipBoxCoeffInput.value) / 100;
+    const ipBoxOn = isIpBoxEnabled();
+    const ipBoxCoeffNum = ipBoxOn
+      ? parseFloat(DOM.ipBoxCoeffInput.value) / 100
+      : 0;
     const isJointTaxation = document.querySelector(".joint-taxation-card.show");
     const spouseIncomeNum = isJointTaxation
       ? parsePLN(document.getElementById("spouseIncome").value)
       : 0;
     const isMultipleRates = DOM.multipleRatesToggle.checked;
 
-    // Get calculated health contributions
     const healthScaleData = getHealthScaleBreakdown(incomeNum);
     const healthLinearData = getHealthLinearBreakdown(incomeNum);
 
-    // Determine ryczałt revenue (total allocated or full revenue)
     let ryczaltRevenueForHealth = revenueNum;
     if (isMultipleRates) {
       let totalAllocated = 0;
@@ -1622,7 +1950,6 @@
       ryczaltRevenueForHealth,
     );
 
-    // Build output text
     let text = `=== DANE PODSTAWOWE ===\n`;
     text += `Przychód: ${formatNumberPL(revenueNum)}\n`;
     text += `Koszty: ${formatNumberPL(costsNum)}\n`;
@@ -1630,7 +1957,9 @@
     if (isJointTaxation) {
       text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n`;
     }
-    text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n`;
+    if (ipBoxOn) {
+      text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n`;
+    }
 
     text += `\nZakres obliczeń: kwoty obejmują PIT (skala / liniowy / ryczałt)\n`;
     text += `oraz składkę zdrowotną podatnika. Nie obejmują składek społecznych\n`;
@@ -1643,12 +1972,10 @@
       text += `"2 × PIT((suma dochodów) / 2)" dla skali.\n`;
     }
 
-    // ==================== PODSUMOWANIE WYNIKÓW ====================
     text += `\n${"=".repeat(50)}\n`;
     text += `=== PODSUMOWANIE WYNIKÓW ===\n`;
     text += `${"=".repeat(50)}\n\n`;
 
-    // Scale tax summary
     const taxScaleValue = document.getElementById("taxScale").value;
     const taxScaleIpBoxValue = document.getElementById("taxScaleIpBox").value;
     text += `SKALA PODATKOWA:\n`;
@@ -1657,22 +1984,28 @@
       const taxScaleIpBoxJointValue =
         document.getElementById("taxScaleIpBoxJoint").value;
       text += `  Indywidualnie: ${taxScaleValue}\n`;
-      text += `  Indywidualnie (IP BOX): ${taxScaleIpBoxValue}\n`;
+      if (ipBoxOn) {
+        text += `  Indywidualnie (IP BOX): ${taxScaleIpBoxValue}\n`;
+      }
       text += `  Wspólnie z małżonkiem: ${taxScaleJointValue}\n`;
-      text += `  Wspólnie z małżonkiem (IP BOX): ${taxScaleIpBoxJointValue}\n`;
+      if (ipBoxOn) {
+        text += `  Wspólnie z małżonkiem (IP BOX): ${taxScaleIpBoxJointValue}\n`;
+      }
     } else {
       text += `  Skala podatkowa: ${taxScaleValue}\n`;
-      text += `  Skala podatkowa (IP BOX): ${taxScaleIpBoxValue}\n`;
+      if (ipBoxOn) {
+        text += `  Skala podatkowa (IP BOX): ${taxScaleIpBoxValue}\n`;
+      }
     }
 
-    // Linear tax summary
     const taxLinearValue = document.getElementById("taxLinear").value;
     const taxLinearIpBoxValue = document.getElementById("taxLinearIpBox").value;
     text += `\nPODATEK LINIOWY:\n`;
     text += `  Podatek liniowy: ${taxLinearValue}\n`;
-    text += `  Podatek liniowy (IP BOX): ${taxLinearIpBoxValue}\n`;
+    if (ipBoxOn) {
+      text += `  Podatek liniowy (IP BOX): ${taxLinearIpBoxValue}\n`;
+    }
 
-    // Ryczałt summary
     const anyRyczaltVisible = Array.from(DOM.ryczaltCheckboxes).some(
       (checkbox) => checkbox.checked,
     );
@@ -1701,29 +2034,25 @@
         }
       });
 
-      // Show total if multiple rates
       if (isMultipleRates) {
         const ratesTotalValue = document.getElementById("ratesTotalValue");
         if (ratesTotalValue) {
           text += `  ---\n`;
-          text += `  SUMA (ryczałt + składka zdrowotna): ${ratesTotalValue.textContent}\n`;
+          text += `  SUMA (PIT + składka zdrowotna zdrowotna): ${ratesTotalValue.textContent}\n`;
         }
       }
     }
 
-    // ==================== SZCZEGÓŁY OBLICZEŃ ====================
     text += `\n${"=".repeat(50)}\n`;
     text += `=== SZCZEGÓŁY OBLICZEŃ ===\n`;
     text += `${"=".repeat(50)}\n`;
 
-    // ===== SKALA PODATKOWA =====
     text += `\n--- SKALA PODATKOWA ---\n`;
     text += `\nDochód: ${formatNumberPL(incomeNum)}\n\n`;
     text += healthScaleData.text;
     text += getScaleTaxBreakdown(incomeNum, healthScaleData.healthScale);
 
-    // Scale tax with IP BOX
-    if (ipBoxCoeffNum > 0) {
+    if (ipBoxOn && ipBoxCoeffNum > 0) {
       text += `\n--- SKALA PODATKOWA (IP BOX) ---\n`;
       text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
       text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
@@ -1735,7 +2064,6 @@
       );
     }
 
-    // Joint taxation
     if (isJointTaxation) {
       text += `\n--- SKALA PODATKOWA (WSPÓLNIE Z MAŁŻONKIEM) ---\n`;
       text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
@@ -1747,8 +2075,7 @@
         healthScaleData.healthScale,
       );
 
-      // Joint with IP BOX
-      if (ipBoxCoeffNum > 0) {
+      if (ipBoxOn && ipBoxCoeffNum > 0) {
         text += `\n--- SKALA PODATKOWA Z IP BOX (WSPÓLNIE Z MAŁŻONKIEM) ---\n`;
         text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
         text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n`;
@@ -1763,7 +2090,6 @@
       }
     }
 
-    // ===== PODATEK LINIOWY =====
     text += `\n--- PODATEK LINIOWY ---\n`;
     text += `\nDochód: ${formatNumberPL(incomeNum)}\n\n`;
     text += healthLinearData.text;
@@ -1773,8 +2099,7 @@
       healthLinearData.healthDeduction,
     );
 
-    // Linear with IP BOX
-    if (ipBoxCoeffNum > 0) {
+    if (ipBoxOn && ipBoxCoeffNum > 0) {
       text += `\n--- PODATEK LINIOWY (IP BOX) ---\n`;
       text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
       text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
@@ -1787,7 +2112,6 @@
       );
     }
 
-    // ===== RYCZAŁT =====
     if (anyRyczaltVisible) {
       text += `\n--- RYCZAŁT ---\n`;
       text += `\nPrzychód: ${formatNumberPL(revenueNum)}\n`;
@@ -1797,7 +2121,6 @@
       text += `\n`;
       text += healthRyczaltData.text;
 
-      // Show breakdown for each visible ryczałt rate
       ryczaltRates.forEach((rateInfo) => {
         const element = document.getElementById(rateInfo.id);
         if (
@@ -1832,7 +2155,6 @@
         }
       });
 
-      // Multiple rates total
       if (isMultipleRates) {
         text += `\n--- SUMA RYCZAŁTU (WIELE STAWEK) ---\n`;
         let totalAllocated = 0;
@@ -1861,13 +2183,13 @@
       }
     }
 
-    // Footer
     text += `\n${"=".repeat(50)}\n`;
     text += `Obliczenia wykonane kalkulatorem podatkowym 2026\n`;
     text += `Stan prawny: od ${TAX_CONSTANTS.EFFECTIVE_FROM}\n`;
 
     return text;
   }
+
   /* ==================================================
      Copy Modal Controller + Confirmation Toast
   ================================================== */
@@ -2067,7 +2389,7 @@
     const intro = document.createElement("p");
     intro.className = "info-modal-intro";
     intro.textContent =
-      "Poniżej znajdziesz wszystkie stałe podatkowe i współczynniki, które Uproszczony Kalkulator Podatkowy bierze pod uwagę przy obliczeniach dla roku 2026.";
+      "Poniżej znajdziesz wszystkie stałe podatkowe i współczynniki, które kalkulator bierze pod uwagę dla roku 2026.";
     DOM.infoModalContent.appendChild(intro);
 
     DOM.infoModalContent.appendChild(
@@ -2392,4 +2714,21 @@
       }
     });
   }
+
+  /* ==================================================
+     Initial paint — set up empty state correctly
+  ================================================== */
+  syncIpBoxRange();
+  updateConditionalRowsVisibility();
+  // hide all ryczałt result rows by default
+  RYCZALT_VARIANT_IDS.forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) {
+      const group = input.closest(".input-group");
+      if (group) group.style.display = "none";
+    }
+  });
+  updateRyczaltMessage();
+  // run an initial calculation so the income field shows 0,00 and rank state is stable
+  calculate();
 })();

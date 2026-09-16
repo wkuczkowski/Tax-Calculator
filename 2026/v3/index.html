@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0b0f0d" />
+    <title>Kalkulator podatkowy 2026 — Rachunek</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Fragment+Mono&display=swap"
+      rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Przejdź do treści</a>
+
+    <div class="atmosphere" aria-hidden="true">
+      <span class="atmosphere-glow atmosphere-glow--a"></span>
+      <span class="atmosphere-glow atmosphere-glow--b"></span>
+      <span class="atmosphere-grid"></span>
+    </div>
+
+    <!-- ========== MASTHEAD ========== -->
+    <header class="masthead" role="banner">
+      <span class="masthead-year" aria-hidden="true">2026</span>
+      <div class="masthead-inner">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none" focusable="false">
+              <path
+                d="M6 8.5h20M6 16h20M6 23.5h13"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round" />
+              <circle cx="24.5" cy="23.5" r="2.6" fill="currentColor" />
+            </svg>
+          </span>
+          <div class="brand-text">
+            <p class="brand-eyebrow">Rachunek · działalność gospodarcza</p>
+            <h1 class="brand-title">
+              Kalkulator podatkowy
+              <em class="brand-title-year">2026</em>
+            </h1>
+            <p class="brand-sub">
+              Skala, liniowy, ryczałt i IP&nbsp;Box obok siebie — stan prawny
+              od 1.02.2026.
+            </p>
+          </div>
+        </div>
+
+        <nav class="actions" aria-label="Akcje narzędzia">
+          <button type="button" class="action-btn" id="resetBtn">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 4v5h5" />
+            </svg>
+            <span>Wyzeruj</span>
+          </button>
+          <button type="button" class="action-btn" id="copyFab">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="9" y="9" width="12" height="12" rx="2" />
+              <path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5" />
+            </svg>
+            <span>Eksport</span>
+          </button>
+          <button type="button" class="action-btn action-btn--accent" id="infoFab">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v5" />
+              <path d="M12 8h.01" />
+            </svg>
+            <span>Założenia</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="layout">
+      <!-- ========== FORM PANE ========== -->
+      <section class="pane pane-form" aria-labelledby="inputsTitle">
+        <header class="pane-head">
+          <span class="pane-index" aria-hidden="true">I</span>
+          <div>
+            <h2 id="inputsTitle" class="pane-title">Dane wejściowe</h2>
+            <p class="pane-lede">
+              Wyniki przeliczają się na bieżąco, w trakcie wpisywania.
+            </p>
+          </div>
+        </header>
+
+        <fieldset class="block" data-reveal="1">
+          <legend class="block-legend">Działalność</legend>
+
+          <div class="field">
+            <label class="field-label" for="revenue">
+              Przychód roczny
+              <span class="field-hint">netto, bez VAT</span>
+            </label>
+            <div class="money">
+              <input
+                type="text"
+                id="revenue"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="0,00"
+                aria-describedby="revenue-error" />
+              <span class="money-unit" aria-hidden="true">zł</span>
+            </div>
+            <p
+              class="error-message"
+              id="revenue-error"
+              role="alert"
+              aria-live="polite"></p>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="costs">
+              Koszty roczne
+              <span class="field-hint">koszty uzyskania przychodu</span>
+            </label>
+            <div class="money">
+              <input
+                type="text"
+                id="costs"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="0,00"
+                aria-describedby="costs-error" />
+              <span class="money-unit" aria-hidden="true">zł</span>
+            </div>
+            <p
+              class="error-message"
+              id="costs-error"
+              role="alert"
+              aria-live="polite"></p>
+          </div>
+
+          <div class="field field--derived">
+            <label class="field-label" for="income">
+              Dochód
+              <span class="field-hint">przychód − koszty</span>
+            </label>
+            <div class="derived">
+              <span class="derived-eq" aria-hidden="true">=</span>
+              <input type="text" id="income" readonly value="0,00 zł" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="block" data-reveal="2">
+          <legend class="block-legend">Ulgi i rozliczenie</legend>
+
+          <div class="field field--switch" id="ipBoxContainer">
+            <div class="switch-row">
+              <div class="switch-copy">
+                <span class="field-label" id="ipBoxEnabledLabel">IP Box</span>
+                <span class="field-hint">
+                  część dochodu z kwalifikowanych praw IP opodatkowana 5%
+                </span>
+              </div>
+              <div
+                class="seg"
+                role="radiogroup"
+                aria-labelledby="ipBoxEnabledLabel">
+                <label class="seg-opt">
+                  <input type="radio" name="ipBoxEnabled" value="no" checked />
+                  <span>Nie</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="ipBoxEnabled" value="yes" />
+                  <span>Tak</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="reveal" id="ipBoxReveal">
+              <div class="reveal-inner">
+                <div class="coeff">
+                  <div class="coeff-head">
+                    <label class="coeff-label" for="ipBoxRange">
+                      Współczynnik IP Box
+                    </label>
+                    <div class="coeff-number">
+                      <input
+                        type="number"
+                        id="ipBoxCoeff"
+                        value="25"
+                        min="0"
+                        max="100"
+                        step="1"
+                        aria-label="Współczynnik IP Box w procentach"
+                        aria-describedby="ipBoxCoeff-error" />
+                      <span class="coeff-unit" aria-hidden="true">%</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    id="ipBoxRange"
+                    class="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="25"
+                    aria-label="Suwak współczynnika IP Box" />
+                  <div class="coeff-scale" aria-hidden="true">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+                <p
+                  class="error-message"
+                  id="ipBoxCoeff-error"
+                  role="alert"
+                  aria-live="polite"></p>
+              </div>
+            </div>
+            <button
+              id="ipBoxEdit"
+              class="sr-only"
+              type="button"
+              tabindex="-1"
+              aria-hidden="true">
+              edit
+            </button>
+          </div>
+
+          <div class="field field--switch" id="jointTaxationCard">
+            <div class="switch-row">
+              <div class="switch-copy">
+                <span class="field-label" id="jointTaxationLabel">
+                  Wspólne rozliczenie z małżonkiem
+                </span>
+                <span class="field-hint">
+                  dotyczy wyłącznie wariantów wg skali podatkowej
+                </span>
+              </div>
+              <div
+                class="seg"
+                role="radiogroup"
+                aria-labelledby="jointTaxationLabel">
+                <label class="seg-opt">
+                  <input type="radio" name="jointTaxation" value="no" checked />
+                  <span>Nie</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="jointTaxation" value="yes" />
+                  <span>Tak</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="reveal field--spouse" id="spouseIncomeCard">
+            <div class="reveal-inner">
+              <div class="field">
+                <label class="field-label" for="spouseIncome">
+                  Dochód małżonka
+                  <span class="field-hint">
+                    roczny, opodatkowany wg skali
+                  </span>
+                </label>
+                <div class="money">
+                  <input
+                    type="text"
+                    id="spouseIncome"
+                    value="0"
+                    readonly
+                    inputmode="decimal"
+                    placeholder="0,00"
+                    aria-describedby="spouseIncome-error spouseIncomeNote" />
+                  <span class="money-unit" aria-hidden="true">zł</span>
+                </div>
+                <p
+                  class="error-message"
+                  id="spouseIncome-error"
+                  role="alert"
+                  aria-live="polite"></p>
+                <p class="field-note" id="spouseIncomeNote">
+                  Nie obejmuje składki zdrowotnej ani innych obciążeń małżonka
+                  — wpływa tylko na warianty „wspólnie z małżonkiem”.
+                </p>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="block" data-reveal="3">
+          <legend class="block-legend">Ryczałt</legend>
+          <p class="block-hint">
+            Zaznacz stawki, które chcesz porównać. W trybie wielu stawek
+            rozdzielisz przychód między nie ręcznie.
+          </p>
+
+          <div
+            class="checkbox-group rates"
+            role="group"
+            aria-label="Stawki ryczałtu">
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="2" data-target="ryczalt2" />
+              <span class="rate-label">2%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt2"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 2%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="3" data-target="ryczalt3" />
+              <span class="rate-label">3%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt3"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 3%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="5.5" data-target="ryczalt5_5" />
+              <span class="rate-label">5,5%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt5_5"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 5,5%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="8.5" data-target="ryczalt8_5" />
+              <span class="rate-label">8,5%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt8_5"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 8,5%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate rate--wide checkbox-wrapper">
+              <input
+                type="checkbox"
+                value="8.5-12.5"
+                data-target="ryczalt8_5_12_5"
+                aria-label="8,5% / 12,5% powyżej 100 000 zł" />
+              <span class="rate-label">
+                8,5% / 12,5%
+                <small>pow. 100 tys.</small>
+              </span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt8_5_12_5"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 8,5% / 12,5%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="10" data-target="ryczalt10" />
+              <span class="rate-label">10%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt10"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 10%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="12" data-target="ryczalt12" />
+              <span class="rate-label">12%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt12"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 12%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="14" data-target="ryczalt14" />
+              <span class="rate-label">14%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt14"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 14%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="15" data-target="ryczalt15" />
+              <span class="rate-label">15%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt15"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 15%"
+                inputmode="decimal" />
+            </label>
+            <label class="rate checkbox-wrapper">
+              <input type="checkbox" value="17" data-target="ryczalt17" />
+              <span class="rate-label">17%</span>
+              <input
+                type="text"
+                class="rate-input"
+                data-for="ryczalt17"
+                placeholder="przychód"
+                aria-label="Przychód dla stawki 17%"
+                inputmode="decimal" />
+            </label>
+          </div>
+
+          <div class="multiple-rates-wrapper">
+            <div class="multiple-rates-revenue-info">
+              <p>Przychód do rozdysponowania:</p>
+            </div>
+            <label class="toggle">
+              <span class="toggle-text">
+                <span class="toggle-title">Wiele stawek</span>
+                <span class="toggle-hint">osobny przychód dla każdej stawki</span>
+              </span>
+              <span class="toggle-switch">
+                <input type="checkbox" id="multipleRatesToggle" />
+                <span class="toggle-knob"></span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-foot" data-reveal="4">
+          <button id="calculateButton" class="btn btn--primary" type="button">
+            <span>Pokaż wyniki</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </button>
+          <p class="footnote">
+            Kwoty obejmują PIT (skala / liniowy / ryczałt) oraz składkę
+            zdrowotną podatnika. Nie uwzględniają składek społecznych (ZUS) ani
+            obciążeń po stronie małżonka.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========== RESULTS PANE ========== -->
+      <section
+        class="pane pane-results"
+        id="resultsSection"
+        aria-labelledby="resultsTitle">
+        <div class="results-sticky">
+          <header class="pane-head">
+            <span class="pane-index" aria-hidden="true">II</span>
+            <div>
+              <h2 id="resultsTitle" class="pane-title">Wyniki</h2>
+              <p class="pane-lede">Roczne obciążenie: PIT + składka zdrowotna.</p>
+            </div>
+          </header>
+
+          <article
+            class="ticket"
+            id="bestCard"
+            data-state="empty"
+            aria-live="polite"
+            aria-atomic="true">
+            <div class="ticket-top">
+              <span class="ticket-kicker">Najkorzystniejsza forma</span>
+              <span class="ticket-stamp" aria-hidden="true">2026</span>
+            </div>
+            <p class="ticket-title" id="bestCardTitle">—</p>
+            <p class="ticket-amount" id="bestCardAmount">—</p>
+            <div class="ticket-tear" aria-hidden="true"></div>
+            <p class="ticket-savings" id="bestCardSavings"></p>
+          </article>
+
+          <section class="ranking" aria-labelledby="comparePitTitle">
+            <header class="ranking-head">
+              <h3 id="comparePitTitle" class="ranking-title">
+                Ranking form opodatkowania
+              </h3>
+              <span class="ranking-meta">od najniższego obciążenia</span>
+            </header>
+
+            <div class="comparison" id="comparePit">
+              <div class="results-row input-group" data-variant="taxScale">
+                <span class="results-row-label">Skala podatkowa</span>
+                <span class="results-row-tag">12% / 32%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxScale" type="text" readonly tabindex="-1" aria-label="Skala podatkowa — obciążenie roczne" />
+              </div>
+              <div
+                class="results-row input-group ipbox-card"
+                data-variant="taxScaleIpBox">
+                <span class="results-row-label">
+                  Skala podatkowa
+                  <span class="mark mark--ipbox">IP Box</span>
+                </span>
+                <span class="results-row-tag">5% / 12% / 32%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxScaleIpBox" type="text" readonly tabindex="-1" aria-label="Skala podatkowa z IP Box — obciążenie roczne" />
+              </div>
+              <div
+                class="results-row input-group joint-taxation-card"
+                data-variant="taxScaleJoint">
+                <span class="results-row-label">
+                  Skala podatkowa
+                  <span class="mark mark--joint" role="img" aria-label="Wspólnie z małżonkiem" title="Wspólnie z małżonkiem">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                      <circle cx="7" cy="6.5" r="2.3" />
+                      <circle cx="13" cy="6.5" r="2.3" />
+                      <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
+                      <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
+                    </svg>
+                    <span>wspólnie</span>
+                  </span>
+                </span>
+                <span class="results-row-tag">12% / 32%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxScaleJoint" type="text" readonly tabindex="-1" aria-label="Skala podatkowa wspólnie z małżonkiem — obciążenie roczne" />
+              </div>
+              <div
+                class="results-row input-group joint-taxation-card ipbox-card"
+                data-variant="taxScaleIpBoxJoint">
+                <span class="results-row-label">
+                  Skala podatkowa
+                  <span class="mark mark--ipbox">IP Box</span>
+                  <span class="mark mark--joint" role="img" aria-label="Wspólnie z małżonkiem" title="Wspólnie z małżonkiem">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                      <circle cx="7" cy="6.5" r="2.3" />
+                      <circle cx="13" cy="6.5" r="2.3" />
+                      <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
+                      <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
+                    </svg>
+                    <span>wspólnie</span>
+                  </span>
+                </span>
+                <span class="results-row-tag">5% / 12% / 32%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxScaleIpBoxJoint" type="text" readonly tabindex="-1" aria-label="Skala podatkowa z IP Box wspólnie z małżonkiem — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="taxLinear">
+                <span class="results-row-label">Podatek liniowy</span>
+                <span class="results-row-tag">19%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxLinear" type="text" readonly tabindex="-1" aria-label="Podatek liniowy — obciążenie roczne" />
+              </div>
+              <div
+                class="results-row input-group ipbox-card"
+                data-variant="taxLinearIpBox">
+                <span class="results-row-label">
+                  Podatek liniowy
+                  <span class="mark mark--ipbox">IP Box</span>
+                </span>
+                <span class="results-row-tag">5% / 19%</span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="taxLinearIpBox" type="text" readonly tabindex="-1" aria-label="Podatek liniowy z IP Box — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt2">
+                <span class="results-row-label">Ryczałt 2%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt2" type="text" readonly tabindex="-1" aria-label="Ryczałt 2% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt3">
+                <span class="results-row-label">Ryczałt 3%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt3" type="text" readonly tabindex="-1" aria-label="Ryczałt 3% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt5_5">
+                <span class="results-row-label">Ryczałt 5,5%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt5_5" type="text" readonly tabindex="-1" aria-label="Ryczałt 5,5% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt8_5">
+                <span class="results-row-label">Ryczałt 8,5%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt8_5" type="text" readonly tabindex="-1" aria-label="Ryczałt 8,5% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt8_5_12_5">
+                <span class="results-row-label">
+                  Ryczałt 8,5% / 12,5%
+                  <em>powyżej 100 000 zł</em>
+                </span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt8_5_12_5" type="text" readonly tabindex="-1" aria-label="Ryczałt 8,5% / 12,5% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt10">
+                <span class="results-row-label">Ryczałt 10%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt10" type="text" readonly tabindex="-1" aria-label="Ryczałt 10% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt12">
+                <span class="results-row-label">Ryczałt 12%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt12" type="text" readonly tabindex="-1" aria-label="Ryczałt 12% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt14">
+                <span class="results-row-label">Ryczałt 14%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt14" type="text" readonly tabindex="-1" aria-label="Ryczałt 14% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt15">
+                <span class="results-row-label">Ryczałt 15%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt15" type="text" readonly tabindex="-1" aria-label="Ryczałt 15% — obciążenie roczne" />
+              </div>
+              <div class="results-row input-group" data-variant="ryczalt17">
+                <span class="results-row-label">Ryczałt 17%</span>
+                <span class="results-row-tag" data-revenue-tag></span>
+                <span class="results-row-bar"><span data-bar></span></span>
+                <input id="ryczalt17" type="text" readonly tabindex="-1" aria-label="Ryczałt 17% — obciążenie roczne" />
+              </div>
+
+              <div id="ratesTotal" class="rates-total hidden">
+                <div class="rates-total-row">
+                  <span>Składka zdrowotna (rocznie)</span>
+                  <span id="ratesHealthRyczaltValue"></span>
+                </div>
+                <div class="rates-total-row rates-total-sum">
+                  <span>Ryczałt łącznie — PIT + składka zdrowotna</span>
+                  <span id="ratesTotalValue"></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <details class="breakdown" id="breakdownDetails">
+            <summary>
+              <span class="breakdown-summary-label">
+                Szczegółowe obliczenia
+              </span>
+              <span class="breakdown-summary-hint">krok po kroku</span>
+              <svg
+                class="breakdown-chevron"
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <pre class="breakdown-pre" id="breakdownPre"></pre>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <!-- ========== EXPORT MODAL ========== -->
+    <div
+      class="copy-modal"
+      id="copyModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copyModalTitle"
+      aria-hidden="true"
+      hidden>
+      <div class="copy-modal-backdrop" data-copy-modal-close></div>
+      <div class="copy-modal-card" role="document">
+        <header class="copy-modal-header">
+          <div>
+            <p class="copy-modal-eyebrow">Eksport</p>
+            <h3 id="copyModalTitle">Pełne obliczenia</h3>
+          </div>
+          <button
+            type="button"
+            class="copy-modal-close"
+            aria-label="Zamknij"
+            data-copy-modal-close>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="2"
+                d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="copy-modal-body">
+          <pre class="copy-modal-preview" id="copyPreview"></pre>
+        </div>
+        <footer class="copy-modal-footer">
+          <button
+            type="button"
+            class="btn btn--ghost"
+            id="copyModalCloseBtn"
+            data-copy-modal-close>
+            Zamknij
+          </button>
+          <button type="button" class="btn btn--primary" id="copyModalCopy">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="9" y="9" width="12" height="12" rx="2" />
+              <path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5" />
+            </svg>
+            <span>Kopiuj do schowka</span>
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ========== INFO (CONSTANTS) MODAL ========== -->
+    <div
+      class="copy-modal info-modal"
+      id="infoModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="infoModalTitle"
+      aria-hidden="true"
+      hidden>
+      <div class="copy-modal-backdrop" data-info-modal-close></div>
+      <div class="copy-modal-card" role="document">
+        <header class="copy-modal-header">
+          <div>
+            <p class="copy-modal-eyebrow">Stałe podatkowe</p>
+            <h3 id="infoModalTitle">Założenia kalkulatora</h3>
+          </div>
+          <button
+            type="button"
+            class="copy-modal-close"
+            aria-label="Zamknij"
+            data-info-modal-close>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="2"
+                d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="copy-modal-body info-modal-body">
+          <div class="info-modal-content" id="infoModalContent"></div>
+        </div>
+        <footer class="copy-modal-footer">
+          <button type="button" class="btn btn--ghost" data-info-modal-close>
+            Zamknij
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ========== COPY-SUCCESS TOAST ========== -->
+    <div
+      class="copy-toast"
+      id="copyToast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      hidden>
+      <div class="copy-toast-card">
+        <span class="copy-toast-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path class="copy-toast-check" d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+        <span class="copy-toast-text">
+          <strong>Skopiowano</strong>
+          <span>Wyniki są w schowku</span>
+        </span>
+      </div>
+    </div>
+
+    <script src="../taxConstants.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

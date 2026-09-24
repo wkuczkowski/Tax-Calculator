@@ -6,9 +6,13 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CALC_ROOT = resolve(HERE, "..", "..");
 
-const HTML_PATH = resolve(CALC_ROOT, "index.html");
 const TAX_CONSTANTS_PATH = resolve(CALC_ROOT, "taxConstants.js");
-const SCRIPT_PATH = resolve(CALC_ROOT, "script.js");
+
+/* Calculator front-ends that share 2026/taxConstants.js. */
+const APP_DIRS = {
+  2026: CALC_ROOT,
+  v2: resolve(CALC_ROOT, "..", "v2"),
+};
 
 const RESULT_IDS = [
   "income",
@@ -53,13 +57,18 @@ const RYCZALT_KEYS = [
  * inspect them. Browsers don't auto-attach top-level `const` to window,
  * so this exposure is only for tests - it does not change runtime behavior.
  */
-function buildDocumentSource() {
-  const html = readFileSync(HTML_PATH, "utf8");
+function buildDocumentSource(app) {
+  const appDir = APP_DIRS[app];
+  if (!appDir) throw new Error(`Unknown calculator app: ${app}`);
+  const html = readFileSync(resolve(appDir, "index.html"), "utf8");
   const taxConstantsSrc = readFileSync(TAX_CONSTANTS_PATH, "utf8");
-  const scriptSrc = readFileSync(SCRIPT_PATH, "utf8");
+  const scriptSrc = readFileSync(resolve(appDir, "script.js"), "utf8");
 
   const stripped = html
-    .replace(/<script\s+src="taxConstants\.js"\s*><\/script>/i, "")
+    .replace(
+      /<script\s+src="(?:\.\.\/2026\/)?taxConstants\.js"\s*><\/script>/i,
+      "",
+    )
     .replace(/<script\s+src="script\.js"\s*><\/script>/i, "");
 
   const exposeGlobals = `
@@ -84,9 +93,10 @@ function buildDocumentSource() {
 /**
  * Boots a fresh calculator instance in a new JSDOM window.
  * Returns an ergonomic API for driving inputs and reading outputs.
+ * `app` selects the front-end: "2026" (default) or "v2".
  */
-export function loadCalculator() {
-  const dom = new JSDOM(buildDocumentSource(), {
+export function loadCalculator(app = "2026") {
+  const dom = new JSDOM(buildDocumentSource(app), {
     runScripts: "dangerously",
     url: "http://localhost/",
     pretendToBeVisual: true,

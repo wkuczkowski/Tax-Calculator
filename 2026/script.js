@@ -640,7 +640,7 @@
     });
 
     updateRatesTotal();
-    updateRevenueTags(revenue, allocatedRevenues);
+    updateRevenueTags(allocatedRevenues);
     updatePeriodHints();
     rankAndSummarize(revenue, income);
     renderChart({
@@ -698,20 +698,20 @@
   /* ==================================================
      Per-row revenue tags (helps multi-rate readability)
   ================================================== */
-  function updateRevenueTags(revenue, allocatedRevenues) {
+  function updateRevenueTags(allocatedRevenues) {
     RYCZALT_VARIANT_IDS.forEach((id) => {
       const row = document.querySelector(`.results-row[data-variant="${id}"]`);
       if (!row) return;
       const tagEl = row.querySelector("[data-revenue-tag]");
       if (!tagEl) return;
-      if (DOM.multipleRatesToggle.checked) {
-        const allocated = allocatedRevenues[id] || 0;
-        tagEl.textContent = allocated
-          ? `od ${formatPLN(allocated)} przychodu`
-          : "";
-      } else {
-        tagEl.textContent = revenue ? `od ${formatPLN(revenue)} przychodu` : "";
-      }
+      // in single-rate mode every row uses the full revenue, so the tag
+      // only adds information when revenue is split between rates
+      const allocated = DOM.multipleRatesToggle.checked
+        ? allocatedRevenues[id] || 0
+        : 0;
+      tagEl.textContent = allocated
+        ? `od ${formatPLN(allocated)} przychodu`
+        : "";
     });
   }
 
@@ -808,11 +808,9 @@
   function clearRowDetails(row) {
     row.classList.remove("is-best");
     const rank = row.querySelector("[data-rank]");
-    const sub = row.querySelector("[data-sub]");
     const delta = row.querySelector("[data-delta]");
     const bar = row.querySelector("[data-bar]");
     if (rank) rank.textContent = "";
-    if (sub) sub.textContent = "";
     if (delta) delta.textContent = "";
     if (bar) bar.style.width = "0%";
   }
@@ -821,8 +819,7 @@
     DOM.bestCard.dataset.state = "empty";
     DOM.bestCardTitle.textContent = "—";
     DOM.bestCardAmount.textContent = "—";
-    DOM.bestCardSavings.textContent =
-      "Wprowadź dane, aby zobaczyć najkorzystniejszy wariant.";
+    DOM.bestCardSavings.textContent = "Wpisz przychód, aby zobaczyć wynik.";
     DOM.bestCardMonthly.textContent = "—";
     DOM.bestCardRate.textContent = "—";
     DOM.bestCardNet.textContent = "—";
@@ -896,13 +893,6 @@
       const rank = v.row.querySelector("[data-rank]");
       if (rank) rank.textContent = String(index + 1);
 
-      const sub = v.row.querySelector("[data-sub]");
-      if (sub) {
-        const parts = [`${formatWholePLN(v.value / 12)} / mies.`];
-        if (income > 0) parts.push(`${formatPercent1(v.value / income)} dochodu`);
-        sub.textContent = parts.join(" · ");
-      }
-
       const delta = v.row.querySelector("[data-delta]");
       if (delta) {
         delta.textContent =
@@ -923,19 +913,14 @@
     if (second && second.value > best.value) {
       const delta = second.value - best.value;
       DOM.bestCardSavings.innerHTML =
-        `<strong>${formatPLN(delta)} mniej</strong>` +
-        ` niż ${VARIANT_LABELS[second.id] || second.id}`;
-      if (worst && worst !== second && worst.value > second.value) {
-        DOM.bestCardSavings.innerHTML += ` · do ${formatWholePLN(
-          worst.value - best.value,
-        )} mniej niż najdroższa opcja`;
-      }
+        `<strong>${formatPLN(delta)}</strong> taniej niż ` +
+        (VARIANT_LABELS[second.id] || second.id);
     } else if (worst && worst.value > best.value) {
       const delta = worst.value - best.value;
-      DOM.bestCardSavings.innerHTML = `<strong>${formatPLN(delta)} mniej</strong> niż najdroższa opcja`;
+      DOM.bestCardSavings.innerHTML = `<strong>${formatPLN(delta)}</strong> taniej niż najdroższy wariant`;
     } else {
       DOM.bestCardSavings.textContent =
-        "Tylko jeden widoczny wariant — zaznacz stawkę ryczałtu, aby porównać.";
+        "Zaznacz stawkę ryczałtu, aby porównać więcej wariantów.";
     }
 
     if (DOM.mobileSummary) {
@@ -2942,7 +2927,7 @@
     const svg = DOM.chartSvg;
     svg.textContent = "";
     const width = Math.max(DOM.chartFrame.clientWidth || 0, 280) || 640;
-    const height = width < 520 ? 240 : 300;
+    const height = width < 520 ? 220 : 260;
     const m = { top: 20, right: 16, bottom: 30, left: 58 };
     const iw = width - m.left - m.right;
     const ih = height - m.top - m.bottom;
@@ -3075,13 +3060,10 @@
     }
 
     chartModel = buildChartModel(lastChartArgs);
-    const costNote =
-      costRatio > 0
-        ? `koszty stale ${formatPercent1(costRatio)} przychodu`
-        : "bez kosztów";
     DOM.chartMeta.textContent =
-      `Obciążenie roczne przy innym przychodzie · ${costNote}` +
-      (args.isMultiRate ? " · bez ryczałtu z wieloma stawkami" : "");
+      (costRatio > 0
+        ? `Koszty: ${formatPercent1(costRatio)} przychodu`
+        : "Bez kosztów") + (args.isMultiRate ? ", bez ryczałtu" : "");
     renderLegend(chartModel);
     drawChart(chartModel);
     renderWinners(chartModel);

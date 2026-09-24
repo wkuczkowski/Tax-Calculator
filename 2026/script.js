@@ -289,26 +289,41 @@
   /* ==================================================
      Tax Calculation Functions
   ================================================== */
+  /* Skala podatkowa wg wzoru z art. 27 ust. 1 ustawy o PIT:
+       podstawa ≤ 120 000 zł: 12% × podstawa − 3 600 zł (kwota zmniejszająca
+       podatek; wynik nie mniejszy niż 0),
+       podstawa > 120 000 zł: 10 800 zł + 32% × nadwyżka ponad 120 000 zł.
+     (Liczbowo to samo co 12% od nadwyżki ponad 30 000 zł.) */
   function getScalePitDetails(income) {
-    const taxableIncome = Math.max(income, 0);
-    const taxFreeAmount = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const inTaxFree = Math.min(taxableIncome, taxFreeAmount);
-    const in12Bracket = Math.min(
-      Math.max(taxableIncome - taxFreeAmount, 0),
-      TAX_BAND_12,
+    const C = TAX_CONSTANTS;
+    const taxableIncome = Math.max(taxMath.round2(income), 0);
+    const threshold12 = C.TAX_THRESHOLD_12;
+    const decreasingAmount = C.TAX_DECREASING_AMOUNT;
+    // 12% × 120 000 − 3 600 = 10 800 zł
+    const taxAtThreshold = taxMath.round2(
+      threshold12 * C.PIT_RATE_12 - decreasingAmount,
     );
-    const in32Bracket = Math.max(taxableIncome - threshold12, 0);
-    const tax12 = taxMath.round2(in12Bracket * TAX_CONSTANTS.PIT_RATE_12);
-    const tax32 = taxMath.round2(in32Bracket * TAX_CONSTANTS.PIT_RATE_32);
-    const totalPit = taxMath.round2(tax12 + tax32);
+    let tax12Gross = 0;
+    let excess = 0;
+    let tax32 = 0;
+    let totalPit;
+    if (taxableIncome <= threshold12) {
+      tax12Gross = taxMath.round2(taxableIncome * C.PIT_RATE_12);
+      totalPit = Math.max(taxMath.round2(tax12Gross - decreasingAmount), 0);
+    } else {
+      excess = taxMath.round2(taxableIncome - threshold12);
+      tax32 = taxMath.round2(excess * C.PIT_RATE_32);
+      totalPit = taxMath.round2(taxAtThreshold + tax32);
+    }
 
     return {
       taxableIncome,
-      inTaxFree,
-      in12Bracket,
-      in32Bracket,
-      tax12,
+      upToThreshold: taxableIncome <= threshold12,
+      threshold12,
+      decreasingAmount,
+      taxAtThreshold,
+      tax12Gross,
+      excess,
       tax32,
       totalPit,
     };
@@ -416,7 +431,7 @@
       weights.reduce((sum, weight) => sum + Math.max(weight, 0), 0),
     );
     if (denominator <= 0) return weights.map(() => 0);
-    const amountCents = Math.round(amount * 100);
+    const amountCents = Math.round(taxMath.round2(amount) * 100);
     const weightSum = weights.reduce((sum, weight) => sum + Math.max(weight, 0), 0);
     const targetCents = Math.round((amountCents * weightSum) / denominator);
     const raw = weights.map(
@@ -519,7 +534,7 @@
     ryczalt: {
       none: "brak składek społecznych do odliczenia",
       ryczalt:
-        "od przychodu (art. 11 ust. 1 ustawy o ryczałcie), nadwyżka od innych dochodów ze skali",
+        "od przychodu po odliczeniu 50% zdrowotnej (art. 11 ust. 1 i 1a ustawy o ryczałcie), nadwyżka od innych dochodów ze skali (art. 26 ust. 13a)",
       scale: "od innych dochodów ze skali (art. 26 ust. 1 pkt 2 i ust. 13a)",
     },
   };
@@ -547,7 +562,7 @@
   }
 
   function buildCalculationContext(inputs, schedule) {
-    const income = inputs.revenue - inputs.costs;
+    const income = taxMath.round2(inputs.revenue - inputs.costs);
     const otherIncome = Math.max(inputs.otherIncome || 0, 0);
     return {
       revenue: inputs.revenue,
@@ -728,22 +743,65 @@
         allocatedTotal,
       ),
     );
-    let socialFromRevenue;
-    let socialFromScale;
-    if (method === "scale") {
-      socialFromScale = Math.min(ctx.social, ctx.otherIncome);
-      socialFromRevenue = 0;
-    } else {
-      socialFromRevenue = Math.min(ctx.social, Math.max(revenueTotal, 0));
-      socialFromScale = Math.min(
-        taxMath.round2(ctx.social - socialFromRevenue),
-        ctx.otherIncome,
+    /* Podział składek społecznych dla danej (zakładanej) składki zdrowotnej.
+       Metoda "ryczalt": najpierw 50% zdrowotnej (art. 11 ust. 1a – tego
+       odliczenia nie można przenieść na skalę), potem składki społeczne do
+       wysokości pozostałego przychodu; reszta od dochodu ze skali
+       (art. 26 ust. 13a). Odliczenie składek w całości od przychodu
+       marnowałoby odliczenie zdrowotnej, gdy przychód jest mały. */
+    const splitSocial = (healthDeductionGuess) => {
+      if (method === "scale") {
+        return {
+          socialFromRevenue: 0,
+          socialFromScale: Math.min(ctx.social, ctx.otherIncome),
+        };
+      }
+      const revenueRoom = Math.max(
+        taxMath.round2(revenueTotal - healthDeductionGuess),
+        0,
       );
+      const fromRevenue = Math.min(ctx.social, revenueRoom);
+      return {
+        socialFromRevenue: fromRevenue,
+        socialFromScale: Math.min(
+          taxMath.round2(ctx.social - fromRevenue),
+          ctx.otherIncome,
+        ),
+      };
+    };
+    /* Próg zdrowotnej zależy od podziału składek (art. 81 ust. 2g), a podział
+       od kwoty zdrowotnej – szukamy punktu stałego, zaczynając od najniższego
+       progu (odwzorowanie jest monotoniczne: wyższa zdrowotna → mniej
+       składek od przychodu → wyższy przychód do progu). */
+    const evaluateTier = (healthMonthlyGuess) => {
+      const guessHealth = taxMath.round2(healthMonthlyGuess * ctx.healthMonths);
+      const guessDeduction = taxMath.round2(
+        guessHealth * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR,
+      );
+      const split = splitSocial(guessDeduction);
+      const notFromScale = taxMath.round2(ctx.social - split.socialFromScale);
+      const threshold = taxMath.round2(revenueTotal - notFromScale);
+      return {
+        ...split,
+        socialNotFromScale: notFromScale,
+        thresholdRevenue: threshold,
+        healthMonthly: taxMath.getRyczaltHealthMonthlyForRevenue(threshold),
+      };
+    };
+    let tier = evaluateTier(taxMath.getRyczaltHealthMonthlyForRevenue(0));
+    for (let step = 0; step < 3; step++) {
+      const next = evaluateTier(tier.healthMonthly);
+      const stable = next.healthMonthly === tier.healthMonthly;
+      tier = next;
+      if (stable) break;
     }
-    const socialNotFromScale = taxMath.round2(ctx.social - socialFromScale);
-    const thresholdRevenue = taxMath.round2(revenueTotal - socialNotFromScale);
-    const healthMonthly =
-      taxMath.getRyczaltHealthMonthlyForRevenue(thresholdRevenue);
+    const {
+      socialFromRevenue,
+      socialFromScale,
+      socialNotFromScale,
+      thresholdRevenue,
+      healthMonthly,
+    } = tier;
     const health = taxMath.getRyczaltHealthAnnualForRevenue(
       thresholdRevenue,
       ctx.healthMonths,
@@ -2030,32 +2088,46 @@
     return title.toLowerCase().replace(/ip box/g, "IP BOX");
   }
 
+  /* PIT wg skali rozpisany wzorem z art. 27 ust. 1 ustawy o PIT. */
   function getScalePitBracketLines(pitDetails, indent) {
-    const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
-
-    let text = `${indent}Kwota wolna (do ${formatNumberPL(
-      taxFree,
-    )}): ${formatNumberPL(pitDetails.inTaxFree)} × 0% = 0,00 zł\n`;
-
-    if (pitDetails.in12Bracket > 0) {
-      text += `${indent}I próg ${formatPercentPL(rate12)} (${formatNumberPL(
-        taxFree + 1,
-      )} - ${formatNumberPL(threshold12)}): ${formatNumberPL(
-        pitDetails.in12Bracket,
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(pitDetails.tax12)}\n`;
+    const d = pitDetails;
+    let text;
+    if (d.upToThreshold) {
+      text = `${indent}Art. 27 ust. 1 (podstawa do ${formatNumberPL(
+        d.threshold12,
+      )}): ${formatPercentPL(rate12)} × podstawa − ${formatNumberPL(
+        d.decreasingAmount,
+      )} (kwota zmniejszająca podatek)\n`;
+      text += `${indent}  ${formatNumberPL(d.taxableIncome)} × ${formatPercentPL(
+        rate12,
+      )} = ${formatNumberPL(d.tax12Gross)}\n`;
+      if (d.tax12Gross > d.decreasingAmount) {
+        text += `${indent}  ${formatNumberPL(d.tax12Gross)} − ${formatNumberPL(
+          d.decreasingAmount,
+        )} = ${formatNumberPL(d.totalPit)}\n`;
+      } else {
+        text += `${indent}  ${formatNumberPL(d.tax12Gross)} nie przekracza kwoty zmniejszającej ${formatNumberPL(
+          d.decreasingAmount,
+        )} → podatek 0,00 zł\n`;
+      }
+      return text;
     }
-
-    if (pitDetails.in32Bracket > 0) {
-      text += `${indent}II próg ${formatPercentPL(rate32)} (${formatNumberPL(
-        threshold12 + 1,
-      )} i więcej): ${formatNumberPL(
-        pitDetails.in32Bracket,
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(pitDetails.tax32)}\n`;
-    }
-
+    text = `${indent}Art. 27 ust. 1 (podstawa ponad ${formatNumberPL(
+      d.threshold12,
+    )}): ${formatNumberPL(d.taxAtThreshold)} + ${formatPercentPL(
+      rate32,
+    )} × nadwyżka ponad ${formatNumberPL(d.threshold12)}\n`;
+    text += `${indent}  Nadwyżka: ${formatNumberPL(d.taxableIncome)} − ${formatNumberPL(
+      d.threshold12,
+    )} = ${formatNumberPL(d.excess)}\n`;
+    text += `${indent}  ${formatNumberPL(d.excess)} × ${formatPercentPL(
+      rate32,
+    )} = ${formatNumberPL(d.tax32)}\n`;
+    text += `${indent}  ${formatNumberPL(d.taxAtThreshold)} + ${formatNumberPL(
+      d.tax32,
+    )} = ${formatNumberPL(d.totalPit)}\n`;
     return text;
   }
 
@@ -2830,19 +2902,26 @@
 
   function getRyczaltDeductionLines(evaluation, indent) {
     const { ctx, best } = evaluation;
-    let text = "";
-    if (best.socialFromRevenue > 0) {
-      text += `${indent}Odliczenie składek społecznych od przychodu (art. 11 ust. 1): ${formatNumberPL(
-        best.socialFromRevenue,
-      )}\n`;
-    }
-    text += `${indent}Odliczenie 50% składki zdrowotnej (art. 11 ust. 1a): ${formatNumberPL(
+    let text = `${indent}Odliczenie 50% składki zdrowotnej (art. 11 ust. 1a): ${formatNumberPL(
       best.healthDeduction,
     )}\n`;
     if (best.socialFromRevenue > 0) {
-      text += `${indent}Odliczenia od przychodu razem: ${formatNumberPL(
+      const capped =
+        best.method === "ryczalt" &&
+        best.socialFromRevenue < ctx.social &&
+        best.socialFromScale > 0;
+      text += `${indent}Odliczenie składek społecznych od przychodu (art. 11 ust. 1): ${formatNumberPL(
         best.socialFromRevenue,
-      )} + ${formatNumberPL(best.healthDeduction)} = ${formatNumberPL(
+      )}${
+        capped
+          ? ` (do wysokości przychodu pozostałego po odliczeniu zdrowotnej: ${formatNumberPL(
+              best.revenueTotal,
+            )} − ${formatNumberPL(best.healthDeduction)})`
+          : ""
+      }\n`;
+      text += `${indent}Odliczenia od przychodu razem: ${formatNumberPL(
+        best.healthDeduction,
+      )} + ${formatNumberPL(best.socialFromRevenue)} = ${formatNumberPL(
         best.totalDeduction,
       )}\n`;
     }

@@ -135,12 +135,82 @@ const EFFECTIVE_IPBOX_PLUS_HEALTH =
 
 const taxMath = {
   /**
-   * Zaokrąglenie do groszy (2 miejsca po przecinku)
+   * Zaokrąglenie do groszy (2 miejsca po przecinku), „połówka w górę”
+   * (od zera) odporne na błędy reprezentacji float: n × 100 jest najpierw
+   * sprowadzane do 15 cyfr znaczących, więc np. 0,09 × 464 484,50 =
+   * 41 803,60499999… (a matematycznie 41 803,605) daje 41 803,61.
    * @param {number} n - liczba do zaokrąglenia
    * @returns {number} zaokrąglona wartość
    */
   round2(n) {
-    return Math.round(n * 100) / 100;
+    if (!Number.isFinite(n)) return n;
+    const scaled = Number((Math.abs(n) * 100).toPrecision(15));
+    return (Math.sign(n) * Math.round(scaled)) / 100 || 0;
+  },
+
+  /**
+   * Parsuje kwotę wpisaną przez użytkownika (jeden parser dla wszystkich
+   * pól kwotowych). Akceptuje m.in. „1234.56”, „1234,56”, „1 234,56”,
+   * „1.234,56”, „1 234.56”, „1 234,56 zł”. Reguły:
+   * - spacje (także twarde) i przyrostek „zł”/„PLN” są pomijane;
+   * - gdy występują oba separatory „.” i „,”, ostatni z nich jest dziesiętny;
+   * - pojedynczy „.” albo „,”, po którym na końcu są 1–2 cyfry, jest
+   *   dziesiętny (pojedynczy separator na samym końcu – np. w trakcie
+   *   pisania „1234,” – też);
+   * - w pozostałych przypadkach „.”/„,”/spacje to separatory tysięcy
+   *   i muszą dzielić liczbę na grupy po 3 cyfry;
+   * - inne znaki (litery, wykładnik „12e3”, kilka minusów) = błąd.
+   * @param {string} raw
+   * @returns {{ok:boolean, empty:boolean, value:number|null, error:string|null}}
+   */
+  parseAmount(raw) {
+    const fail = (error) => ({ ok: false, empty: false, value: null, error });
+    let text = String(raw === null || raw === undefined ? "" : raw)
+      .replace(/[\s\u00a0\u202f\u2009]+/g, " ")
+      .trim()
+      .replace(/\s*(zł|pln)\.?$/i, "")
+      .trim();
+    if (text === "") return { ok: true, empty: true, value: 0, error: null };
+    let negative = false;
+    if (/^[-−]/.test(text)) {
+      negative = true;
+      text = text.slice(1).trim();
+    }
+    if (!/^\d[\d .,]*$/.test(text)) return fail("format");
+    const lastDot = text.lastIndexOf(".");
+    const lastComma = text.lastIndexOf(",");
+    let decimalSep = null;
+    if (lastDot >= 0 && lastComma >= 0) {
+      decimalSep = lastDot > lastComma ? "." : ",";
+      if (text.split(decimalSep).length !== 2) return fail("format");
+    } else {
+      const sep = lastDot >= 0 ? "." : lastComma >= 0 ? "," : null;
+      if (sep && text.split(sep).length === 2) {
+        const after = text.slice(text.lastIndexOf(sep) + 1);
+        if (/^\d{0,2}$/.test(after)) decimalSep = sep;
+      }
+    }
+    let intPart = text;
+    let fracPart = "";
+    if (decimalSep) {
+      const idx = text.lastIndexOf(decimalSep);
+      intPart = text.slice(0, idx);
+      fracPart = text.slice(idx + 1);
+      if (!/^\d{0,2}$/.test(fracPart)) return fail("format");
+    }
+    const groups = intPart.split(/[ .,]/);
+    if (groups.length > 1) {
+      if (!/^\d{1,3}$/.test(groups[0])) return fail("format");
+      if (!groups.slice(1).every((group) => /^\d{3}$/.test(group))) {
+        return fail("format");
+      }
+    } else if (!/^\d+$/.test(intPart)) {
+      return fail("format");
+    }
+    const value = Number(`${groups.join("")}.${fracPart || "0"}`);
+    if (!Number.isFinite(value)) return fail("format");
+    const signed = negative && value !== 0 ? -value : value;
+    return { ok: true, empty: false, value: signed, error: null };
   },
 
   /**
@@ -446,12 +516,16 @@ const taxMath = {
       ? opts.path
       : "full";
 
+    // Przy umowie o pracę ≥ minimalnego nie ma obowiązkowych ubezpieczeń
+    // społecznych z JDG – okresy ulgi / małego ZUS nie są ustalane (nie
+    // pokazujemy „ulga na start do …”, jakby była wykorzystywana).
+    const socialPath = opts.enabled && start && !opts.employment;
     let ulgaEndIdx = null;
     let prefEndIdx = null;
-    if (opts.enabled && start && path === "ulga") {
+    if (socialPath && path === "ulga") {
       ulgaEndIdx = startIdx + C.ZUS_ULGA_MONTHS - 1 + (midMonthStart ? 1 : 0);
       prefEndIdx = ulgaEndIdx + C.ZUS_PREF_MONTHS;
-    } else if (opts.enabled && start && path === "pref") {
+    } else if (socialPath && path === "pref") {
       prefEndIdx = startIdx + C.ZUS_PREF_MONTHS - 1 + (midMonthStart ? 1 : 0);
     }
 

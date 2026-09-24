@@ -695,3 +695,85 @@ describe("Składki ZUS – jawne kwoty (liczone ręcznie)", () => {
     expect(data.baseline).toBe(36400);
   });
 });
+
+describe("Ryczałt – 50% zdrowotnej przed składkami społecznymi (RC1)", () => {
+  it("przychód 15 000, inne dochody 100 000, pełny ZUS: ryczałt 17% → 27 967,37", () => {
+    // Zdrowotna próg I: 498,35 × 12 = 5980,20 → odliczenie 2990,10.
+    // Od przychodu: 2990,10 + składki 12 009,90 = 15 000 → ryczałt 0.
+    // Nadwyżka składek 21 459,48 − 12 009,90 = 9449,58 od skali:
+    // PIT 12% × 90 550,42 − 3600 = 7266,05; bez działalności 8400.
+    // 7266,05 − 8400 + 5980,20 + 23 121,12 = 27 967,37.
+    const calc = loadCalculator();
+    calc.setRevenue(15000);
+    calc.setCosts(0);
+    calc.setOtherIncome(100000);
+    withRates(calc, "ryczalt17", "ryczalt12");
+    calc.calculate();
+    const r17 = calc.readVariantData("ryczalt17");
+    const r12 = calc.readVariantData("ryczalt12");
+    calc.close();
+    expect(r17.method).toBe("ryczalt");
+    expect(r17.taxes).toBe(7266.05);
+    expect(r17.health).toBe(5980.2);
+    expect(r17.total).toBe(27967.37);
+    expect(r12.total).toBe(27967.37);
+  });
+
+  it("przychód 10 000 (koszty 30 000), inne dochody 50 000: ryczałt 15% → 27 367,37 (I-265)", () => {
+    // 10 000 − 2990,10 = 7009,90 składek od przychodu; 14 449,58 od skali:
+    // PIT 12% × 35 550,42 − 3600 = 666,05; bez działalności 2400.
+    const r = totals(
+      (calc) => {
+        calc.setRevenue(10000);
+        calc.setCosts(30000);
+        calc.setOtherIncome(50000);
+        withRates(calc, "ryczalt15");
+      },
+      ["ryczalt15"],
+    );
+    expect(r.ryczalt15).toBe(27367.37);
+  });
+
+  it("bez innych dochodów wynik się nie zmienia (100 000 @ 12% → 41 914,92)", () => {
+    const r = totals(
+      (calc) => {
+        calc.setRevenue(100000);
+        calc.setCosts(0);
+        withRates(calc, "ryczalt12");
+      },
+      ["ryczalt12"],
+    );
+    expect(r.ryczalt12).toBe(41914.92);
+  });
+});
+
+describe("Zaokrąglanie do grosza – połówka w górę (C4)", () => {
+  it("przychód 1 177 622,32 / koszty 713 137,82, ZUS wył.: zdrowotna 9% × 464 484,50 = 41 803,61", () => {
+    const calc = loadCalculator();
+    calc.setZusEnabled(false);
+    calc.setRevenue("1177622,32");
+    calc.setCosts("713137,82");
+    calc.calculate();
+    const data = calc.readVariantData("taxScale");
+    calc.close();
+    expect(data.health).toBe(41803.61);
+    // PIT: 10 800 + 32% × 344 484,50 = 121 035,04
+    expect(data.taxes).toBe(121035.04);
+    expect(data.total).toBe(162838.65);
+  });
+
+  it("taxMath.round2: remisy w górę (od zera), bez -0", () => {
+    const calc = loadCalculator();
+    const { taxMath } = calc.window;
+    const out = [
+      taxMath.round2(0.09 * 464484.5),
+      taxMath.round2(1.005),
+      taxMath.round2(2.675),
+      taxMath.round2(-2.675),
+      taxMath.round2(-0.001),
+      taxMath.round2(41803.604),
+    ];
+    calc.close();
+    expect(out).toEqual([41803.61, 1.01, 2.68, -2.68, 0, 41803.6]);
+  });
+});

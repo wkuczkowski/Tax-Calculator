@@ -1,25 +1,30 @@
 /**
  * KALKULATOR PODATKOWY 2026
- * Stan prawny: od 1.02.2026 (rok składkowy 02.2026–01.2027)
- * Kalkulator zakłada pełny rok na tych stawkach.
+ * Stan prawny na 24.09.2026 (rok podatkowy 2026; brak zmian w trakcie roku
+ * wpływających na poniższe wartości).
+ * Składka zdrowotna:
+ * - skala, liniowy, IP BOX: rok składkowy 02.2026–01.2027 (od EFFECTIVE_FROM),
+ *   który odpowiada dochodom ze stycznia–grudnia 2026;
+ * - ryczałt: rok kalendarzowy, kwoty 2026 obowiązują od 1.01.2026.
  *
  * Źródła danych bazowych:
- * - MIN_WAGE (4806 PLN): https://www.gov.pl/web/rodzina/minimalne-wynagrodzenie-za-prace
- * - AVG_SALARY_Q4_PREV (9228.64 PLN): https://stat.gov.pl/.../obwieszczenie-...-iv-kwartale-2025-r.html
- * - Minimalna składka zdrowotna od 1.02.2026: https://www.zus.pl/.../minimalna-skladka-na-ubezpieczenie-zdrowotne-w-2026-r.
- * - LINEAR_HEALTH_DEDUCTION_LIMIT (14100 PLN): https://monitorpolski.gov.pl/MP/2025/1274
+ * - MIN_WAGE (4806 PLN), Dz.U. 2025 poz. 1242: https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU20250001242
+ * - AVG_SALARY_Q4_PREV (9228.64 PLN), M.P. 2026 poz. 117: https://monitorpolski.gov.pl/MP/2026/117
+ * - Składka zdrowotna 2026 (ZUS): https://www.zus.pl/-/informacja-w-sprawie-podstawy-wymiaru-sk%C5%82adki-oraz-kwoty-sk%C5%82adki-na-ubezpieczenie-zdrowotne-w-2026-r.
+ * - LINEAR_HEALTH_DEDUCTION_LIMIT (14100 PLN), M.P. 2025 poz. 1274: https://monitorpolski.gov.pl/MP/2025/1274
  */
 
 const TAX_CONSTANTS = {
-  // Obowiązuje w kalkulatorze (pełny rok liczony stawkami od lutego 2026)
+  // Początek roku składkowego 2026/27 dla skali, liniowego i IP BOX
+  // (pełny rok liczony stawkami od lutego 2026; ryczałt wg roku kalendarzowego)
   EFFECTIVE_FROM: "2026-02-01",
   ASSUME_FULL_YEAR_FROM_FEB: true,
 
   // Dane z aktów/obwieszczeń
-  // Minimalne wynagrodzenie 2026: https://www.gov.pl/web/rodzina/minimalne-wynagrodzenie-za-prace
+  // Minimalne wynagrodzenie 2026 (Dz.U. 2025 poz. 1242): https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU20250001242
   MIN_WAGE: 4806, // PLN / miesiąc
 
-  // GUS IV kw. 2025 (włącznie z wypłatami z zysku): https://stat.gov.pl/.../obwieszczenie-...-iv-kwartale-2025-r.html
+  // GUS IV kw. 2025 (włącznie z wypłatami z zysku), M.P. 2026 poz. 117: https://monitorpolski.gov.pl/MP/2026/117
   AVG_SALARY_Q4_PREV: 9228.64, // PLN / miesiąc
 
   // Limit odliczenia liniowy 2026 (MP 2025 poz. 1274): https://monitorpolski.gov.pl/MP/2025/1274
@@ -39,7 +44,7 @@ const TAX_CONSTANTS = {
   IP_BOX_RATE: 0.05, // Stawka IP BOX 5%
 
   // Składka zdrowotna – stawki
-  // ZUS minimalna składka zdrowotna od 1.02.2026: https://www.zus.pl/.../minimalna-skladka-na-ubezpieczenie-zdrowotne-w-2026-r.
+  // ZUS, składka zdrowotna 2026: https://www.zus.pl/-/informacja-w-sprawie-podstawy-wymiaru-sk%C5%82adki-oraz-kwoty-sk%C5%82adki-na-ubezpieczenie-zdrowotne-w-2026-r.
   HEALTH_RATE_SCALE: 0.09, // Stawka zdrowotna dla skali podatkowej (9%)
   HEALTH_RATE_LINEAR: 0.049, // Stawka zdrowotna dla podatku liniowego (4.9%)
   HEALTH_RATE_RYCZALT: 0.09, // Stawka zdrowotna dla ryczałtu (9%)

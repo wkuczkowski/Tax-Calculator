@@ -1782,6 +1782,15 @@ input.error {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
+.info-section-text {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+.info-section-text:last-child {
+  margin-bottom: 0;
+}
 .info-list {
   display: grid;
   grid-template-columns: 1fr auto;

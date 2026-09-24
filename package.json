@@ -12,8 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:update": "vitest run -u",
-    "lint": "eslint 2026/ v2/",
-    "lint:fix": "eslint 2026/ v2/ --fix"
+    "lint": "eslint 2026/",
+    "lint:fix": "eslint 2026/ --fix"
   },
   "repository": {
     "type": "git",

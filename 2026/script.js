@@ -343,12 +343,62 @@
 
   /* Walidacja wszystkich pól wpływających na wynik. Wywoływana przy każdym
      przeliczeniu (niezależnie od tego, która kontrolka je wywołała). */
-  function validateAllInputs() {
+  /* Pole jest „aktywne”, gdy użytkownik je widzi i może je edytować:
+     nie leży w zwiniętej (inert/hidden) sekcji. Nieaktywne pole nigdy nie
+     blokuje wyników (np. data urodzenia przy wyłączonych składkach). */
+  function isFieldActive(element) {
+    if (!element) return false;
+    // tło otwartego okna modalnego (data-modal-inert) nie liczy się jako
+    // zwinięta sekcja – pola pod oknem nadal podlegają walidacji
+    if (element.closest("[inert]:not([data-modal-inert]), [hidden]")) {
+      return false;
+    }
+    if (element.disabled) return false;
+    return true;
+  }
+
+  /* Czy wpis w polu, które ma fokus, jest jeszcze niedokończony (np.
+     „150 0”, „1234,” w trakcie pisania albo data z rokiem „0202”)? Taki
+     wpis nie przełącza wyników w stan błędu – zostają ostatnie poprawne
+     wyniki, a pełna walidacja rusza przy opuszczeniu pola / zmianie. */
+  function isPendingInput(element) {
+    if (!element) return false;
+    if (element === DOM.zusStartDate) {
+      return !!getDateFieldMessage(element, "x");
+    }
+    if (element === DOM.zusBirthDate) {
+      if (getDateFieldMessage(element, "x")) return true;
+      const start = getValidDateValue(DOM.zusStartDate);
+      return !!(start && element.value && element.value >= start);
+    }
+    if (element === DOM.ipBoxCoeffInput) {
+      const raw = String(element.value).trim();
+      return (
+        !!(element.validity && element.validity.badInput) ||
+        raw === "" ||
+        !Number.isFinite(Number(raw.replace(",", ".")))
+      );
+    }
+    // pola kwotowe: tylko błąd formatu (ujemna / zbyt duża kwota to błąd od razu)
+    return !taxMath.parseAmount(element.value).ok;
+  }
+
+  /* Walidacja wszystkich pól wpływających na wynik. Wywoływana przy każdym
+     przeliczeniu (niezależnie od tego, która kontrolka je wywołała).
+     deferField – pole z fokusem, w którym właśnie pisze użytkownik: gdy
+     jego wpis jest niedokończony, pole jest pomijane (bez komunikatu),
+     a wynik ma deferred = true. */
+  function validateAllInputs(deferField = null) {
     const invalid = [];
+    const deferred =
+      deferField && isFieldActive(deferField) && isPendingInput(deferField)
+        ? deferField
+        : null;
     const note = (fieldName, ok, label) => {
       if (!ok) {
         invalid.push({
           id: fieldName,
+          element: document.getElementById(fieldName),
           label: label || FIELD_LABELS[fieldName] || fieldName,
           message:
             (document.getElementById(`${fieldName}-error`) || {}).textContent ||
@@ -356,26 +406,29 @@
         });
       }
     };
+    const check = (fieldName, active, validate) => {
+      const element = document.getElementById(fieldName);
+      if (element && element === deferred) return;
+      if (active && isFieldActive(element)) note(fieldName, validate());
+      else clearFieldError(fieldName);
+    };
     ["revenue", "costs", "otherIncome"].forEach((fieldName) => {
-      const input = document.getElementById(fieldName);
-      note(fieldName, validateInput(input.value, fieldName));
-    });
-    if (isJointTaxationEnabled()) {
-      note(
-        "spouseIncome",
-        validateInput(DOM.spouseIncomeInput.value, "spouseIncome"),
+      check(fieldName, true, () =>
+        validateInput(document.getElementById(fieldName).value, fieldName),
       );
-    } else {
-      clearFieldError("spouseIncome");
-    }
-    if (isIpBoxEnabled()) {
-      note("ipBoxCoeff", validateIpBoxCoeff());
-    } else {
-      clearFieldError("ipBoxCoeff");
-    }
+    });
+    check("spouseIncome", isJointTaxationEnabled(), () =>
+      validateInput(DOM.spouseIncomeInput.value, "spouseIncome"),
+    );
+    check("ipBoxCoeff", isIpBoxEnabled(), () => validateIpBoxCoeff());
     const rateErrors = [];
     DOM.rateInputs.forEach((input) => {
-      if (DOM.multipleRatesToggle.checked && input.classList.contains("show")) {
+      if (input === deferred) return;
+      if (
+        DOM.multipleRatesToggle.checked &&
+        input.classList.contains("show") &&
+        isFieldActive(input)
+      ) {
         if (!validateRateInput(input)) {
           rateErrors.push(input);
           invalid.push({
@@ -394,16 +447,18 @@
       }
     });
     const ratesError = document.getElementById("rateInputs-error");
-    if (ratesError) {
+    if (ratesError && !(deferred && deferred.classList.contains("rate-input"))) {
       const message = rateErrors.length
         ? "Popraw kwotę przychodu przy zaznaczonej stawce (np. 12 345,67)."
         : "";
       if (ratesError.textContent !== message) ratesError.textContent = message;
       ratesError.classList.toggle("visible", !!message);
     }
-    note("zusStartDate", validateStartDate());
-    note("zusBirthDate", validateBirthDate());
-    return { valid: invalid.length === 0, invalid };
+    check("zusStartDate", true, validateStartDate);
+    // data urodzenia służy tylko do zwolnienia z FP/FS – przy wyłączonych
+    // składkach społecznych (sekcja zwinięta) nie może blokować wyników
+    check("zusBirthDate", DOM.zusEnabled.checked, validateBirthDate);
+    return { valid: invalid.length === 0, invalid, deferred: !!deferred };
   }
 
   /* ==================================================
@@ -667,6 +722,26 @@
     scale: "od innych dochodów ze skali",
     ryczalt: "od przychodu",
   };
+
+  /* Krótki opis tego, jak składki społeczne faktycznie odliczono w danym
+     wariancie (dla ryczałtu – wg kwot, nie tylko nazwy metody). */
+  function getSocialMethodLabel(evaluation) {
+    const { best, method } = evaluation;
+    if (best && best.form === "ryczalt" && method !== "none") {
+      const fromRevenue = best.socialFromRevenue > 0;
+      const fromScale = best.socialFromScale > 0;
+      if (fromRevenue && fromScale) {
+        return "od przychodu i (nadwyżka) od dochodu ze skali";
+      }
+      if (fromRevenue) return "od przychodu";
+      if (fromScale && method === "ryczalt") {
+        return "od dochodu ze skali (przychód w całości pokryty odliczeniem 50% zdrowotnej)";
+      }
+      if (fromScale) return "od dochodu ze skali";
+      return "nieodliczone (brak przychodu po odliczeniu 50% zdrowotnej i brak dochodu ze skali)";
+    }
+    return SOCIAL_DEDUCTION_SHORT_LABELS[method];
+  }
 
   /* PIT (i danina), który podatnik zapłaciłby od samych innych dochodów –
      indywidualnie wg skali, bez działalności. Odejmowany w każdym wariancie. */
@@ -1209,6 +1284,13 @@
 
   function updateRemainingRevenue() {
     if (!DOM.revenueInfoText) return;
+    // niedokończony wpis przychodu (fokus) – zostaw poprzedni komunikat
+    if (
+      document.activeElement === DOM.revenueInput &&
+      isPendingInput(DOM.revenueInput)
+    ) {
+      return;
+    }
     const status = getAllocationStatus(amountOf(DOM.revenueInput.value));
     const container = DOM.revenueInfoText.parentElement;
     const warning = status.state === "over" || status.state === "under";
@@ -1320,13 +1402,21 @@
     if (element && element.textContent !== text) element.textContent = text;
   }
 
-  function calculate() {
-    const validation = validateAllInputs();
+  /* field – kontrolka, która wywołała przeliczenie w trakcie pisania
+     (zdarzenie input/change pola z fokusem); jej niedokończony wpis nie
+     powoduje błędu – zostają ostatnie poprawne wyniki. */
+  function calculate(field = null) {
+    const typingField =
+      field && field.nodeType === 1 && document.activeElement === field
+        ? field
+        : null;
+    const validation = validateAllInputs(typingField);
     updateZusPathAvailability();
     if (!validation.valid) {
       renderInvalidState(validation);
       return;
     }
+    if (validation.deferred) return;
     if (DOM.resultsSection) delete DOM.resultsSection.dataset.state;
 
     const result = computeFromForm();
@@ -1414,7 +1504,11 @@
       const target =
         item.element || (item.id && document.getElementById(item.id));
       button.addEventListener("click", () => {
-        if (target && target.focus) target.focus();
+        if (!target || !target.focus) return;
+        if (target.scrollIntoView) {
+          target.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+        target.focus({ preventScroll: true });
       });
       li.appendChild(button);
       list.appendChild(li);
@@ -1831,7 +1925,7 @@
     if (ctx.zusEnabled) {
       parts.push(`ZUS społ. ${formatAmountPL(ctx.socialTotal)}`);
       if (ctx.social > 0) {
-        parts.push(`składki: ${SOCIAL_DEDUCTION_SHORT_LABELS[evaluation.method]}`);
+        parts.push(`składki: ${getSocialMethodLabel(evaluation)}`);
       }
       if (evaluation.holidayMonth) {
         parts.push(`wakacje: ${ROMAN_MONTHS[evaluation.holidayMonth - 1]}`);
@@ -2167,7 +2261,16 @@
     if (!input) return;
     if (input.value.trim() === "" && !formatEmpty) return;
     const checked = checkAmount(input.value);
-    if (checked.ok) input.value = formatPLN(checked.value);
+    // bez „zł” tam, gdzie jednostka stoi obok pola (.input-suffix);
+    // pola przychodu stawek (chipy) nie mają przyrostka
+    const hasSuffix = !!(
+      input.parentElement && input.parentElement.querySelector(".input-suffix")
+    );
+    if (checked.ok) {
+      input.value = hasSuffix
+        ? formatAmountPL(checked.value)
+        : formatPLN(checked.value);
+    }
   }
 
   function handleCalculate() {
@@ -2175,7 +2278,7 @@
     if (!isJointTaxationEnabled()) {
       setRevealed(DOM.spouseIncomeCard, false);
       DOM.spouseIncomeInput.setAttribute("readonly", "");
-      DOM.spouseIncomeInput.value = formatPLN(0);
+      DOM.spouseIncomeInput.value = formatAmountPL(0);
     }
     calculate();
     if (DOM.bestCard.dataset.state !== "invalid") {
@@ -2224,7 +2327,7 @@
       true;
     setRevealed(DOM.spouseIncomeCard, false);
     DOM.spouseIncomeInput.setAttribute("readonly", "");
-    DOM.spouseIncomeInput.value = formatPLN(0);
+    DOM.spouseIncomeInput.value = formatAmountPL(0);
     updateConditionalRowsVisibility();
 
     DOM.multipleRatesToggle.checked = false;
@@ -2271,7 +2374,7 @@
      pola); po opuszczeniu pola poprawna kwota jest formatowana. */
   [DOM.revenueInput, DOM.costsInput, DOM.otherIncomeInput].forEach((input) => {
     input.addEventListener("input", () => {
-      calculate();
+      calculate(input);
       if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("blur", () => {
@@ -2287,9 +2390,12 @@
     calculate();
   });
   [DOM.zusStartDate, DOM.zusBirthDate].forEach((input) => {
-    ["input", "change", "blur"].forEach((type) => {
-      input.addEventListener(type, calculate);
+    // w trakcie wpisywania (fokus) niepełna data nie „miga” błędem;
+    // pełna walidacja przy opuszczeniu pola
+    ["input", "change"].forEach((type) => {
+      input.addEventListener(type, () => calculate(input));
     });
+    input.addEventListener("blur", () => calculate());
   });
   [...DOM.zusPathRadios, ...DOM.zusSexRadios].forEach((radio) => {
     radio.addEventListener("change", calculate);
@@ -2300,9 +2406,12 @@
 
   /* IP BOX: number input + range slider stay in sync */
   DOM.ipBoxCoeffInput.addEventListener("input", (e) => {
-    if (validateIpBoxCoeff(e.target.value)) syncIpBoxRange();
-    calculate();
+    if (!isPendingInput(e.target) && validateIpBoxCoeff(e.target.value)) {
+      syncIpBoxRange();
+    }
+    calculate(e.target);
   });
+  DOM.ipBoxCoeffInput.addEventListener("blur", () => calculate());
   if (DOM.ipBoxRange) {
     DOM.ipBoxRange.addEventListener("input", (e) => {
       DOM.ipBoxCoeffInput.value = e.target.value;
@@ -2343,7 +2452,7 @@
       } else {
         setRevealed(DOM.spouseIncomeCard, false);
         DOM.spouseIncomeInput.setAttribute("readonly", "");
-        DOM.spouseIncomeInput.value = formatPLN(0);
+        DOM.spouseIncomeInput.value = formatAmountPL(0);
         DOM.spouseIncomeInput.placeholder = "";
       }
       updateConditionalRowsVisibility();
@@ -2352,7 +2461,7 @@
   });
 
   DOM.spouseIncomeInput.addEventListener("input", () => {
-    if (isJointTaxationEnabled()) calculate();
+    if (isJointTaxationEnabled()) calculate(DOM.spouseIncomeInput);
   });
   DOM.spouseIncomeInput.addEventListener("blur", () => {
     if (isJointTaxationEnabled()) {
@@ -2424,16 +2533,14 @@
     resizeRateInput(input);
     input.addEventListener("input", (e) => {
       resizeRateInput(e.target);
-      calculate();
+      calculate(e.target);
       if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("blur", (e) => {
-      if (e.target.value) {
-        formatAmountField(e.target);
-        resizeRateInput(e.target);
-        calculate();
-        updateRemainingRevenue();
-      }
+      formatAmountField(e.target);
+      resizeRateInput(e.target);
+      calculate();
+      if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("focus", (e) => {
       e.target.select();
@@ -3285,9 +3392,15 @@
     const label = RYCZALT_RATE_LABELS[rateId];
     const base = Math.max(taxMath.round2(rate.rateRevenue - rate.deduction), 0);
     if (rateId !== "ryczalt8_5_12_5") {
-      return `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
-        rate.deduction,
-      )} = ${formatNumberPL(base)}\n${indent}Ryczałt: ${formatNumberPL(
+      const baseLine =
+        rate.deduction > rate.rateRevenue
+          ? `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+              rate.deduction,
+            )} < 0 → ${formatNumberPL(base)}\n`
+          : `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+              rate.deduction,
+            )} = ${formatNumberPL(base)}\n`;
+      return `${baseLine}${indent}Ryczałt: ${formatNumberPL(
         base,
       )} × ${label} = ${formatNumberPL(rate.tax)}\n`;
     }
@@ -3327,6 +3440,19 @@
     let text = `${indent}Odliczenie 50% składki zdrowotnej (art. 11 ust. 1a): ${formatNumberPL(
       best.healthDeduction,
     )}\n`;
+    // 50% zdrowotnej ponad przychód nie da się odliczyć gdzie indziej
+    // (art. 11 ust. 1a dotyczy tylko przychodu ryczałtowego; brak
+    // odpowiednika w art. 26 ustawy o PIT)
+    const unusedHealth = taxMath.round2(
+      Math.max(best.healthDeduction - Math.max(best.revenueTotal, 0), 0),
+    );
+    if (unusedHealth > 0) {
+      text += `${indent}  (przychód ${formatNumberPL(
+        best.revenueTotal,
+      )} pokrywa tylko część tego odliczenia; nieodliczone ${formatNumberPL(
+        unusedHealth,
+      )} przepada — art. 11 ust. 1a pozwala pomniejszyć wyłącznie przychód ryczałtowy, nie można tego przenieść na dochód ze skali)\n`;
+    }
     if (best.socialFromRevenue > 0) {
       const capped =
         best.method === "ryczalt" &&
@@ -3336,7 +3462,7 @@
         best.socialFromRevenue,
       )}${
         capped
-          ? ` (do wysokości przychodu pozostałego po odliczeniu zdrowotnej: ${formatNumberPL(
+          ? ` (do wysokości przychodu pomniejszonego o 50% zdrowotnej: ${formatNumberPL(
               best.revenueTotal,
             )} − ${formatNumberPL(best.healthDeduction)})`
           : ""
@@ -3346,6 +3472,8 @@
       )} + ${formatNumberPL(best.socialFromRevenue)} = ${formatNumberPL(
         best.totalDeduction,
       )}\n`;
+    } else if (ctx.social > 0 && best.method === "ryczalt") {
+      text += `${indent}Odliczenie składek społecznych od przychodu: 0,00 zł (przychód w całości pokryty odliczeniem 50% zdrowotnej)\n`;
     }
     const lost = taxMath.round2(
       ctx.social - best.socialFromRevenue - best.socialFromScale,
@@ -3353,7 +3481,24 @@
     if (ctx.social > 0 && lost > 0) {
       text += `${indent}(nieodliczona nadwyżka składek ${formatNumberPL(lost)} przepada)\n`;
     }
+    text += getPit28NoteText(evaluation, indent);
     return text;
+  }
+
+  /* Praktyczna wskazówka do zeznań: ile składek społecznych wpisać w PIT-28,
+     a ile odliczyć w PIT-36/PIT-37 (art. 26 ust. 13a ustawy o PIT). */
+  function getPit28NoteText(evaluation, indent) {
+    const { ctx, best } = evaluation;
+    if (!ctx.zusEnabled || ctx.social <= 0 || best.socialFromScale <= 0) {
+      return "";
+    }
+    return `${indent}W zeznaniach: w PIT-28 (część E.1, „Składki na ubezpieczenia społeczne”) wpisz ${formatNumberPL(
+      best.socialFromRevenue,
+    )}${
+      best.socialFromRevenue < ctx.social ? " — mniej niż zapłacone składki" : ""
+    }; pozostałe ${formatNumberPL(
+      best.socialFromScale,
+    )} odlicz od dochodu ze skali w PIT-36/PIT-37 (art. 26 ust. 1 pkt 2 i ust. 13a ustawy o PIT: składki nieodliczone od przychodu ryczałtowego).\n`;
   }
 
   function getRyczaltOtherIncomeLines(evaluation, indent) {
@@ -3363,7 +3508,9 @@
     text += `${indent}  Dochód: ${formatNumberPL(ctx.otherIncome)}${
       best.socialFromScale > 0
         ? ` − składki społeczne (art. 26 ust. 1 pkt 2${
-            best.method === "ryczalt" ? " i ust. 13a — nadwyżka ponad przychód" : ""
+            best.method === "ryczalt"
+              ? " i ust. 13a — nadwyżka ponad przychód pomniejszony o 50% zdrowotnej"
+              : ""
           }) ${formatNumberPL(best.socialFromScale)} = ${formatNumberPL(best.scaleBase)}`
         : ""
     }\n`;
@@ -3406,7 +3553,7 @@
     text += getRyczaltHealthText(evaluation);
     text += `\nObliczenie ryczałtu (stawka ${label}${
       ctx.zusEnabled && ctx.social > 0
-        ? `; składki społeczne: ${SOCIAL_DEDUCTION_SHORT_LABELS[best.method]}`
+        ? `; składki społeczne: ${getSocialMethodLabel(evaluation)}`
         : ""
     }):\n`;
     text += `  Przychód: ${formatNumberPL(rate.rateRevenue)}\n`;
@@ -3439,7 +3586,7 @@
     text += getRyczaltHealthText(evaluation);
     text += `\nObliczenie ryczałtu${
       ctx.zusEnabled && ctx.social > 0
-        ? ` (składki społeczne: ${SOCIAL_DEDUCTION_SHORT_LABELS[best.method]})`
+        ? ` (składki społeczne: ${getSocialMethodLabel(evaluation)})`
         : ""
     }:\n`;
     text += getRyczaltDeductionLines(evaluation, "  ");
@@ -3484,7 +3631,7 @@
     const { ctx } = evaluation;
     const notes = [];
     if (ctx.zusEnabled && ctx.social > 0) {
-      notes.push(`składki: ${SOCIAL_DEDUCTION_SHORT_LABELS[evaluation.method]}`);
+      notes.push(`składki: ${getSocialMethodLabel(evaluation)}`);
     }
     if (evaluation.holidayMonth) {
       notes.push(`wakacje: ${ROMAN_MONTHS[evaluation.holidayMonth - 1]}`);
@@ -3914,8 +4061,13 @@
 
   function setBackgroundInert(inert) {
     MODAL_BACKGROUND.forEach((element) => {
-      if (inert) element.setAttribute("inert", "");
-      else element.removeAttribute("inert");
+      if (inert) {
+        element.setAttribute("inert", "");
+        element.setAttribute("data-modal-inert", "");
+      } else {
+        element.removeAttribute("inert");
+        element.removeAttribute("data-modal-inert");
+      }
     });
   }
 

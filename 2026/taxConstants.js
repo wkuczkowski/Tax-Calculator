@@ -156,7 +156,8 @@ const taxMath = {
    * - gdy występują oba separatory „.” i „,”, ostatni z nich jest dziesiętny;
    * - pojedynczy „.” albo „,”, po którym na końcu są 1–2 cyfry, jest
    *   dziesiętny (pojedynczy separator na samym końcu – np. w trakcie
-   *   pisania „1234,” – też);
+   *   pisania „1234,” – też); gdy tysiące są oddzielone spacjami, pojedynczy
+   *   „.”/„,” za ostatnią spacją jest zawsze dziesiętny („1 000,555” = błąd);
    * - w pozostałych przypadkach „.”/„,”/spacje to separatory tysięcy
    *   i muszą dzielić liczbę na grupy po 3 cyfry;
    * - inne znaki (litery, wykładnik „12e3”, kilka minusów) = błąd.
@@ -186,8 +187,13 @@ const taxMath = {
     } else {
       const sep = lastDot >= 0 ? "." : lastComma >= 0 ? "," : null;
       if (sep && text.split(sep).length === 2) {
-        const after = text.slice(text.lastIndexOf(sep) + 1);
-        if (/^\d{0,2}$/.test(after)) decimalSep = sep;
+        const sepIndex = text.lastIndexOf(sep);
+        const after = text.slice(sepIndex + 1);
+        // „1 000,555”: tysiące oddzielone spacjami, więc pojedynczy „,”/„.”
+        // za ostatnią spacją jest dziesiętny (3 cyfry po nim = błąd),
+        // a nie kolejną grupą tysięcy
+        const spaceGrouped = sepIndex > text.lastIndexOf(" ") && text.includes(" ");
+        if (/^\d{0,2}$/.test(after) || spaceGrouped) decimalSep = sep;
       }
     }
     let intPart = text;

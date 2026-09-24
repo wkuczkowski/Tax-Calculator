@@ -807,6 +807,8 @@ describe("Parser kwot (taxMath.parseAmount) – C2", () => {
       badGroup: value("1234,567"),
       badSpaces: value("12 34"),
       threeDecimals: value("1.234,567"),
+      spaceGroupedThreeDecimals: value("1 000,555"),
+      spaceGroupedDecimal: value("1 000,5"),
     };
     calc.close();
     expect(out).toEqual({
@@ -830,6 +832,8 @@ describe("Parser kwot (taxMath.parseAmount) – C2", () => {
       badGroup: "ERR",
       badSpaces: "ERR",
       threeDecimals: "ERR",
+      spaceGroupedThreeDecimals: "ERR",
+      spaceGroupedDecimal: 1000.5,
     });
   });
 
@@ -841,8 +845,9 @@ describe("Parser kwot (taxMath.parseAmount) – C2", () => {
     const income = calc.document.getElementById("income").value;
     const revenueField = calc.document.getElementById("revenue").value;
     calc.close();
-    expect(income).toBe("100 000,50 zł");
-    expect(revenueField).toBe("100 000,50 zł");
+    expect(income).toBe("100\u00a0000,50\u00a0zł");
+    // bez „zł” w polu – jednostka jest obok pola
+    expect(revenueField).toBe("100\u00a0000,50");
   });
 });
 
@@ -1008,5 +1013,75 @@ describe("ZUS – prezentacja: etat + ulga, wakacje w tabeli (C5)", () => {
     expect(pensionCol[0]).toBe(0);
     expect(pensionSum).toBe(num(sigma.slice(22, 31)));
     expect(text.includes("zwolniono 1926,76 zł")).toBe(true);
+  });
+});
+
+describe("Pola ukryte nie blokują wyników; pisanie nie „miga” błędem", () => {
+  it("błędna data urodzenia przestaje blokować po wyłączeniu składek społecznych", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.setStartDate("2026-03-16");
+    calc.setBirthDate("2026-05-01");
+    calc.calculate();
+    const blocked = calc.document.getElementById("bestCardTitle").textContent;
+    calc.setZusEnabled(false);
+    const out = {
+      blocked,
+      after: calc.document.getElementById("bestCardTitle").textContent,
+      birthError: calc.document.getElementById("zusBirthDate-error").textContent,
+      hasTotal: Number.isFinite(calc.readVariantData("taxScale").total),
+    };
+    calc.close();
+    expect(out).toEqual({
+      blocked: "Popraw dane",
+      after: "Skala podatkowa",
+      birthError: "",
+      hasTotal: true,
+    });
+  });
+
+  it("niedokończona kwota w polu z fokusem zostawia ostatnie wyniki, blur pokazuje błąd", () => {
+    const calc = loadCalculator();
+    const revenue = calc.document.getElementById("revenue");
+    const type = (value) => {
+      revenue.value = value;
+      revenue.dispatchEvent(new calc.window.Event("input", { bubbles: true }));
+    };
+    calc.setRevenue(150);
+    calc.setCosts(0);
+    calc.calculate();
+    const before = calc.readVariantData("taxScale").total;
+    revenue.focus();
+    type("150 0");
+    const typing = {
+      state: calc.document.getElementById("bestCard").dataset.state,
+      total: calc.readVariantData("taxScale").total,
+      error: calc.document.getElementById("revenue-error").textContent,
+    };
+    type("150 000");
+    const done = calc.readVariantData("taxScale").total;
+    type("150 0");
+    revenue.blur();
+    const blurred = calc.document.getElementById("bestCard").dataset.state;
+    calc.close();
+    expect(typing).toEqual({ state: "ranked", total: before, error: "" });
+    expect(done > before).toBe(true);
+    expect(blurred).toBe("invalid");
+  });
+});
+
+describe("Walidacja przy otwartym oknie eksportu", () => {
+  it("tło okna (inert) nie wyłącza walidacji pól", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.calculate();
+    calc.readBreakdown(); // otwiera okno eksportu (tło inert)
+    calc.setRevenue("-50000");
+    calc.calculate();
+    const title = calc.document.getElementById("bestCardTitle").textContent;
+    calc.close();
+    expect(title).toBe("Popraw dane");
   });
 });

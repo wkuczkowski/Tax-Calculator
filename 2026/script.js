@@ -9,10 +9,10 @@
     costsInput: document.getElementById("costs"),
     ipBoxCoeffInput: document.getElementById("ipBoxCoeff"),
     ipBoxRange: document.getElementById("ipBoxRange"),
-    ipBoxEdit: document.getElementById("ipBoxEdit"),
     ipBoxContainer: document.getElementById("ipBoxContainer"),
     ipBoxEnabledRadios: document.querySelectorAll('input[name="ipBoxEnabled"]'),
     ipBoxReveal: document.getElementById("ipBoxReveal"),
+    inputPeriodRadios: document.querySelectorAll('input[name="inputPeriod"]'),
     ryczaltCheckboxes: document.querySelectorAll(
       '.checkbox-group input[type="checkbox"]',
     ),
@@ -25,12 +25,15 @@
     rateInputs: document.querySelectorAll(".rate-input"),
     revenueInfoText: document.querySelector(".multiple-rates-revenue-info p"),
     resetBtn: document.getElementById("resetBtn"),
+    shareBtn: document.getElementById("shareBtn"),
+    themeToggle: document.getElementById("themeToggle"),
     copyFab: document.getElementById("copyFab"),
     copyModal: document.getElementById("copyModal"),
-    copyModalCard: document.querySelector(".copy-modal-card"),
     copyModalCopy: document.getElementById("copyModalCopy"),
     copyPreview: document.getElementById("copyPreview"),
     copyToast: document.getElementById("copyToast"),
+    copyToastTitle: document.getElementById("copyToastTitle"),
+    copyToastSubtitle: document.getElementById("copyToastSubtitle"),
     infoFab: document.getElementById("infoFab"),
     infoModal: document.getElementById("infoModal"),
     infoModalContent: document.getElementById("infoModalContent"),
@@ -38,6 +41,21 @@
     bestCardTitle: document.getElementById("bestCardTitle"),
     bestCardAmount: document.getElementById("bestCardAmount"),
     bestCardSavings: document.getElementById("bestCardSavings"),
+    bestCardMonthly: document.getElementById("bestCardMonthly"),
+    bestCardRate: document.getElementById("bestCardRate"),
+    bestCardNet: document.getElementById("bestCardNet"),
+    mobileSummary: document.getElementById("mobileSummary"),
+    mobileSummaryTitle: document.getElementById("mobileSummaryTitle"),
+    mobileSummaryAmount: document.getElementById("mobileSummaryAmount"),
+    chartFrame: document.getElementById("chartFrame"),
+    chartSvg: document.getElementById("chartSvg"),
+    chartTooltip: document.getElementById("chartTooltip"),
+    chartEmpty: document.getElementById("chartEmpty"),
+    chartLegend: document.getElementById("chartLegend"),
+    chartMeta: document.getElementById("chartMeta"),
+    chartWinners: document.getElementById("chartWinners"),
+    winnerStrip: document.getElementById("winnerStrip"),
+    winnerList: document.getElementById("winnerList"),
     breakdownDetails: document.getElementById("breakdownDetails"),
     breakdownPre: document.getElementById("breakdownPre"),
   };
@@ -65,31 +83,6 @@
     ratesTotal: "Ryczałt łącznie",
   };
 
-  const RATE_INPUT_MIN_WIDTH = 96;
-  const RATE_INPUT_MAX_WIDTH = 190;
-  const RATE_INPUT_CHAR_WIDTH = 8.5;
-  const RATE_INPUT_HORIZONTAL_SPACE = 30;
-
-  function resizeRateInput(input) {
-    if (!input) return;
-
-    const text = input.value || input.placeholder || "";
-    const contentWidth =
-      Array.from(text).length * RATE_INPUT_CHAR_WIDTH +
-      RATE_INPUT_HORIZONTAL_SPACE;
-    const width = Math.min(
-      RATE_INPUT_MAX_WIDTH,
-      Math.max(RATE_INPUT_MIN_WIDTH, Math.ceil(contentWidth)),
-    );
-
-    input.style.setProperty("--rate-input-width", `${width}px`);
-  }
-
-  function resetRateInputWidth(input) {
-    if (!input) return;
-    input.style.removeProperty("--rate-input-width");
-  }
-
   const PIT_VARIANT_IDS = [
     "taxScale",
     "taxScaleIpBox",
@@ -116,24 +109,6 @@
     ...PIT_VARIANT_IDS,
     ...RYCZALT_VARIANT_IDS,
   ];
-
-  /* ==================================================
-     Shared Variables & Calculation Value Getters/Setters
-  ================================================== */
-  const contributionValues = {
-    healthLinear: 0,
-    healthRyczalt: 0,
-    healthScale: 0,
-    healthLinearDeduction: 0,
-    healthRyczaltDeduction: 0,
-  };
-
-  function setCalculationValue(id, value) {
-    contributionValues[id] = value;
-  }
-  function getCalculationValue(id) {
-    return contributionValues[id];
-  }
 
   /* ==================================================
      Utility Functions
@@ -417,6 +392,12 @@
       });
   }
 
+  function setMultiRateLayout(isEnabled) {
+    document
+      .querySelectorAll(".multiple-rates-wrapper, .rate-grid")
+      .forEach((el) => el.classList.toggle("is-multi", isEnabled));
+  }
+
   function updateRemainingRevenue() {
     const totalRevenue = parsePLN(DOM.revenueInput.value);
     const rateInputsShown = document.querySelectorAll(".rate-input.show");
@@ -426,134 +407,219 @@
     });
     const difference = usedRevenue - totalRevenue;
     if (!DOM.revenueInfoText) return;
+    const suffix = getPeriodFactor() === 12 ? " / mies." : "";
+    const isDone = difference === 0 && totalRevenue > 0;
+    DOM.revenueInfoText.classList.toggle("is-over", difference > 0);
+    DOM.revenueInfoText.classList.toggle("is-done", isDone);
     if (difference > 0) {
-      DOM.revenueInfoText.innerHTML = `<span style="color: var(--error)">Przekroczono przychód o ${formatPLN(
+      DOM.revenueInfoText.textContent = `Przekroczono przychód o ${formatPLN(
         difference,
-      )}</span>`;
+      )}${suffix}`;
+    } else if (isDone) {
+      DOM.revenueInfoText.textContent = "Cały przychód jest rozdysponowany.";
     } else {
-      const remainingRevenue = totalRevenue - usedRevenue;
       DOM.revenueInfoText.textContent = `Przychód do rozdysponowania: ${formatPLN(
-        remainingRevenue,
-      )}`;
+        totalRevenue - usedRevenue,
+      )}${suffix}`;
     }
+  }
+
+  /* ==================================================
+     Input period (amounts typed per year or per month)
+  ================================================== */
+  function getPeriodFactor() {
+    const checked = document.querySelector('input[name="inputPeriod"]:checked');
+    return checked && checked.value === "month" ? 12 : 1;
+  }
+
+  /* Money typed by the user, converted to an annual amount. */
+  function readAnnualAmount(input) {
+    if (!input) return 0;
+    return (parsePLN(input.value) || 0) * getPeriodFactor();
+  }
+
+  function getAllocatedRevenueTotal() {
+    let total = 0;
+    document.querySelectorAll(".rate-input.show").forEach((input) => {
+      total += readAnnualAmount(input);
+    });
+    return total;
+  }
+
+  /* ==================================================
+     Pure scenario math (shared by results and the chart)
+  ================================================== */
+  const RYCZALT_RATES = {
+    ryczalt2: TAX_CONSTANTS.RYCZALT_RATE_2,
+    ryczalt3: TAX_CONSTANTS.RYCZALT_RATE_3,
+    ryczalt5_5: TAX_CONSTANTS.RYCZALT_RATE_5_5,
+    ryczalt8_5: TAX_CONSTANTS.RYCZALT_RATE_8_5,
+    ryczalt10: TAX_CONSTANTS.RYCZALT_RATE_10,
+    ryczalt12: TAX_CONSTANTS.RYCZALT_RATE_12,
+    ryczalt14: TAX_CONSTANTS.RYCZALT_RATE_14,
+    ryczalt15: TAX_CONSTANTS.RYCZALT_RATE_15,
+    ryczalt17: TAX_CONSTANTS.RYCZALT_RATE_17,
+  };
+
+  /* Ryczałt PIT (without the health contribution) for one rate. */
+  function calculateRyczaltPit(rateId, allocated, healthRyczaltDeduction) {
+    if (rateId === "ryczalt8_5_12_5") {
+      const ryczalt85Threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
+      const rate85 = TAX_CONSTANTS.RYCZALT_RATE_8_5;
+      const rate125 = TAX_CONSTANTS.RYCZALT_RATE_12_5;
+      const taxAt85Threshold = ryczalt85Threshold * rate85;
+
+      if (allocated <= ryczalt85Threshold) {
+        return Math.max(allocated - healthRyczaltDeduction, 0) * rate85;
+      }
+      return (
+        Math.max(allocated - (healthRyczaltDeduction + ryczalt85Threshold), 0) *
+          rate125 +
+        taxAt85Threshold
+      );
+    }
+    const base = Math.max(allocated - healthRyczaltDeduction, 0);
+    return base * RYCZALT_RATES[rateId];
+  }
+
+  /* Annual PIT + health totals of every variant for one scenario.
+     Ryczałt values are single-rate totals (whole revenue at that rate). */
+  function computeVariantTotals({
+    revenue,
+    costs,
+    ipBoxEnabled,
+    ipBoxCoeff,
+    jointEnabled,
+    spouseIncome,
+    ryczaltIds,
+  }) {
+    const income = revenue - costs;
+    const healthScale = taxMath.calculateHealthScale(income);
+    const healthLinear = taxMath.calculateHealthLinear(income);
+    const healthLinearDeduction = Math.min(
+      healthLinear,
+      TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT,
+    );
+    const healthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
+    const healthRyczaltDeduction =
+      healthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
+
+    const totals = {
+      taxScale: calculateScaleTaxTotal(income, healthScale),
+      taxLinear: calculateLinearTaxTotal(
+        income,
+        healthLinearDeduction,
+        healthLinear,
+      ),
+    };
+    if (jointEnabled) {
+      totals.taxScaleJoint = calculateJointScaleTaxTotal(
+        income,
+        spouseIncome,
+        healthScale,
+      );
+    }
+    if (ipBoxEnabled) {
+      totals.taxScaleIpBox = calculateScaleIpBoxTaxTotal(
+        income,
+        ipBoxCoeff,
+        healthScale,
+      );
+      if (jointEnabled) {
+        totals.taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
+          income,
+          spouseIncome,
+          ipBoxCoeff,
+          healthScale,
+        );
+      }
+      totals.taxLinearIpBox = calculateLinearIpBoxTaxTotal(
+        income,
+        ipBoxCoeff,
+        healthLinearDeduction,
+        healthLinear,
+      );
+    }
+    (ryczaltIds || []).forEach((id) => {
+      totals[id] =
+        calculateRyczaltPit(id, revenue, healthRyczaltDeduction) +
+        healthRyczalt;
+    });
+    return totals;
   }
 
   /* ==================================================
      Main Calculation Function
   ================================================== */
   function calculate() {
+    const periodFactor = getPeriodFactor();
     const rawRevenue = DOM.revenueInput.value;
     const rawCosts = DOM.costsInput.value;
     const revenue =
-      parseFloat(rawRevenue.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
+      (parseFloat(rawRevenue.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0) *
+      periodFactor;
     const costs =
-      parseFloat(rawCosts.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
+      (parseFloat(rawCosts.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0) *
+      periodFactor;
     const income = revenue - costs;
 
     document.getElementById("income").value = formatPLN(income);
 
     const ipBoxCoeff = parseFloat(DOM.ipBoxCoeffInput.value) / 100;
-    const healthContribLimit = TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT;
-
-    const healthLinear = taxMath.calculateHealthLinear(income);
-    setCalculationValue("healthLinear", healthLinear);
+    const isMultiRate = DOM.multipleRatesToggle.checked;
 
     const healthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
-    setCalculationValue("healthRyczalt", healthRyczalt);
+    const healthRyczaltDeduction = isMultiRate
+      ? taxMath.getRyczaltHealthAnnualForRevenue(getAllocatedRevenueTotal()) *
+        TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR
+      : healthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
 
-    const healthScale = taxMath.calculateHealthScale(income);
-    setCalculationValue("healthScale", healthScale);
-    const healthLinearDeduction = Math.min(healthLinear, healthContribLimit);
-    setCalculationValue("healthLinearDeduction", healthLinearDeduction);
-
-    let healthRyczaltDeduction;
-    if (DOM.multipleRatesToggle.checked) {
-      let totalAllocatedRevenue = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        totalAllocatedRevenue += parsePLN(input.value) || 0;
-      });
-      const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
-        totalAllocatedRevenue,
-      );
-      healthRyczaltDeduction =
-        ratesHealthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
-    } else {
-      healthRyczaltDeduction =
-        healthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
-    }
-    setCalculationValue("healthRyczaltDeduction", healthRyczaltDeduction);
-
-    const jointTaxationEnabled =
-      document.querySelector('input[name="jointTaxation"]:checked').value ===
-      "yes";
+    const jointTaxationEnabled = isJointTaxationEnabled();
     const spouseIncome = jointTaxationEnabled
-      ? parsePLN(document.getElementById("spouseIncome").value)
+      ? readAnnualAmount(DOM.spouseIncomeInput)
       : 0;
-
-    const taxScale = calculateScaleTaxTotal(
-      income,
-      getCalculationValue("healthScale"),
-    );
-    document.getElementById("taxScale").value = formatPLN(taxScale);
-    if (jointTaxationEnabled) {
-      const taxScaleJoint = calculateJointScaleTaxTotal(
-        income,
-        spouseIncome,
-        getCalculationValue("healthScale"),
-      );
-      document.getElementById("taxScaleJoint").value = formatPLN(taxScaleJoint);
-    }
-
-    const taxLinear = calculateLinearTaxTotal(
-      income,
-      healthLinearDeduction,
-      healthLinear,
-    );
-    document.getElementById("taxLinear").value = formatPLN(taxLinear);
-
     const ipBoxEnabled = isIpBoxEnabled();
-    if (ipBoxEnabled) {
-      const taxScaleIpBox = calculateScaleIpBoxTaxTotal(
-        income,
-        ipBoxCoeff,
-        getCalculationValue("healthScale"),
-      );
-      document.getElementById("taxScaleIpBox").value = formatPLN(taxScaleIpBox);
-      if (jointTaxationEnabled) {
-        const taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
-          income,
-          spouseIncome,
-          ipBoxCoeff,
-          getCalculationValue("healthScale"),
-        );
-        document.getElementById("taxScaleIpBoxJoint").value =
-          formatPLN(taxScaleIpBoxJoint);
-      } else {
-        document.getElementById("taxScaleIpBoxJoint").value = "";
-      }
 
-      const taxLinearIpBox = calculateLinearIpBoxTaxTotal(
-        income,
-        ipBoxCoeff,
-        healthLinearDeduction,
-        healthLinear,
+    const totals = computeVariantTotals({
+      revenue,
+      costs,
+      ipBoxEnabled,
+      ipBoxCoeff,
+      jointEnabled: jointTaxationEnabled,
+      spouseIncome,
+    });
+
+    document.getElementById("taxScale").value = formatPLN(totals.taxScale);
+    if (jointTaxationEnabled) {
+      document.getElementById("taxScaleJoint").value = formatPLN(
+        totals.taxScaleJoint,
       );
-      document.getElementById("taxLinearIpBox").value =
-        formatPLN(taxLinearIpBox);
+    }
+    document.getElementById("taxLinear").value = formatPLN(totals.taxLinear);
+
+    if (ipBoxEnabled) {
+      document.getElementById("taxScaleIpBox").value = formatPLN(
+        totals.taxScaleIpBox,
+      );
+      document.getElementById("taxScaleIpBoxJoint").value = jointTaxationEnabled
+        ? formatPLN(totals.taxScaleIpBoxJoint)
+        : "";
+      document.getElementById("taxLinearIpBox").value = formatPLN(
+        totals.taxLinearIpBox,
+      );
     } else {
       clearIpBoxResultFields();
     }
 
     const allocatedRevenues = {};
-    if (DOM.multipleRatesToggle.checked) {
-      const rateInputsVisible = document.querySelectorAll(".rate-input.show");
-      rateInputsVisible.forEach((input) => {
-        allocatedRevenues[input.dataset.for] = parsePLN(input.value) || 0;
+    if (isMultiRate) {
+      document.querySelectorAll(".rate-input.show").forEach((input) => {
+        allocatedRevenues[input.dataset.for] = readAnnualAmount(input);
       });
     }
 
     function getAllocatedOrFullRateValue(rateId) {
-      if (DOM.multipleRatesToggle.checked) {
+      if (isMultiRate) {
         const rateInput = document.querySelector(
           `.rate-input[data-for="${rateId}"]`,
         );
@@ -563,139 +629,29 @@
       return revenue;
     }
 
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt2") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
+    RYCZALT_VARIANT_IDS.forEach((id) => {
+      let value = calculateRyczaltPit(
+        id,
+        getAllocatedOrFullRateValue(id),
+        healthRyczaltDeduction,
       );
-      let ryczalt2 = base * TAX_CONSTANTS.RYCZALT_RATE_2;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt2 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt2").value = formatPLN(ryczalt2);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt3") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt3 = base * TAX_CONSTANTS.RYCZALT_RATE_3;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt3 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt3").value = formatPLN(ryczalt3);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt5_5") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt5_5 = base * TAX_CONSTANTS.RYCZALT_RATE_5_5;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt5_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt5_5").value = formatPLN(ryczalt5_5);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt8_5") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt8_5 = base * TAX_CONSTANTS.RYCZALT_RATE_8_5;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt8_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt8_5").value = formatPLN(ryczalt8_5);
-    }
-    {
-      const allocated = getAllocatedOrFullRateValue("ryczalt8_5_12_5");
-      let ryczalt8_5_12_5;
-      const ryczalt85Threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
-      const rate85 = TAX_CONSTANTS.RYCZALT_RATE_8_5;
-      const rate125 = TAX_CONSTANTS.RYCZALT_RATE_12_5;
-      const taxAt85Threshold = ryczalt85Threshold * rate85;
-
-      if (allocated <= ryczalt85Threshold) {
-        ryczalt8_5_12_5 =
-          Math.max(
-            allocated - getCalculationValue("healthRyczaltDeduction"),
-            0,
-          ) * rate85;
-      } else {
-        ryczalt8_5_12_5 =
-          Math.max(
-            allocated -
-              (getCalculationValue("healthRyczaltDeduction") +
-                ryczalt85Threshold),
-            0,
-          ) *
-            rate125 +
-          taxAt85Threshold;
-      }
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt8_5_12_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt8_5_12_5").value =
-        formatPLN(ryczalt8_5_12_5);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt10") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt10 = base * TAX_CONSTANTS.RYCZALT_RATE_10;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt10 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt10").value = formatPLN(ryczalt10);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt12") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt12 = base * TAX_CONSTANTS.RYCZALT_RATE_12;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt12 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt12").value = formatPLN(ryczalt12);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt14") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt14 = base * TAX_CONSTANTS.RYCZALT_RATE_14;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt14 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt14").value = formatPLN(ryczalt14);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt15") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt15 = base * TAX_CONSTANTS.RYCZALT_RATE_15;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt15 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt15").value = formatPLN(ryczalt15);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt17") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt17 = base * TAX_CONSTANTS.RYCZALT_RATE_17;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt17 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt17").value = formatPLN(ryczalt17);
-    }
+      if (!isMultiRate) value += healthRyczalt;
+      document.getElementById(id).value = formatPLN(value);
+    });
 
     updateRatesTotal();
     updateRevenueTags(revenue, allocatedRevenues);
+    updatePeriodHints();
     rankAndSummarize(revenue, income);
+    renderChart({
+      revenue,
+      costs,
+      ipBoxEnabled,
+      ipBoxCoeff,
+      jointEnabled: jointTaxationEnabled,
+      spouseIncome,
+      isMultiRate,
+    });
     refreshBreakdownIfOpen();
   }
 
@@ -722,13 +678,8 @@
       return;
     }
 
-    let totalAllocatedRevenue = 0;
-    document.querySelectorAll(".rate-input.show").forEach((input) => {
-      totalAllocatedRevenue += parsePLN(input.value) || 0;
-    });
-
     const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
-      totalAllocatedRevenue,
+      getAllocatedRevenueTotal(),
     );
 
     let total = 0;
@@ -813,9 +764,23 @@
       });
     }
 
+    const isMultiRate = DOM.multipleRatesToggle.checked;
+    const isComponent = (id) => isMultiRate && RYCZALT_VARIANT_IDS.includes(id);
+    RYCZALT_VARIANT_IDS.forEach((id) => {
+      const row = document.querySelector(`.results-row[data-variant="${id}"]`);
+      if (row) row.classList.toggle("is-component", isMultiRate);
+    });
+
+    // in multi-rate mode the per-rate rows are PIT components of the
+    // "ryczałt łącznie" total, so they stay grouped directly above it
+    const components = visibleVariants.filter((v) => isComponent(v.id));
     visibleVariants
+      .filter((v) => !isComponent(v.id))
       .sort((a, b) => a.value - b.value || a.index - b.index)
-      .forEach(({ row }) => {
+      .forEach(({ id, row }) => {
+        if (id === "ratesTotal") {
+          components.forEach((c) => container.appendChild(c.row));
+        }
         container.appendChild(row);
       });
   }
@@ -823,6 +788,51 @@
   /* ==================================================
      Rank visible variants & populate the best card
   ================================================== */
+  function formatPercent1(value) {
+    return (
+      new Intl.NumberFormat("pl-PL", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(value * 100) + "%"
+    );
+  }
+
+  function formatWholePLN(value) {
+    return new Intl.NumberFormat("pl-PL", {
+      style: "currency",
+      currency: "PLN",
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  function clearRowDetails(row) {
+    row.classList.remove("is-best");
+    const rank = row.querySelector("[data-rank]");
+    const sub = row.querySelector("[data-sub]");
+    const delta = row.querySelector("[data-delta]");
+    const bar = row.querySelector("[data-bar]");
+    if (rank) rank.textContent = "";
+    if (sub) sub.textContent = "";
+    if (delta) delta.textContent = "";
+    if (bar) bar.style.width = "0%";
+  }
+
+  function setEmptySummary() {
+    DOM.bestCard.dataset.state = "empty";
+    DOM.bestCardTitle.textContent = "—";
+    DOM.bestCardAmount.textContent = "—";
+    DOM.bestCardSavings.textContent =
+      "Wprowadź dane, aby zobaczyć najkorzystniejszy wariant.";
+    DOM.bestCardMonthly.textContent = "—";
+    DOM.bestCardRate.textContent = "—";
+    DOM.bestCardNet.textContent = "—";
+    if (DOM.mobileSummary) {
+      DOM.mobileSummary.dataset.state = "empty";
+      DOM.mobileSummaryTitle.textContent = "—";
+      DOM.mobileSummaryAmount.textContent = "—";
+    }
+  }
+
   function rankAndSummarize(revenue, income) {
     const isMultiRate = !!(
       DOM.multipleRatesToggle && DOM.multipleRatesToggle.checked
@@ -844,14 +854,10 @@
       // share (without health). The user-meaningful ryczałt cost is the
       // aggregated "Łącznie PIT + składka zdrowotna". Compare that as one option,
       // but only once the user actually allocated some revenue to a rate.
-      let allocatedRevenue = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        allocatedRevenue += parsePLN(input.value) || 0;
-      });
       const ratesTotalVariant = getVisibleRatesTotalVariant();
       if (
         ratesTotalVariant &&
-        allocatedRevenue > 0 &&
+        getAllocatedRevenueTotal() > 0 &&
         ratesTotalVariant.value > 0
       ) {
         variants.push(ratesTotalVariant);
@@ -862,21 +868,14 @@
 
     document
       .querySelectorAll(".results-row, #ratesTotal")
-      .forEach((r) => r.classList.remove("is-best"));
-    document
-      .querySelectorAll(".results-row [data-bar]")
-      .forEach((b) => (b.style.width = "0%"));
+      .forEach(clearRowDetails);
 
     sortPitComparisonRows();
 
     const meaningful = revenue > 0 || income !== 0;
 
     if (!variants.length || !meaningful) {
-      DOM.bestCard.dataset.state = "empty";
-      DOM.bestCardTitle.textContent = "—";
-      DOM.bestCardAmount.textContent = "—";
-      DOM.bestCardSavings.textContent =
-        "Wprowadź dane, aby zobaczyć najkorzystniejszy wariant.";
+      setEmptySummary();
       return;
     }
 
@@ -888,29 +887,86 @@
     best.row.classList.add("is-best");
 
     const maxVal = Math.max(...variants.map((v) => v.value), 1);
-    variants.forEach((v) => {
+    sorted.forEach((v, index) => {
       const bar = v.row.querySelector("[data-bar]");
-      if (!bar) return;
-      const pct = maxVal > 0 ? (v.value / maxVal) * 100 : 0;
-      bar.style.width = pct.toFixed(1) + "%";
+      if (bar) {
+        const pct = maxVal > 0 ? (v.value / maxVal) * 100 : 0;
+        bar.style.width = pct.toFixed(1) + "%";
+      }
+      const rank = v.row.querySelector("[data-rank]");
+      if (rank) rank.textContent = String(index + 1);
+
+      const sub = v.row.querySelector("[data-sub]");
+      if (sub) {
+        const parts = [`${formatWholePLN(v.value / 12)} / mies.`];
+        if (income > 0) parts.push(`${formatPercent1(v.value / income)} dochodu`);
+        sub.textContent = parts.join(" · ");
+      }
+
+      const delta = v.row.querySelector("[data-delta]");
+      if (delta) {
+        delta.textContent =
+          v === best ? "najtaniej" : `+${formatWholePLN(v.value - best.value)}`;
+      }
     });
 
+    const bestLabel = VARIANT_LABELS[best.id] || best.id;
     DOM.bestCard.dataset.state = "ranked";
-    DOM.bestCardTitle.textContent = VARIANT_LABELS[best.id] || best.id;
+    DOM.bestCardTitle.textContent = bestLabel;
     DOM.bestCardAmount.textContent = formatPLN(best.value);
+    DOM.bestCardMonthly.textContent = formatPLN(best.value / 12);
+    DOM.bestCardRate.textContent =
+      income > 0 ? formatPercent1(best.value / income) : "—";
+    DOM.bestCardNet.textContent =
+      income > 0 ? formatPLN(income - best.value) : "—";
 
     if (second && second.value > best.value) {
       const delta = second.value - best.value;
       DOM.bestCardSavings.innerHTML =
-        `<strong>−${formatPLN(delta)}</strong>` +
-        ` vs. drugi najlepszy wariant (${VARIANT_LABELS[second.id] || second.id})`;
+        `<strong>${formatPLN(delta)} mniej</strong>` +
+        ` niż ${VARIANT_LABELS[second.id] || second.id}`;
+      if (worst && worst !== second && worst.value > second.value) {
+        DOM.bestCardSavings.innerHTML += ` · do ${formatWholePLN(
+          worst.value - best.value,
+        )} mniej niż najdroższa opcja`;
+      }
     } else if (worst && worst.value > best.value) {
       const delta = worst.value - best.value;
-      DOM.bestCardSavings.innerHTML = `<strong>−${formatPLN(delta)}</strong> vs. najwyższy wariant`;
+      DOM.bestCardSavings.innerHTML = `<strong>${formatPLN(delta)} mniej</strong> niż najdroższa opcja`;
     } else {
       DOM.bestCardSavings.textContent =
-        "Tylko jeden widoczny wariant — wybierz więcej, aby porównać.";
+        "Tylko jeden widoczny wariant — zaznacz stawkę ryczałtu, aby porównać.";
     }
+
+    if (DOM.mobileSummary) {
+      DOM.mobileSummary.dataset.state = "ranked";
+      DOM.mobileSummaryTitle.textContent = bestLabel;
+      DOM.mobileSummaryAmount.textContent = formatWholePLN(best.value);
+    }
+  }
+
+  /* ==================================================
+     Period hints ("= X zł rocznie") and suffixes
+  ================================================== */
+  const DEFAULT_HINTS = {};
+  document.querySelectorAll("[data-annual-hint]").forEach((el) => {
+    DEFAULT_HINTS[el.dataset.annualHint] = el.textContent.trim();
+  });
+
+  function updatePeriodHints() {
+    const isMonthly = getPeriodFactor() === 12;
+    document.querySelectorAll("[data-period-suffix]").forEach((el) => {
+      el.textContent = isMonthly ? "/mies." : "/rok";
+    });
+    document.querySelectorAll("[data-annual-hint]").forEach((el) => {
+      const input = document.getElementById(el.dataset.annualHint);
+      const annual = readAnnualAmount(input);
+      el.classList.toggle("is-conversion", isMonthly && annual > 0);
+      el.textContent =
+        isMonthly && annual > 0
+          ? `= ${formatPLN(annual)} rocznie`
+          : DEFAULT_HINTS[el.dataset.annualHint];
+    });
   }
 
   /* ==================================================
@@ -988,10 +1044,7 @@
     updateConditionalRowsVisibility();
 
     DOM.multipleRatesToggle.checked = false;
-    document.querySelector(".multiple-rates-revenue-info").style.display =
-      "none";
-    document.querySelector(".multiple-rates-wrapper").style.justifyContent =
-      "flex-end";
+    setMultiRateLayout(false);
     DOM.ryczaltCheckboxes.forEach((cb) => {
       cb.checked = false;
       const targetId = cb.dataset.target;
@@ -1004,7 +1057,6 @@
       if (rateInput) {
         rateInput.classList.remove("show");
         rateInput.value = "";
-        resetRateInputWidth(rateInput);
       }
       targetInput.value = formatPLN(0);
     });
@@ -1142,11 +1194,7 @@
   DOM.multipleRatesToggle.addEventListener("change", function (e) {
     const isEnabled = e.target.checked;
     const rateInputs = document.querySelectorAll(".rate-input");
-    const revenueInfo = document.querySelector(".multiple-rates-revenue-info");
-    const wrapper = document.querySelector(".multiple-rates-wrapper");
-
-    revenueInfo.style.display = isEnabled ? "block" : "none";
-    wrapper.style.justifyContent = isEnabled ? "space-between" : "flex-end";
+    setMultiRateLayout(isEnabled);
 
     rateInputs.forEach((input) => {
       const wrap = input.closest(".checkbox-wrapper");
@@ -1156,12 +1204,10 @@
       if (isEnabled && checkbox.checked) {
         input.classList.add("show");
         input.value = "";
-        resizeRateInput(input);
         targetInput.value = formatPLN(0);
       } else {
         input.classList.remove("show");
         input.value = "";
-        resetRateInputWidth(input);
       }
     });
     if (isEnabled) updateRemainingRevenue();
@@ -1183,14 +1229,12 @@
         if (multipleRatesEnabled) {
           rateInput.classList.add("show");
           rateInput.value = "";
-          resizeRateInput(rateInput);
           targetInput.value = formatPLN(0);
         }
       } else {
         targetGroup.style.display = "none";
         rateInput.classList.remove("show");
         rateInput.value = "";
-        resetRateInputWidth(rateInput);
         targetInput.value = formatPLN(0);
       }
 
@@ -1200,18 +1244,15 @@
   });
 
   document.querySelectorAll(".rate-input").forEach((input) => {
-    resizeRateInput(input);
     input.addEventListener("input", (e) => {
-      resizeRateInput(e.target);
-      if (!e.target.value) return;
-      const isValid = validateInput(e.target.value, e.target.dataset.for);
+      const isValid =
+        !e.target.value || validateInput(e.target.value, e.target.dataset.for);
       if (isValid) calculate();
       if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("blur", (e) => {
       if (e.target.value) {
         e.target.value = formatPLN(parsePLN(e.target.value));
-        resizeRateInput(e.target);
         updateRemainingRevenue();
       }
     });
@@ -1909,8 +1950,9 @@
   }
 
   function getFormattedValues() {
-    const revenueNum = parsePLN(DOM.revenueInput.value);
-    const costsNum = parsePLN(DOM.costsInput.value);
+    const periodFactor = getPeriodFactor();
+    const revenueNum = readAnnualAmount(DOM.revenueInput);
+    const costsNum = readAnnualAmount(DOM.costsInput);
     const incomeNum = revenueNum - costsNum;
     const ipBoxOn = isIpBoxEnabled();
     const ipBoxCoeffNum = ipBoxOn
@@ -1918,7 +1960,7 @@
       : 0;
     const isJointTaxation = document.querySelector(".joint-taxation-card.show");
     const spouseIncomeNum = isJointTaxation
-      ? parsePLN(document.getElementById("spouseIncome").value)
+      ? readAnnualAmount(DOM.spouseIncomeInput)
       : 0;
     const isMultipleRates = DOM.multipleRatesToggle.checked;
 
@@ -1927,17 +1969,16 @@
 
     let ryczaltRevenueForHealth = revenueNum;
     if (isMultipleRates) {
-      let totalAllocated = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        totalAllocated += parsePLN(input.value) || 0;
-      });
-      ryczaltRevenueForHealth = totalAllocated;
+      ryczaltRevenueForHealth = getAllocatedRevenueTotal();
     }
     const healthRyczaltData = getHealthRyczaltBreakdown(
       ryczaltRevenueForHealth,
     );
 
-    let text = `=== DANE PODSTAWOWE ===\n`;
+    let text = `=== DANE PODSTAWOWE (ROCZNIE) ===\n`;
+    if (periodFactor === 12) {
+      text += `(kwoty wprowadzone miesięcznie i przeliczone × 12)\n`;
+    }
     text += `Przychód: ${formatNumberPL(revenueNum)}\n`;
     text += `Koszty: ${formatNumberPL(costsNum)}\n`;
     text += `Dochód: ${formatNumberPL(incomeNum)}\n`;
@@ -2119,7 +2160,7 @@
             const rateInput = document.querySelector(
               `.rate-input[data-for="${rateInfo.id}"]`,
             );
-            rateRevenue = rateInput ? parsePLN(rateInput.value) || 0 : 0;
+            rateRevenue = readAnnualAmount(rateInput);
           }
 
           if (rateInfo.id === "ryczalt8_5_12_5") {
@@ -2144,11 +2185,8 @@
 
       if (isMultipleRates) {
         text += `\n--- SUMA RYCZAŁTU (WIELE STAWEK) ---\n`;
-        let totalAllocated = 0;
+        const totalAllocated = getAllocatedRevenueTotal();
         let totalRyczalt = 0;
-        document.querySelectorAll(".rate-input.show").forEach((input) => {
-          totalAllocated += parsePLN(input.value) || 0;
-        });
         ryczaltRates.forEach((rateInfo) => {
           const element = document.getElementById(rateInfo.id);
           if (
@@ -2223,8 +2261,13 @@
     }
   }
 
-  function showCopyToast() {
+  function showCopyToast(
+    title = "Skopiowano",
+    subtitle = "Wyniki znajdują się w schowku",
+  ) {
     if (!DOM.copyToast) return;
+    if (DOM.copyToastTitle) DOM.copyToastTitle.textContent = title;
+    if (DOM.copyToastSubtitle) DOM.copyToastSubtitle.textContent = subtitle;
     if (toastShowTimeout) {
       clearTimeout(toastShowTimeout);
       toastShowTimeout = null;
@@ -2252,31 +2295,7 @@
   async function copyResultsToClipboard() {
     const text = DOM.copyPreview ? DOM.copyPreview.textContent : "";
     if (!text) return;
-    let success = false;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        success = true;
-      } else {
-        throw new Error("Clipboard API unavailable");
-      }
-    } catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.top = "-1000px";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        success = document.execCommand("copy");
-        document.body.removeChild(ta);
-      } catch (fallbackErr) {
-        console.error("Failed to copy values:", fallbackErr);
-      }
-    }
-    if (success) {
+    if (await copyText(text)) {
       closeCopyModal();
       showCopyToast();
     }
@@ -2703,6 +2722,606 @@
   }
 
   /* ==================================================
+     Chart: total burden vs. revenue + cheapest form by revenue
+  ================================================== */
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const CHART_SAMPLES = 160;
+  const PIT_SERIES_SLOTS = {
+    taxScale: 1,
+    taxLinear: 2,
+    taxLinearIpBox: 4,
+    taxScaleJoint: 5,
+    taxScaleIpBox: 7,
+    taxScaleIpBoxJoint: 8,
+  };
+  const RYCZALT_SERIES_SLOTS = [3, 6];
+  let lastChartArgs = null;
+  let chartModel = null;
+  let chartHoverIndex = null;
+
+  const compactFormatter = new Intl.NumberFormat("pl-PL", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  });
+
+  function niceCeil(value) {
+    if (value <= 0) return 1;
+    const exp = Math.pow(10, Math.floor(Math.log10(value)));
+    const f = value / exp;
+    const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((n) => f <= n);
+    return step * exp;
+  }
+
+  function niceStep(max, targetTicks) {
+    const raw = max / targetTicks;
+    const exp = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / exp;
+    const step = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+    return step * exp;
+  }
+
+  function svgEl(tag, attrs, parent) {
+    const el = document.createElementNS(SVG_NS, tag);
+    Object.entries(attrs || {}).forEach(([key, value]) => {
+      el.setAttribute(key, String(value));
+    });
+    if (parent) parent.appendChild(el);
+    return el;
+  }
+
+  function getChartSeries(args) {
+    const series = [];
+    const add = (id, slot, dashed) =>
+      series.push({ id, label: VARIANT_LABELS[id], slot, dashed: !!dashed });
+
+    add("taxScale", PIT_SERIES_SLOTS.taxScale);
+    if (args.jointEnabled) add("taxScaleJoint", PIT_SERIES_SLOTS.taxScaleJoint);
+    if (args.ipBoxEnabled) {
+      add("taxScaleIpBox", PIT_SERIES_SLOTS.taxScaleIpBox);
+      if (args.jointEnabled) {
+        add("taxScaleIpBoxJoint", PIT_SERIES_SLOTS.taxScaleIpBoxJoint);
+      }
+    }
+    add("taxLinear", PIT_SERIES_SLOTS.taxLinear);
+    if (args.ipBoxEnabled) {
+      add("taxLinearIpBox", PIT_SERIES_SLOTS.taxLinearIpBox);
+    }
+    if (!args.isMultiRate) {
+      Array.from(DOM.ryczaltCheckboxes)
+        .filter((cb) => cb.checked)
+        .forEach((cb, index) => {
+          const slots = RYCZALT_SERIES_SLOTS;
+          add(cb.dataset.target, slots[index % slots.length], index >= slots.length);
+        });
+    }
+    return series;
+  }
+
+  function totalsAtRevenue(args, series, revenue) {
+    return computeVariantTotals({
+      revenue,
+      costs: revenue * args.costRatio,
+      ipBoxEnabled: args.ipBoxEnabled,
+      ipBoxCoeff: args.ipBoxCoeff,
+      jointEnabled: args.jointEnabled,
+      spouseIncome: args.spouseIncome,
+      ryczaltIds: series.filter((s) => s.id.startsWith("ryczalt")).map((s) => s.id),
+    });
+  }
+
+  function cheapestId(series, totals) {
+    let bestId = null;
+    series.forEach((s) => {
+      if (bestId === null || totals[s.id] < totals[bestId]) bestId = s.id;
+    });
+    return bestId;
+  }
+
+  /* Find the revenue at which the cheapest form switches (bisection). */
+  function refineSwitchPoint(args, series, lo, hi, loId) {
+    for (let i = 0; i < 40 && hi - lo > 1; i++) {
+      const mid = (lo + hi) / 2;
+      const id = cheapestId(series, totalsAtRevenue(args, series, mid));
+      if (id === loId) lo = mid;
+      else hi = mid;
+    }
+    return hi;
+  }
+
+  function buildChartModel(args) {
+    const series = getChartSeries(args);
+    const xMax = niceCeil(Math.max(args.revenue * 2, 100000));
+    const xs = [];
+    const values = {};
+    series.forEach((s) => (values[s.id] = []));
+    for (let i = 0; i <= CHART_SAMPLES; i++) {
+      const x = (xMax * i) / CHART_SAMPLES;
+      const totals = totalsAtRevenue(args, series, x);
+      xs.push(x);
+      series.forEach((s) => values[s.id].push(totals[s.id]));
+    }
+
+    const segments = [];
+    let currentId = null;
+    xs.forEach((x, i) => {
+      const totalsHere = {};
+      series.forEach((s) => (totalsHere[s.id] = values[s.id][i]));
+      const id = cheapestId(series, totalsHere);
+      if (id !== currentId) {
+        const from =
+          currentId === null
+            ? 0
+            : refineSwitchPoint(args, series, xs[i - 1], x, currentId);
+        if (segments.length) segments[segments.length - 1].to = from;
+        segments.push({ id, from, to: xMax });
+        currentId = id;
+      }
+    });
+
+    const yMaxRaw = Math.max(
+      1,
+      ...series.map((s) => Math.max(...values[s.id])),
+    );
+    return {
+      args,
+      series,
+      xs,
+      values,
+      xMax,
+      yMax: niceCeil(yMaxRaw),
+      segments,
+      currentTotals: totalsAtRevenue(args, series, args.revenue),
+    };
+  }
+
+  function seriesColor(slot) {
+    return `var(--series-${slot})`;
+  }
+
+  function renderLegend(model) {
+    DOM.chartLegend.textContent = "";
+    model.series.forEach((s) => {
+      const item = document.createElement("span");
+      item.className = "chart-legend-item";
+      const key = document.createElement("span");
+      key.className = "chart-key" + (s.dashed ? " is-dashed" : "");
+      key.style.setProperty("--key-color", seriesColor(s.slot));
+      item.appendChild(key);
+      item.appendChild(document.createTextNode(s.label));
+      DOM.chartLegend.appendChild(item);
+    });
+  }
+
+  function renderWinners(model) {
+    DOM.winnerStrip.textContent = "";
+    DOM.winnerList.textContent = "";
+    const bySlot = {};
+    model.series.forEach((s) => (bySlot[s.id] = s));
+    const revenue = model.args.revenue;
+
+    model.segments.forEach((seg, index) => {
+      const s = bySlot[seg.id];
+      const width = ((seg.to - seg.from) / model.xMax) * 100;
+      const block = document.createElement("span");
+      block.className = "winner-strip-seg" + (s.dashed ? " is-dashed" : "");
+      block.style.width = `${width}%`;
+      block.style.setProperty("--seg-color", seriesColor(s.slot));
+      DOM.winnerStrip.appendChild(block);
+
+      const isLast = index === model.segments.length - 1;
+      const li = document.createElement("li");
+      const isCurrent =
+        revenue >= seg.from && (revenue < seg.to || (isLast && revenue <= seg.to));
+      li.className = "winner-item" + (isCurrent ? " is-current" : "");
+      const key = document.createElement("span");
+      key.className = "chart-key" + (s.dashed ? " is-dashed" : "");
+      key.style.setProperty("--key-color", seriesColor(s.slot));
+      const range = document.createElement("span");
+      range.className = "winner-range";
+      const fromTxt = formatWholePLN(Math.round(seg.from / 100) * 100);
+      const toTxt = formatWholePLN(Math.round(seg.to / 100) * 100);
+      if (model.segments.length === 1) range.textContent = "w całym zakresie";
+      else if (index === 0) range.textContent = `do ${toTxt}`;
+      else if (isLast) range.textContent = `od ${fromTxt}`;
+      else range.textContent = `${fromTxt} – ${toTxt}`;
+      const name = document.createElement("span");
+      name.className = "winner-name";
+      name.textContent = s.label;
+      li.append(key, range, name);
+      if (isCurrent) {
+        const you = document.createElement("span");
+        you.className = "winner-you";
+        you.textContent = "Twój przychód";
+        li.appendChild(you);
+      }
+      DOM.winnerList.appendChild(li);
+    });
+  }
+
+  function drawChart(model) {
+    const svg = DOM.chartSvg;
+    svg.textContent = "";
+    const width = Math.max(DOM.chartFrame.clientWidth || 0, 280) || 640;
+    const height = width < 520 ? 240 : 300;
+    const m = { top: 20, right: 16, bottom: 30, left: 58 };
+    const iw = width - m.left - m.right;
+    const ih = height - m.top - m.bottom;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+
+    const sx = (x) => m.left + (x / model.xMax) * iw;
+    const sy = (y) => m.top + ih - (y / model.yMax) * ih;
+    model.sx = sx;
+    model.sy = sy;
+    model.inner = { left: m.left, right: m.left + iw, top: m.top, bottom: m.top + ih };
+
+    const grid = svgEl("g", { class: "chart-grid" }, svg);
+    const yStep = niceStep(model.yMax, 4);
+    for (let y = 0; y <= model.yMax + 1e-6; y += yStep) {
+      svgEl("line", { x1: m.left, x2: m.left + iw, y1: sy(y), y2: sy(y), class: y === 0 ? "chart-baseline" : "chart-gridline" }, grid);
+      const t = svgEl("text", { x: m.left - 10, y: sy(y), class: "chart-tick chart-tick-y" }, grid);
+      t.textContent = y === 0 ? "0" : compactFormatter.format(y);
+    }
+    const xStep = niceStep(model.xMax, width < 520 ? 3 : 5);
+    for (let x = 0; x <= model.xMax + 1e-6; x += xStep) {
+      const t = svgEl("text", { x: sx(x), y: m.top + ih + 20, class: "chart-tick chart-tick-x" }, grid);
+      t.textContent = x === 0 ? "0 zł" : compactFormatter.format(x);
+    }
+
+    const currentX = sx(model.args.revenue);
+    const marker = svgEl("g", { class: "chart-current" }, svg);
+    svgEl("line", { x1: currentX, x2: currentX, y1: m.top - 6, y2: m.top + ih }, marker);
+    const markerLabel = svgEl("text", {
+      x: currentX,
+      y: m.top - 8,
+      class: "chart-current-label",
+      "text-anchor": currentX > m.left + iw - 60 ? "end" : currentX < m.left + 60 ? "start" : "middle",
+    }, marker);
+    markerLabel.textContent = "Twój przychód";
+
+    const lines = svgEl("g", { class: "chart-lines" }, svg);
+    model.series.forEach((s) => {
+      const d = model.xs
+        .map((x, i) => `${i ? "L" : "M"}${sx(x).toFixed(1)},${sy(model.values[s.id][i]).toFixed(1)}`)
+        .join("");
+      const path = svgEl("path", { d, class: "chart-line" + (s.dashed ? " is-dashed" : "") }, lines);
+      path.style.stroke = seriesColor(s.slot);
+    });
+
+    const dots = svgEl("g", { class: "chart-dots" }, svg);
+    model.series.forEach((s) => {
+      const dot = svgEl("circle", { cx: currentX, cy: sy(model.currentTotals[s.id]), r: 4.5, class: "chart-dot" }, dots);
+      dot.style.fill = seriesColor(s.slot);
+    });
+
+    const hover = svgEl("g", { class: "chart-hover", visibility: "hidden" }, svg);
+    model.hoverLine = svgEl("line", { y1: m.top, y2: m.top + ih }, hover);
+    model.hoverDots = model.series.map((s) => {
+      const dot = svgEl("circle", { r: 4.5, class: "chart-dot" }, hover);
+      dot.style.fill = seriesColor(s.slot);
+      return dot;
+    });
+    model.hoverGroup = hover;
+
+    svgEl("rect", { x: m.left, y: m.top, width: iw, height: ih, class: "chart-hit" }, svg);
+  }
+
+  function showChartHover(index) {
+    const model = chartModel;
+    if (!model || !model.hoverGroup) return;
+    chartHoverIndex = Math.max(0, Math.min(model.xs.length - 1, index));
+    const x = model.xs[chartHoverIndex];
+    const px = model.sx(x);
+    model.hoverGroup.setAttribute("visibility", "visible");
+    model.hoverLine.setAttribute("x1", px);
+    model.hoverLine.setAttribute("x2", px);
+    model.series.forEach((s, i) => {
+      model.hoverDots[i].setAttribute("cx", px);
+      model.hoverDots[i].setAttribute("cy", model.sy(model.values[s.id][chartHoverIndex]));
+    });
+
+    const tip = DOM.chartTooltip;
+    tip.textContent = "";
+    const head = document.createElement("p");
+    head.className = "chart-tooltip-head";
+    head.textContent = `Przychód ${formatWholePLN(x)}`;
+    tip.appendChild(head);
+    model.series
+      .map((s) => ({ s, v: model.values[s.id][chartHoverIndex] }))
+      .sort((a, b) => a.v - b.v)
+      .forEach(({ s, v }) => {
+        const row = document.createElement("p");
+        row.className = "chart-tooltip-row";
+        const key = document.createElement("span");
+        key.className = "chart-key" + (s.dashed ? " is-dashed" : "");
+        key.style.setProperty("--key-color", seriesColor(s.slot));
+        const val = document.createElement("strong");
+        val.textContent = formatWholePLN(v);
+        const name = document.createElement("span");
+        name.textContent = s.label;
+        row.append(key, val, name);
+        tip.appendChild(row);
+      });
+    tip.hidden = false;
+    const frameWidth = DOM.chartFrame.clientWidth || 0;
+    const tipWidth = tip.offsetWidth || 220;
+    const left = px + 14 + tipWidth > frameWidth ? px - 14 - tipWidth : px + 14;
+    tip.style.left = `${Math.max(0, left)}px`;
+  }
+
+  function hideChartHover() {
+    chartHoverIndex = null;
+    if (chartModel && chartModel.hoverGroup) {
+      chartModel.hoverGroup.setAttribute("visibility", "hidden");
+    }
+    DOM.chartTooltip.hidden = true;
+  }
+
+  function renderChart(args) {
+    if (!DOM.chartSvg) return;
+    const hasData = args.revenue > 0;
+    const costRatio = args.revenue > 0 ? args.costs / args.revenue : 0;
+    lastChartArgs = { ...args, costRatio };
+    DOM.chartFrame.classList.toggle("is-empty", !hasData);
+    DOM.chartWinners.hidden = !hasData;
+    DOM.chartLegend.hidden = !hasData;
+    if (!hasData) {
+      chartModel = null;
+      DOM.chartSvg.textContent = "";
+      DOM.chartMeta.textContent = "";
+      hideChartHover();
+      return;
+    }
+
+    chartModel = buildChartModel(lastChartArgs);
+    const costNote =
+      costRatio > 0
+        ? `koszty stale ${formatPercent1(costRatio)} przychodu`
+        : "bez kosztów";
+    DOM.chartMeta.textContent =
+      `Obciążenie roczne przy innym przychodzie · ${costNote}` +
+      (args.isMultiRate ? " · bez ryczałtu z wieloma stawkami" : "");
+    renderLegend(chartModel);
+    drawChart(chartModel);
+    renderWinners(chartModel);
+    if (chartHoverIndex !== null) showChartHover(chartHoverIndex);
+  }
+
+  if (DOM.chartSvg) {
+    const indexFromPointer = (e) => {
+      if (!chartModel || !chartModel.inner) return null;
+      const rect = DOM.chartSvg.getBoundingClientRect();
+      const viewWidth = DOM.chartSvg.viewBox.baseVal.width || rect.width;
+      const x = (e.clientX - rect.left) * (rect.width ? viewWidth / rect.width : 1);
+      const ratio = (x - chartModel.inner.left) / (chartModel.inner.right - chartModel.inner.left);
+      return Math.round(ratio * CHART_SAMPLES);
+    };
+    DOM.chartSvg.addEventListener("pointermove", (e) => {
+      const index = indexFromPointer(e);
+      if (index === null || index < 0 || index > CHART_SAMPLES) {
+        hideChartHover();
+        return;
+      }
+      showChartHover(index);
+    });
+    DOM.chartSvg.addEventListener("pointerleave", hideChartHover);
+    DOM.chartSvg.addEventListener("blur", hideChartHover);
+    DOM.chartSvg.addEventListener("keydown", (e) => {
+      if (!chartModel) return;
+      const start =
+        chartHoverIndex === null
+          ? Math.round((lastChartArgs.revenue / chartModel.xMax) * CHART_SAMPLES)
+          : chartHoverIndex;
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === "ArrowRight") showChartHover(start + (chartHoverIndex === null ? 0 : step));
+      else if (e.key === "ArrowLeft") showChartHover(start - (chartHoverIndex === null ? 0 : step));
+      else if (e.key === "Escape") hideChartHover();
+      else return;
+      e.preventDefault();
+    });
+
+    if (typeof ResizeObserver !== "undefined") {
+      let resizeFrame = null;
+      let lastWidth = 0;
+      new ResizeObserver(() => {
+        const width = DOM.chartFrame.clientWidth;
+        if (width === lastWidth || !chartModel) return;
+        lastWidth = width;
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          drawChart(chartModel);
+          if (chartHoverIndex !== null) showChartHover(chartHoverIndex);
+        });
+      }).observe(DOM.chartFrame);
+    }
+  }
+
+  /* ==================================================
+     Input period switch (rocznie / miesięcznie)
+  ================================================== */
+  DOM.inputPeriodRadios.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      calculate();
+      if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
+    });
+  });
+
+  /* ==================================================
+     Shareable link (state lives in the URL hash)
+  ================================================== */
+  function roundForUrl(value) {
+    return String(taxMath.round2(value));
+  }
+
+  function buildShareUrl() {
+    const params = new URLSearchParams();
+    const factor = getPeriodFactor();
+    if (factor === 12) params.set("okres", "m");
+    const revenue = parsePLN(DOM.revenueInput.value);
+    const costs = parsePLN(DOM.costsInput.value);
+    if (revenue) params.set("p", roundForUrl(revenue));
+    if (costs) params.set("k", roundForUrl(costs));
+    if (isIpBoxEnabled()) params.set("ipbox", DOM.ipBoxCoeffInput.value || "0");
+    if (isJointTaxationEnabled()) {
+      params.set("malzonek", roundForUrl(parsePLN(DOM.spouseIncomeInput.value)));
+    }
+    const rates = Array.from(DOM.ryczaltCheckboxes)
+      .filter((cb) => cb.checked)
+      .map((cb) => cb.dataset.target.replace("ryczalt", ""));
+    if (rates.length) params.set("ryczalt", rates.join(","));
+    if (DOM.multipleRatesToggle.checked) {
+      const split = [];
+      document.querySelectorAll(".rate-input.show").forEach((input) => {
+        const value = parsePLN(input.value);
+        if (value) split.push(`${input.dataset.for.replace("ryczalt", "")}:${roundForUrl(value)}`);
+      });
+      params.set("podzial", split.join(",") || "1");
+    }
+    const url = new URL(window.location.href);
+    url.hash = params.toString();
+    return url.toString();
+  }
+
+  function setRadio(name, value) {
+    const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (radio && !radio.checked) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function applyStateFromHash() {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash || !/(^|&)(p|k|ryczalt)=/.test(hash)) return false;
+    const params = new URLSearchParams(hash);
+    const num = (key) => {
+      const value = parseFloat(params.get(key));
+      return Number.isFinite(value) && value >= 0 ? value : null;
+    };
+
+    setRadio("inputPeriod", params.get("okres") === "m" ? "month" : "year");
+    if (num("p") !== null) DOM.revenueInput.value = formatPLN(num("p"));
+    if (num("k") !== null) DOM.costsInput.value = formatPLN(num("k"));
+
+    if (params.has("ipbox") && num("ipbox") !== null) {
+      setRadio("ipBoxEnabled", "yes");
+      DOM.ipBoxCoeffInput.value = String(Math.min(100, num("ipbox")));
+      syncIpBoxRange();
+    }
+    if (params.has("malzonek")) {
+      setRadio("jointTaxation", "yes");
+      DOM.spouseIncomeInput.value = formatPLN(num("malzonek") || 0);
+    }
+
+    const rates = (params.get("ryczalt") || "").split(",").filter(Boolean);
+    DOM.ryczaltCheckboxes.forEach((cb) => {
+      const shouldCheck = rates.includes(cb.dataset.target.replace("ryczalt", ""));
+      if (cb.checked !== shouldCheck) {
+        cb.checked = shouldCheck;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    if (params.has("podzial")) {
+      DOM.multipleRatesToggle.checked = true;
+      DOM.multipleRatesToggle.dispatchEvent(new Event("change", { bubbles: true }));
+      params
+        .get("podzial")
+        .split(",")
+        .forEach((pair) => {
+          const [key, value] = pair.split(":");
+          const input = document.querySelector(`.rate-input.show[data-for="ryczalt${key}"]`);
+          const amount = parseFloat(value);
+          if (input && Number.isFinite(amount)) input.value = formatPLN(amount);
+        });
+      updateRemainingRevenue();
+    }
+    calculate();
+    return true;
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      /* fall through to the legacy path */
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      return false;
+    }
+  }
+
+  if (DOM.shareBtn) {
+    DOM.shareBtn.addEventListener("click", async () => {
+      const url = buildShareUrl();
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", url);
+      }
+      if (await copyText(url)) {
+        showCopyToast("Link skopiowany", "Otwórz go, aby wrócić do tych danych");
+      }
+    });
+  }
+
+  /* ==================================================
+     Theme toggle (system default, manual override stored)
+  ================================================== */
+  function getEffectiveTheme() {
+    const explicit = document.documentElement.dataset.theme;
+    if (explicit === "light" || explicit === "dark") return explicit;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  if (DOM.themeToggle) {
+    DOM.themeToggle.addEventListener("click", () => {
+      const next = getEffectiveTheme() === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try {
+        localStorage.setItem("tax-calc-theme", next);
+      } catch {
+        /* storage unavailable - theme lasts for this visit only */
+      }
+    });
+  }
+
+  /* ==================================================
+     Mobile summary bar (visible while the result is off-screen)
+  ================================================== */
+  if (DOM.mobileSummary) {
+    DOM.mobileSummary.addEventListener("click", () => {
+      DOM.bestCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    if (typeof IntersectionObserver !== "undefined") {
+      new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            DOM.mobileSummary.classList.toggle("is-hidden", entry.isIntersecting);
+          });
+        },
+        { threshold: 0.15 },
+      ).observe(DOM.bestCard);
+    }
+  }
+
+  /* ==================================================
      Initial paint — set up empty state correctly
   ================================================== */
   syncIpBoxRange();
@@ -2717,4 +3336,5 @@
   });
   // run an initial calculation so the income field shows 0,00 and rank state is stable
   calculate();
+  applyStateFromHash();
 })();

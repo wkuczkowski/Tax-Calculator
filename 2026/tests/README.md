@@ -50,6 +50,13 @@ Covered scenarios include:
 - explicit (non-snapshot) amounts for the audit cases B1–B3, loss cases and
   hand-computed ZUS scenarios (`toBe` on raw numbers from `data-*` attributes)
 
+- explicit assertions for the fix round: ryczałt „50% zdrowotnej przed
+  składkami” (15 000 / inne 100 000 → 27 967,37), tie-safe rounding
+  (1 177 622,32 / 713 137,82 → zdrowotna 41 803,61), the shared amount parser
+  (`taxMath.parseAmount`), blocking validation (invalid inputs → no results,
+  best card „Popraw dane”), employment + ulga export text and the holiday
+  month in the ZUS table
+
 `taxConstants.test.js` also contains explicit unit assertions for
 `taxMath.buildSocialSchedule()` (month-by-month social contributions).
 

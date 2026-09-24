@@ -178,7 +178,13 @@
           <div class="field field-derived">
             <label class="field-label" for="income">Dochód</label>
             <div class="input-derived">
-              <input type="text" id="income" readonly value="0,00 zł" />
+              <input
+                type="text"
+                id="income"
+                readonly
+                tabindex="-1"
+                aria-readonly="true"
+                value="0,00 zł" />
               <span class="input-derived-tag">automatycznie</span>
             </div>
           </div>
@@ -595,7 +601,7 @@
           <div class="field" id="ipBoxContainer">
             <div class="field-head field-head-toggle">
               <span class="field-label" id="ipBoxEnabledLabel">
-                Współczynnik IP BOX
+                Udział dochodu kwalifikowanego IP BOX
               </span>
               <div
                 class="seg"
@@ -611,7 +617,7 @@
                 </label>
               </div>
             </div>
-            <div class="ipbox-reveal" id="ipBoxReveal">
+            <div class="ipbox-reveal" id="ipBoxReveal" inert aria-hidden="true">
               <div class="ipbox-control">
                 <input
                   type="range"
@@ -620,9 +626,9 @@
                   max="100"
                   step="1"
                   value="25"
-                  aria-label="Suwak współczynnika IP BOX" />
+                  aria-label="Suwak: udział dochodu kwalifikowanego IP BOX" />
                 <div class="ipbox-number-stack">
-                  <p class="ipbox-reveal-hint">część dochodu opodatkowana 5%</p>
+                  <p class="ipbox-reveal-hint">część dochodu opodatkowana 5% (po wskaźniku nexus)</p>
                   <div class="ipbox-number">
                     <input
                       type="number"
@@ -631,7 +637,7 @@
                       min="0"
                       max="100"
                       step="1"
-                      aria-label="Współczynnik IP BOX w procentach"
+                      aria-label="Udział dochodu kwalifikowanego IP BOX w procentach"
                       aria-describedby="ipBoxCoeff-error" />
                     <span class="input-suffix" aria-hidden="true">%</span>
                   </div>
@@ -674,7 +680,11 @@
             </div>
           </div>
 
-          <div class="field field-spouse" id="spouseIncomeCard">
+          <div
+            class="field field-spouse"
+            id="spouseIncomeCard"
+            inert
+            aria-hidden="true">
             <div class="field-head">
               <span class="field-label-with-tip">
                 <label class="field-label" for="spouseIncome">
@@ -721,9 +731,15 @@
                 value="0"
                 readonly
                 inputmode="decimal"
-                placeholder="0,00" />
+                placeholder="0,00"
+                aria-describedby="spouseIncome-error" />
               <span class="input-suffix" aria-hidden="true">zł</span>
             </div>
+            <p
+              class="error-message"
+              id="spouseIncome-error"
+              role="alert"
+              aria-live="polite"></p>
             <p class="field-foot">
               Wpływa tylko na warianty „wspólnie z małżonkiem".
             </p>
@@ -847,6 +863,11 @@
                 inputmode="decimal" />
             </label>
           </div>
+          <p
+            class="error-message"
+            id="rateInputs-error"
+            role="alert"
+            aria-live="polite"></p>
 
           <div class="multiple-rates-wrapper">
             <div class="multiple-rates-revenue-info">
@@ -878,8 +899,8 @@
       <section
         class="panel panel-results"
         id="resultsSection"
-        aria-labelledby="resultsTitle"
-        aria-live="polite">
+        aria-labelledby="resultsTitle">
+        <p id="resultsLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="panel-head">
           <h2 id="resultsTitle" class="panel-title">
             <span class="panel-title-num">02</span> Wyniki
@@ -913,7 +934,7 @@
         <section class="results-block" aria-labelledby="comparePitTitle">
           <header class="results-block-head">
             <h3 id="comparePitTitle" class="results-block-title">
-              Porównanie PIT
+              Porównanie form opodatkowania
             </h3>
             <span class="results-block-meta" id="comparePitMeta">
               PIT + zdrowotna + ZUS
@@ -922,7 +943,10 @@
 
           <div class="comparison" id="comparePit">
             <div class="results-row input-group" data-variant="taxScale">
-              <span class="results-row-label">Skala podatkowa</span>
+              <span class="results-row-label">
+                Skala podatkowa
+                <span class="variant-badge variant-badge--solo" data-joint-only hidden>indywidualnie</span>
+              </span>
               <span class="results-row-tag">12% / 32%</span>
               <span class="results-row-bar"><span data-bar></span></span>
               <input id="taxScale" type="text" readonly tabindex="-1" />
@@ -933,6 +957,7 @@
               <span class="results-row-label">
                 Skala podatkowa
                 <span class="variant-badge variant-badge--ipbox">IP BOX</span>
+                <span class="variant-badge variant-badge--solo" data-joint-only hidden>indywidualnie</span>
               </span>
               <span class="results-row-tag">5% / 12% / 32%</span>
               <span class="results-row-bar"><span data-bar></span></span>
@@ -943,11 +968,7 @@
               data-variant="taxScaleJoint">
               <span class="results-row-label">
                 Skala podatkowa
-                <span
-                  class="variant-mark variant-mark--joint"
-                  role="img"
-                  aria-label="Wspólnie z małżonkiem"
-                  title="Wspólnie z małżonkiem">
+                <span class="variant-badge variant-badge--joint">
                   <svg
                     viewBox="0 0 20 20"
                     width="16"
@@ -964,6 +985,7 @@
                     <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                     <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                   </svg>
+                  wspólnie z małżonkiem
                 </span>
               </span>
               <span class="results-row-tag">12% / 32%</span>
@@ -976,11 +998,7 @@
               <span class="results-row-label">
                 Skala podatkowa
                 <span class="variant-badge variant-badge--ipbox">IP BOX</span>
-                <span
-                  class="variant-mark variant-mark--joint"
-                  role="img"
-                  aria-label="Wspólnie z małżonkiem"
-                  title="Wspólnie z małżonkiem">
+                <span class="variant-badge variant-badge--joint">
                   <svg
                     viewBox="0 0 20 20"
                     width="16"
@@ -997,6 +1015,7 @@
                     <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                     <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                   </svg>
+                  wspólnie z małżonkiem
                 </span>
               </span>
               <span class="results-row-tag">5% / 12% / 32%</span>
@@ -1102,9 +1121,10 @@
                 <span id="ratesOtherPitValue"></span>
               </div>
               <div class="rates-total-row rates-total-sum">
-                <span>Łącznie ryczałt + zdrowotna + ZUS</span>
+                <span>Łącznie: ryczałt (wiele stawek) + zdrowotna + ZUS</span>
                 <span id="ratesTotalValue"></span>
               </div>
+              <p class="results-row-detail" id="ratesTotalDetail"></p>
             </div>
           </div>
         </section>
@@ -1122,7 +1142,11 @@
             </span>
           </header>
           <div class="zus-summary-body">
-            <ol class="zus-months" id="zusMonths" aria-label="Tryb składek w miesiącach 2026"></ol>
+            <ol
+              class="zus-months"
+              id="zusMonths"
+              aria-label="Składki społeczne w miesiącach 2026"></ol>
+            <ul class="zus-legend" id="zusLegend" aria-label="Legenda"></ul>
             <p class="zus-summary-note" id="zusScheduleSummary"></p>
             <div class="rates-total-row">
               <span>Składki społeczne + FP/FS (rocznie)</span>
@@ -1163,6 +1187,12 @@
         </details>
       </section>
     </main>
+
+    <!-- Szybki skok do wyników (wąskie ekrany) -->
+    <a class="mobile-jump" id="mobileJump" href="#resultsSection">
+      <span class="mobile-jump-label">Przejdź do wyników</span>
+      <span class="mobile-jump-summary" id="mobileJumpSummary">Wprowadź dane</span>
+    </a>
 
     <!-- Hidden compatibility button (tests trigger calculation by clicking it) -->
     <button id="calculateButton" class="sr-only" type="button" tabindex="-1">

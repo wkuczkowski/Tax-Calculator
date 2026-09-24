@@ -777,3 +777,236 @@ describe("Zaokrąglanie do grosza – połówka w górę (C4)", () => {
     expect(out).toEqual([41803.61, 1.01, 2.68, -2.68, 0, 41803.6]);
   });
 });
+
+describe("Parser kwot (taxMath.parseAmount) – C2", () => {
+  it("akceptuje zapisy z przecinkiem, kropką i spacjami; odrzuca śmieci", () => {
+    const calc = loadCalculator();
+    const { taxMath } = calc.window;
+    const value = (raw) => {
+      const parsed = taxMath.parseAmount(raw);
+      return parsed.ok ? parsed.value : "ERR";
+    };
+    const out = {
+      dot: value("1234.56"),
+      comma: value("1234,56"),
+      spaceComma: value("1 234,56"),
+      dotThousandsComma: value("1.234,56"),
+      spaceDot: value("1 234.56"),
+      commaThousandsDot: value("1,234.56"),
+      nbspFormatted: value("12 345,67 zł"),
+      thousandsDot: value("1.234"),
+      thousandsComma: value("1,234"),
+      millions: value("12.345.678"),
+      oneDecimal: value("100000.5"),
+      trailingSep: value("1234,"),
+      empty: value(""),
+      negative: value("-100"),
+      abc: value("abc"),
+      exponent: value("12e3"),
+      doubleComma: value("1,5,5"),
+      badGroup: value("1234,567"),
+      badSpaces: value("12 34"),
+      threeDecimals: value("1.234,567"),
+    };
+    calc.close();
+    expect(out).toEqual({
+      dot: 1234.56,
+      comma: 1234.56,
+      spaceComma: 1234.56,
+      dotThousandsComma: 1234.56,
+      spaceDot: 1234.56,
+      commaThousandsDot: 1234.56,
+      nbspFormatted: 12345.67,
+      thousandsDot: 1234,
+      thousandsComma: 1234,
+      millions: 12345678,
+      oneDecimal: 100000.5,
+      trailingSep: 1234,
+      empty: 0,
+      negative: -100,
+      abc: "ERR",
+      exponent: "ERR",
+      doubleComma: "ERR",
+      badGroup: "ERR",
+      badSpaces: "ERR",
+      threeDecimals: "ERR",
+    });
+  });
+
+  it("„100000.50” w przychodzie to 100 000,50 zł (nie 10 000 050)", () => {
+    const calc = loadCalculator();
+    calc.setRevenue("100000.50");
+    calc.setCosts("0");
+    calc.calculate();
+    const income = calc.document.getElementById("income").value;
+    const revenueField = calc.document.getElementById("revenue").value;
+    calc.close();
+    expect(income).toBe("100 000,50 zł");
+    expect(revenueField).toBe("100 000,50 zł");
+  });
+});
+
+describe("Błędne dane blokują wyniki – C3", () => {
+  function invalidState(setup) {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.calculate();
+    setup(calc);
+    const state = {
+      best: calc.document.getElementById("bestCardTitle").textContent,
+      taxScale: calc.document.getElementById("taxScale").value,
+      total: calc.document.getElementById("taxScale").dataset.total ?? null,
+      panel: calc.document.getElementById("resultsSection").dataset.state ?? null,
+    };
+    calc.close();
+    return state;
+  }
+  const BLOCKED = {
+    best: "Popraw dane",
+    taxScale: "",
+    total: null,
+    panel: "invalid",
+  };
+
+  it("ujemny przychód – także po przełączeniu innej kontrolki", () => {
+    expect(
+      invalidState((calc) => {
+        calc.setRevenue("-50000");
+        calc.setSickness(false);
+      }),
+    ).toEqual(BLOCKED);
+  });
+
+  it("tekst zamiast kwoty w kosztach („abc”) nie jest traktowany jak 0", () => {
+    expect(
+      invalidState((calc) => {
+        calc.setCosts("abc");
+        calc.setHoliday(true);
+      }),
+    ).toEqual(BLOCKED);
+  });
+
+  it("ujemny dochód małżonka", () => {
+    expect(
+      invalidState((calc) => {
+        calc.setJointTaxation(true, "-10000");
+        calc.calculate();
+      }),
+    ).toEqual(BLOCKED);
+  });
+
+  it("udział IP BOX poza 0–100", () => {
+    expect(
+      invalidState((calc) => {
+        calc.setIpBox(150);
+        calc.setSickness(false);
+      }),
+    ).toEqual(BLOCKED);
+  });
+
+  it("data rozpoczęcia po 31.12.2026", () => {
+    expect(invalidState((calc) => calc.setStartDate("2027-01-05"))).toEqual(
+      BLOCKED,
+    );
+  });
+
+  it("data urodzenia po dacie rozpoczęcia i po 2026 r.", () => {
+    expect(
+      invalidState((calc) => {
+        calc.setStartDate("2026-03-01");
+        calc.setBirthDate("2026-05-01");
+      }),
+    ).toEqual(BLOCKED);
+    expect(invalidState((calc) => calc.setBirthDate("2030-01-01"))).toEqual(
+      BLOCKED,
+    );
+  });
+
+  it("po poprawieniu pola wyniki wracają", () => {
+    const state = invalidState((calc) => {
+      calc.setRevenue("-5");
+      calc.setSickness(false);
+      calc.setRevenue(100000);
+      calc.calculate();
+    });
+    expect(state.panel).toBe(null);
+    expect(state.best === "Popraw dane").toBe(false);
+  });
+
+  it("ulga na start bez daty: opcja wyłączona, podpowiedź, pełny ZUS", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.setZusPath("ulga");
+    calc.calculate();
+    const radio = calc.document.querySelector(
+      'input[name="zusPath"][value="ulga"]',
+    );
+    const hint = calc.document.getElementById("zusPathHint");
+    const out = {
+      disabled: radio.disabled,
+      hintState: hint.dataset.state,
+      mentionsDate: hint.textContent.includes("wymagają daty rozpoczęcia"),
+      total: calc.readVariantData("taxScale").total,
+    };
+    calc.setStartDate("2026-01-01");
+    out.enabledAfterDate = !radio.disabled;
+    calc.close();
+    expect(out).toEqual({
+      disabled: true,
+      hintState: "warn",
+      mentionsDate: true,
+      total: 35665.69,
+      enabledAfterDate: true,
+    });
+  });
+});
+
+describe("ZUS – prezentacja: etat + ulga, wakacje w tabeli (C5)", () => {
+  it("umowa o pracę + ulga na start: bez „Ulga na start do …” w podpowiedzi i eksporcie", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.setStartDate("2026-03-01");
+    calc.setZusPath("ulga");
+    calc.setEmployment(true);
+    calc.calculate();
+    const hint = calc.document.getElementById("zusPathHint").textContent;
+    const text = calc.readBreakdown();
+    const out = {
+      hintUlga: hint.includes("Ulga na start do"),
+      exportUlga: text.includes("Ulga na start (art. 18"),
+      exportPref: text.includes("Mały ZUS (art. 18a"),
+      exportNotApplied: text.includes("nie dotyczy — umowa o pracę"),
+    };
+    calc.close();
+    expect(out).toEqual({
+      hintUlga: false,
+      exportUlga: false,
+      exportPref: false,
+      exportNotApplied: true,
+    });
+  });
+
+  it("wakacje w tabeli miesięcznej: składniki 0 w miesiącu zwolnienia, kolumny zgodne z Σ", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.setHoliday(true);
+    calc.calculate();
+    const text = calc.readBreakdown();
+    calc.close();
+    const lines = text.split("\n");
+    const header = lines.findIndex((line) => line.startsWith("Mc "));
+    const rows = lines.slice(header + 1, header + 13);
+    const sigma = lines[header + 13];
+    const num = (s) => Number(s.replace(/\s/g, "").replace(",", "."));
+    const pensionCol = rows.map((row) => num(row.slice(22, 31)));
+    const pensionSum = Math.round(pensionCol.reduce((a, b) => a + b, 0) * 100) / 100;
+    expect(rows[0].startsWith("01  wakac.")).toBe(true);
+    expect(pensionCol[0]).toBe(0);
+    expect(pensionSum).toBe(num(sigma.slice(22, 31)));
+    expect(text.includes("zwolniono 1926,76 zł")).toBe(true);
+  });
+});

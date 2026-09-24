@@ -42,6 +42,19 @@ Covered scenarios include:
 - joint taxation with spouse
 - single-rate ryczalt
 - multi-rate ryczalt
+- social ZUS contributions 2026 (paths: full / ulga na start / mały ZUS, start dates
+  on the 1st, mid-month and before 2026, chorobowe on/off, FP/FS age exemption,
+  employment contract, wakacje składkowe)
+- other income taxed at the scale (0 / 80k / 200k), joint taxation, IP BOX
+- ryczałt health tiers near 60k / 300k (art. 81 ust. 2g)
+- explicit (non-snapshot) amounts for the audit cases B1–B3, loss cases and
+  hand-computed ZUS scenarios (`toBe` on raw numbers from `data-*` attributes)
+
+`taxConstants.test.js` also contains explicit unit assertions for
+`taxMath.buildSocialSchedule()` (month-by-month social contributions).
+
+Note: social contributions are ON by default, so every older snapshot changed
+when this feature landed. Review the diff and run `npm run test:update`.
 
 ## How It Works
 
@@ -59,8 +72,15 @@ It:
    - `toggleRyczaltRate(...)`
    - `enableMultipleRates(...)`
    - `setRateRevenue(...)`
+   - `setOtherIncome(...)`, `setZusEnabled(...)`, `setStartDate("RRRR-MM-DD")`,
+     `setZusPath("full" | "ulga" | "pref")`, `setSickness(...)`,
+     `setEmployment(...)`, `setHoliday(...)`, `setBirthDate(...)`,
+     `setSex("K" | "M" | "")`
    - `calculate()`
    - `readOutputs()`
+   - `readVariantData(id)` – raw numbers of a variant (`total`, `taxes`,
+     `baseline`, `health`, `social`, `method`, `holidayMonth`)
+   - `readBreakdown()` – the full export text
 
 Important details:
 

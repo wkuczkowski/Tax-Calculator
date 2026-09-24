@@ -43,13 +43,19 @@ Covered scenarios include:
 - single-rate ryczalt
 - multi-rate ryczalt
 
+### 3. `v2Parity.test.js`
+
+The `/v2` front-end (`v2/index.html` + `v2/script.js`) reuses `2026/taxConstants.js`.
+This test runs the same scenarios against `2026` and `v2` and checks that every
+visible output and the chosen best variant are identical. It uses no snapshots.
+
 ## How It Works
 
 The helper file `helpers/loadCalculator.js` creates a fresh JSDOM environment for each test.
 
 It:
 
-1. reads the real HTML and JS files
+1. reads the real HTML and JS files (`loadCalculator()` for `2026`, `loadCalculator("v2")` for `/v2`)
 2. injects `taxConstants.js` and `script.js` into the test DOM
 3. exposes helper methods like:
    - `setRevenue(...)`

@@ -1049,6 +1049,23 @@
               <div class="field">
                 <div class="field-head field-head-toggle">
                   <span class="field-label-with-tip">
+                    <label class="field-label" for="spouseIsParent">
+                      Małżonek jest rodzicem dzieci
+                    </label>
+                  </span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="spouseIsParent" checked aria-describedby="spouseIsParentHint" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <p class="field-foot" id="spouseIsParentHint">
+                  Wyłącz przy dziecku tylko jednego z małżonków: ulgi nie dzielicie, a limit zwrotu obejmuje tylko Twoje składki (art. 27f ust. 4 i 10). Dochód małżonka nadal wchodzi do limitu 112&nbsp;000&nbsp;zł.
+                  <a class="tip-more" href="#info-child-share" data-info-topic="info-child-share">Więcej&nbsp;→</a>
+                </p>
+              </div>
+              <div class="field">
+                <div class="field-head field-head-toggle">
+                  <span class="field-label-with-tip">
                     <label class="field-label" for="spouseLinRycz">
                       Małżonek stosuje liniowy lub ryczałt
                     </label>
@@ -1090,7 +1107,7 @@
               </div>
               <div class="field" id="spouseLinearIncomeField" hidden>
                 <label class="field-label" for="spouseLinearIncome">
-                  Dochód małżonka opodatkowany liniowo lub z&nbsp;art.&nbsp;30b (do limitu)
+                  Dochód małżonka z&nbsp;art.&nbsp;30b (kapitały) i&nbsp;— przy liniowym — z&nbsp;działalności (tylko do limitu 112&nbsp;000&nbsp;zł)
                 </label>
                 <div class="input-money">
                   <input
@@ -1108,7 +1125,7 @@
                   role="alert"
                   aria-live="polite"></p>
               </div>
-              <div class="field">
+              <div class="field" id="spouseContribField">
                 <label class="field-label" for="spouseContrib">
                   Składki małżonka do limitu zwrotu ulgi (społeczne + zdrowotna)
                 </label>

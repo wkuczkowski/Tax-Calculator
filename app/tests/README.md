@@ -88,10 +88,17 @@ parent on liniowy, the one-child limit edge 112 000,00 / 112 000,01, the
 refund cap and the deduction-method optimizer that takes it into account,
 joint taxation with children, the spouse on liniowy/ryczałt (joint variants
 unavailable) and the 4+ exemption (85 528 zł, amount already used,
-8,5% / 12,5%).
+8,5% / 12,5% with the uncertain alternative amount). Fix round: child
+periods as months from–to (disjoint 6 + 6 months → one-child limit), the
+literal refund cap (the review's case: 4 children, etat 12 000, revenue
+120 000 → ryczałt 5,5% 35 042,84 beats skala 36 014,81), a spouse who is not
+the children's parent, collapsed sections that block with invalid in-effect
+values, the joint-baseline explanation and typographic minus signs.
 Helpers: `setFamilyStatus("married" | "single" | "other")`,
-`addChild({ months, disabled, adult })`, `setFamilyShare(percent)`,
-`setSpouseIncome(value)`, `setSpouseLinRycz(on)`, `setSpouseLinearIncome(value)`,
+`addChild({ from, to, months, disabled, adult })` (months from–to, default
+the full year 1–12; `{ months: m }` without `from` = the last m months of the
+year, as before), `setFamilyShare(percent)`, `setSpouseIncome(value)`,
+`setSpouseLinRycz(on)`, `setSpouseIsParent(on)`, `setSpouseLinearIncome(value)`,
 `setSpouseContrib(value)`, `setOtherContrib(value)`, `setFourPlus(on, used)`.
 
 Snapshot note (family change): only `TAX_CONSTANTS > matches the recorded

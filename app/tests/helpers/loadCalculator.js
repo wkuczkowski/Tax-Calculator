@@ -294,16 +294,27 @@ export function loadCalculator(options = {}) {
     checkRadio("familyStatus", status);
   }
 
-  /** Dodaje dziecko: { months = 12, disabled = false, adult = false }. */
-  function addChild({ months = 12, disabled = false, adult = false } = {}) {
+  /** Dodaje dziecko: { from = 1, to = 12, disabled, adult } (miesiące od–do);
+   *  { months: m } = ostatnie m miesięcy roku. */
+  function addChild({ from, to, months, disabled = false, adult = false } = {}) {
     $("#addChildBtn").click();
     const rows = document.querySelectorAll("#childrenList .child-row");
     const row = rows[rows.length - 1];
-    const select = row.querySelector("select");
-    if (select.value !== String(months)) {
-      select.value = String(months);
-      fire(select, "change");
+    let f = from === undefined ? 1 : from;
+    let t = to === undefined ? 12 : to;
+    if (months !== undefined && from === undefined) {
+      f = 13 - months;
+      t = 12;
     }
+    const set = (field, value) => {
+      const select = row.querySelector(`select[data-field="${field}"]`);
+      if (select.value !== String(value)) {
+        select.value = String(value);
+        fire(select, "change");
+      }
+    };
+    set("to", t);
+    set("from", f);
     const setBox = (field, on) => {
       const box = row.querySelector(`input[data-field="${field}"]`);
       if (box.checked !== on) {
@@ -329,6 +340,11 @@ export function loadCalculator(options = {}) {
     el.removeAttribute("readonly");
     el.value = String(value);
     fire(el, "input");
+  }
+
+  /** „Małżonek jest rodzicem dzieci” (domyślnie włączone). */
+  function setSpouseIsParent(on = true) {
+    setChecked("#spouseIsParent", on);
   }
 
   function setSpouseLinRycz(on = true) {
@@ -483,6 +499,7 @@ export function loadCalculator(options = {}) {
     setFamilyShare,
     setSpouseIncome,
     setSpouseLinRycz,
+    setSpouseIsParent,
     setSpouseLinearIncome,
     setSpouseContrib,
     setOtherContrib,

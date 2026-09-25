@@ -1386,32 +1386,51 @@ const taxMath = {
   },
 
   /**
+   * Okres dziecka w roku jako miesiące od–do (1–12). Zgodność wstecz:
+   * { months: m } = ostatnie m miesięcy roku.
+   * @param {{from?:number, to?:number, months?:number}} child
+   * @returns {{from:number, to:number}}
+   */
+  getChildPeriod(child) {
+    const clamp = (value) => Math.min(Math.max(Math.round(Number(value)) || 1, 1), 12);
+    if (child && child.from !== undefined && child.to !== undefined) {
+      const from = clamp(child.from);
+      const to = clamp(child.to);
+      return from <= to ? { from, to } : { from: to, to: from };
+    }
+    const months = child && child.months > 0 ? Math.min(child.months, 12) : 12;
+    return { from: 13 - months, to: 12 };
+  },
+
+  /**
    * Ulga na dzieci dla rodziny (przed limitem dochodu i podziałem między
-   * rodziców), liczona miesiąc po miesiącu: w miesiącu z n uprawnionymi
-   * dziećmi przysługuje suma stawek 1., 2., …, n-tego dziecka.
-   * Założenie (liczba miesięcy zamiast dat): okresy dzieci nakładają się
-   * maksymalnie – dziecko z m miesiącami jest uprawnione w ostatnich m
-   * miesiącach roku (jak dziecko urodzone w trakcie roku), więc w miesiącu
-   * nr i uprawnione są dzieci z m ≥ 13 − i.
-   * @param {Array<{months:number}>} children
-   * @returns {{total:number, maxCount:number, groups:Array<{count:number, months:number, monthly:number, rates:number[], amount:number}>}}
+   * rodziców), liczona miesiąc po miesiącu (art. 27f ust. 2): w miesiącu
+   * z n uprawnionymi dziećmi przysługuje suma stawek 1., 2., …, n-tego
+   * dziecka. Okres każdego dziecka to miesiące od–do, więc nakładanie się
+   * okresów jest dokładne (także dla testu „co najmniej dwoje dzieci
+   * choćby przez jeden dzień” – ust. 2b: maxCount).
+   * @param {Array<{from:number, to:number}>} children
+   * @returns {{total:number, maxCount:number, groups:Array<{count:number, from:number, to:number, months:number, monthly:number, rates:number[], amount:number}>}}
    */
   getChildRelief(children) {
-    const list = (children || []).filter((child) => child && child.months > 0);
+    const periods = (children || []).filter(Boolean).map((child) => this.getChildPeriod(child));
     const groups = [];
     let maxCount = 0;
     for (let month = 1; month <= 12; month++) {
-      const count = list.filter((child) => Math.min(child.months, 12) >= 13 - month).length;
+      const count = periods.filter((p) => p.from <= month && month <= p.to).length;
       maxCount = Math.max(maxCount, count);
-      if (!count) continue;
       const last = groups[groups.length - 1];
-      if (last && last.count === count) {
+      if (!count) continue;
+      if (last && last.count === count && last.to === month - 1) {
         last.months += 1;
+        last.to = month;
       } else {
         const rates = [];
         for (let k = 1; k <= count; k++) rates.push(this.getChildReliefRate(k));
         groups.push({
           count,
+          from: month,
+          to: month,
           months: 1,
           rates,
           monthly: this.round2(rates.reduce((sum, rate) => sum + rate, 0)),

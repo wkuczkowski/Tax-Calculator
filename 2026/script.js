@@ -40,7 +40,37 @@
     bestCardSavings: document.getElementById("bestCardSavings"),
     breakdownDetails: document.getElementById("breakdownDetails"),
     breakdownPre: document.getElementById("breakdownPre"),
+    otherIncomeInput: document.getElementById("otherIncome"),
+    zusEnabled: document.getElementById("zusEnabled"),
+    zusReveal: document.getElementById("zusReveal"),
+    zusStartDate: document.getElementById("zusStartDate"),
+    zusPathRadios: document.querySelectorAll('input[name="zusPath"]'),
+    zusPathHint: document.getElementById("zusPathHint"),
+    zusStartHint: document.getElementById("zusStartHint"),
+    zusSickness: document.getElementById("zusSickness"),
+    zusEmployment: document.getElementById("zusEmployment"),
+    zusHoliday: document.getElementById("zusHoliday"),
+    zusHolidayStatus: document.getElementById("zusHolidayStatus"),
+    zusBirthDate: document.getElementById("zusBirthDate"),
+    zusSexRadios: document.querySelectorAll('input[name="zusSex"]'),
+    zusBirthHint: document.getElementById("zusBirthHint"),
+    zusSummary: document.getElementById("zusSummary"),
+    zusSummaryMeta: document.getElementById("zusSummaryMeta"),
+    zusSocialTotal: document.getElementById("zusSocialTotal"),
+    zusFpTotal: document.getElementById("zusFpTotal"),
+    zusHealthMonths: document.getElementById("zusHealthMonths"),
+    zusMonths: document.getElementById("zusMonths"),
+    zusScheduleSummary: document.getElementById("zusScheduleSummary"),
+    comparePitMeta: document.getElementById("comparePitMeta"),
   };
+
+  // Data weryfikacji stanu prawnego (etykieta w nagłówku, eksport, Założenia)
+  // – jedno źródło: TAX_CONSTANTS.LEGAL_STATUS_DATE
+  const LEGAL_STATUS_DATE = TAX_CONSTANTS.LEGAL_STATUS_DATE;
+
+  // Warianty, których wynik może być ujemny (PIT przypisany przy rozliczeniu
+  // wspólnym, zob. calculateJointScalePitAttributed)
+  const JOINT_VARIANT_IDS = ["taxScaleJoint", "taxScaleIpBoxJoint"];
 
   /* ==================================================
      Variant labels (used by best-card + ranking)
@@ -62,7 +92,7 @@
     ryczalt14: "Ryczałt 14%",
     ryczalt15: "Ryczałt 15%",
     ryczalt17: "Ryczałt 17%",
-    ratesTotal: "Ryczałt łącznie",
+    ratesTotal: "Ryczałt (wiele stawek) łącznie",
   };
 
   const RATE_INPUT_MIN_WIDTH = 96;
@@ -118,24 +148,6 @@
   ];
 
   /* ==================================================
-     Shared Variables & Calculation Value Getters/Setters
-  ================================================== */
-  const contributionValues = {
-    healthLinear: 0,
-    healthRyczalt: 0,
-    healthScale: 0,
-    healthLinearDeduction: 0,
-    healthRyczaltDeduction: 0,
-  };
-
-  function setCalculationValue(id, value) {
-    contributionValues[id] = value;
-  }
-  function getCalculationValue(id) {
-    return contributionValues[id];
-  }
-
-  /* ==================================================
      Utility Functions
   ================================================== */
   function formatPLN(value) {
@@ -146,90 +158,347 @@
       maximumFractionDigits: 2,
     }).format(value);
   }
-  function parsePLN(value) {
-    return parseFloat(value.replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
-  }
-
   function selectInputValue(e) {
     e.target.select();
   }
 
   /* ==================================================
      Validation Functions
+     Jeden parser kwot (taxMath.parseAmount) dla wszystkich pól kwotowych.
+     Nieprawidłowe dane nigdy nie są zamieniane na 0 – blokują wyniki.
   ================================================== */
-  function validateInput(value, fieldName) {
-    const input = document.getElementById(fieldName);
-    const errorElement = document.getElementById(`${fieldName}-error`);
-    let isValid = true;
-    if (input) input.classList.remove("error");
-    if (errorElement) {
-      errorElement.textContent = "";
-      errorElement.classList.remove("visible");
+  const MONEY_MAX = 999999999;
+
+  const FIELD_LABELS = {
+    revenue: "Przychód roczny",
+    costs: "Koszty roczne",
+    otherIncome: "Inne dochody opodatkowane skalą",
+    spouseIncome: "Dochód małżonka",
+    ipBoxCoeff: "Udział dochodu kwalifikowanego IP BOX",
+    zusStartDate: "Data rozpoczęcia działalności",
+    zusBirthDate: "Data urodzenia",
+  };
+
+  /* Kwota z pola: { ok, value, message }. Pusta = 0. Ujemne i zbyt duże
+     kwoty są błędem (wszystkie pola kwotowe kalkulatora są nieujemne). */
+  function checkAmount(raw) {
+    const parsed = taxMath.parseAmount(raw);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        value: null,
+        message: "Nieprawidłowy format kwoty — wpisz np. 12 345,67.",
+      };
     }
-    const numericValue = parsePLN(value);
-    if (isNaN(numericValue)) {
-      if (errorElement) errorElement.textContent = "Wprowadź prawidłową kwotę.";
-      isValid = false;
-    } else if (numericValue < 0) {
-      if (errorElement) errorElement.textContent = "Kwota nie może być ujemna.";
-      isValid = false;
-    } else if (numericValue > 999999999) {
-      if (errorElement) errorElement.textContent = "Kwota jest zbyt duża.";
-      isValid = false;
+    if (parsed.value < 0) {
+      return {
+        ok: false,
+        value: parsed.value,
+        message: "Kwota nie może być ujemna — wpisz ją bez znaku minus.",
+      };
     }
-    if (!isValid) {
-      if (input) input.classList.add("error");
-      if (errorElement) errorElement.classList.add("visible");
+    if (parsed.value > MONEY_MAX) {
+      return { ok: false, value: parsed.value, message: "Kwota jest zbyt duża." };
     }
-    return isValid;
+    return { ok: true, value: parsed.value, empty: parsed.empty, message: "" };
   }
+
+  /* Wartość liczbowa pola kwotowego (0 dla pustego lub błędnego – błędne
+     i tak blokują obliczenia w calculate()). */
+  function amountOf(raw) {
+    const checked = checkAmount(raw);
+    return checked.ok ? checked.value : 0;
+  }
+
+  function setFieldError(input, errorElement, message) {
+    if (input) {
+      input.classList.toggle("error", !!message);
+      if (message) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    }
+    if (errorElement) {
+      if (errorElement.textContent !== message) {
+        errorElement.textContent = message;
+      }
+      errorElement.classList.toggle("visible", !!message);
+    }
+  }
+
+  function clearFieldError(fieldName) {
+    setFieldError(
+      document.getElementById(fieldName),
+      document.getElementById(`${fieldName}-error`),
+      "",
+    );
+  }
+
+  function validateInput(value, fieldName) {
+    const checked = checkAmount(value);
+    setFieldError(
+      document.getElementById(fieldName),
+      document.getElementById(`${fieldName}-error`),
+      checked.message,
+    );
+    return checked.ok;
+  }
+
+  /* Pole przychodu dla stawki (tryb „Wiele stawek”) – błąd zaznaczamy
+     na samym polu, a nie na polu wyniku o tym samym identyfikatorze. */
+  function validateRateInput(input) {
+    const checked = checkAmount(input.value);
+    input.classList.toggle("error", !checked.ok);
+    if (checked.ok) {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("title");
+    } else {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("title", checked.message);
+    }
+    return checked.ok;
+  }
+
   function validateIpBoxCoeff(value) {
     const errorElement = document.getElementById("ipBoxCoeff-error");
-    const numValue = parseFloat(value);
-    let isValid = true;
-    DOM.ipBoxCoeffInput.classList.remove("error");
-    if (errorElement) {
-      errorElement.textContent = "";
-      errorElement.classList.remove("visible");
-    }
-    if (isNaN(numValue) || value === "") {
-      if (errorElement) errorElement.textContent = "Wpisz wartość 0–100.";
-      isValid = false;
+    const input = DOM.ipBoxCoeffInput;
+    const raw = String(value === undefined ? input.value : value).trim();
+    const badInput = !!(input.validity && input.validity.badInput);
+    const numValue = Number(raw.replace(",", "."));
+    let message = "";
+    if (badInput || raw === "" || !Number.isFinite(numValue)) {
+      message = "Wpisz liczbę 0–100.";
     } else if (numValue < 0 || numValue > 100) {
-      if (errorElement)
-        errorElement.textContent = "Wartość musi być w zakresie 0–100.";
-      isValid = false;
+      message = "Wartość musi być w zakresie 0–100.";
     }
-    if (!isValid) {
-      DOM.ipBoxCoeffInput.classList.add("error");
-      if (errorElement) errorElement.classList.add("visible");
+    setFieldError(input, errorElement, message);
+    return !message;
+  }
+
+  function getIpBoxCoeffValue() {
+    const numValue = Number(
+      String(DOM.ipBoxCoeffInput.value).trim().replace(",", "."),
+    );
+    return Number.isFinite(numValue) ? numValue / 100 : 0;
+  }
+
+  /* Pola dat (RRRR-MM-DD z <input type="date">). Puste pole jest poprawne
+     (oba pola są opcjonalne). Data musi mieścić się w latach 1900–2026.
+     Niepełna data (np. bez roku) ma pustą wartość i validity.badInput –
+     to błąd, a nie „brak daty”. */
+  const DATE_MIN = "1900-01-01";
+  const DATE_MAX = `${TAX_CONSTANTS.ZUS_YEAR}-12-31`;
+
+  function getDateFieldMessage(input, maxErrorText) {
+    if (!input) return "";
+    if (input.validity && input.validity.badInput) {
+      return "Uzupełnij pełną datę (dd.mm.rrrr).";
     }
-    return isValid;
+    const raw = (input.value || "").trim();
+    if (raw === "") return "";
+    const parsed = taxMath.parseISODate(raw);
+    if (!parsed || raw < DATE_MIN) return "Wprowadź prawidłową datę.";
+    if (raw > DATE_MAX) return maxErrorText;
+    return "";
+  }
+
+  function validateStartDate() {
+    const message = getDateFieldMessage(
+      DOM.zusStartDate,
+      "Data rozpoczęcia nie może być późniejsza niż 31.12.2026.",
+    );
+    setFieldError(
+      DOM.zusStartDate,
+      document.getElementById("zusStartDate-error"),
+      message,
+    );
+    return !message;
+  }
+
+  function validateBirthDate() {
+    let message = getDateFieldMessage(
+      DOM.zusBirthDate,
+      "Data urodzenia nie może być późniejsza niż 31.12.2026.",
+    );
+    const birth = (DOM.zusBirthDate.value || "").trim();
+    const start = getValidDateValue(DOM.zusStartDate);
+    if (!message && birth && start && birth >= start) {
+      message =
+        "Data urodzenia musi być wcześniejsza niż data rozpoczęcia działalności.";
+    }
+    setFieldError(
+      DOM.zusBirthDate,
+      document.getElementById("zusBirthDate-error"),
+      message,
+    );
+    return !message;
+  }
+
+  /* Wartość pola daty, jeśli jest poprawna; w przeciwnym razie null. */
+  function getValidDateValue(input) {
+    if (!input) return null;
+    if (input.validity && input.validity.badInput) return null;
+    const raw = (input.value || "").trim();
+    if (!raw || raw < DATE_MIN || raw > DATE_MAX) return null;
+    return taxMath.parseISODate(raw) ? raw : null;
+  }
+
+  /* Walidacja wszystkich pól wpływających na wynik. Wywoływana przy każdym
+     przeliczeniu (niezależnie od tego, która kontrolka je wywołała). */
+  /* Pole jest „aktywne”, gdy użytkownik je widzi i może je edytować:
+     nie leży w zwiniętej (inert/hidden) sekcji. Nieaktywne pole nigdy nie
+     blokuje wyników (np. data urodzenia przy wyłączonych składkach). */
+  function isFieldActive(element) {
+    if (!element) return false;
+    // tło otwartego okna modalnego (data-modal-inert) nie liczy się jako
+    // zwinięta sekcja – pola pod oknem nadal podlegają walidacji
+    if (element.closest("[inert]:not([data-modal-inert]), [hidden]")) {
+      return false;
+    }
+    if (element.disabled) return false;
+    return true;
+  }
+
+  /* Czy wpis w polu, które ma fokus, jest jeszcze niedokończony (np.
+     „150 0”, „1234,” w trakcie pisania albo data z rokiem „0202”)? Taki
+     wpis nie przełącza wyników w stan błędu – zostają ostatnie poprawne
+     wyniki, a pełna walidacja rusza przy opuszczeniu pola / zmianie. */
+  function isPendingInput(element) {
+    if (!element) return false;
+    if (element === DOM.zusStartDate) {
+      return !!getDateFieldMessage(element, "x");
+    }
+    if (element === DOM.zusBirthDate) {
+      if (getDateFieldMessage(element, "x")) return true;
+      const start = getValidDateValue(DOM.zusStartDate);
+      return !!(start && element.value && element.value >= start);
+    }
+    if (element === DOM.ipBoxCoeffInput) {
+      const raw = String(element.value).trim();
+      return (
+        !!(element.validity && element.validity.badInput) ||
+        raw === "" ||
+        !Number.isFinite(Number(raw.replace(",", ".")))
+      );
+    }
+    // pola kwotowe: tylko błąd formatu (ujemna / zbyt duża kwota to błąd od razu)
+    return !taxMath.parseAmount(element.value).ok;
+  }
+
+  /* Walidacja wszystkich pól wpływających na wynik. Wywoływana przy każdym
+     przeliczeniu (niezależnie od tego, która kontrolka je wywołała).
+     deferField – pole z fokusem, w którym właśnie pisze użytkownik: gdy
+     jego wpis jest niedokończony, pole jest pomijane (bez komunikatu),
+     a wynik ma deferred = true. */
+  function validateAllInputs(deferField = null) {
+    const invalid = [];
+    const deferred =
+      deferField && isFieldActive(deferField) && isPendingInput(deferField)
+        ? deferField
+        : null;
+    const note = (fieldName, ok, label) => {
+      if (!ok) {
+        invalid.push({
+          id: fieldName,
+          element: document.getElementById(fieldName),
+          label: label || FIELD_LABELS[fieldName] || fieldName,
+          message:
+            (document.getElementById(`${fieldName}-error`) || {}).textContent ||
+            "",
+        });
+      }
+    };
+    const check = (fieldName, active, validate) => {
+      const element = document.getElementById(fieldName);
+      if (element && element === deferred) return;
+      if (active && isFieldActive(element)) note(fieldName, validate());
+      else clearFieldError(fieldName);
+    };
+    ["revenue", "costs", "otherIncome"].forEach((fieldName) => {
+      check(fieldName, true, () =>
+        validateInput(document.getElementById(fieldName).value, fieldName),
+      );
+    });
+    check("spouseIncome", isJointTaxationEnabled(), () =>
+      validateInput(DOM.spouseIncomeInput.value, "spouseIncome"),
+    );
+    check("ipBoxCoeff", isIpBoxEnabled(), () => validateIpBoxCoeff());
+    const rateErrors = [];
+    DOM.rateInputs.forEach((input) => {
+      if (input === deferred) return;
+      if (
+        DOM.multipleRatesToggle.checked &&
+        input.classList.contains("show") &&
+        isFieldActive(input)
+      ) {
+        if (!validateRateInput(input)) {
+          rateErrors.push(input);
+          invalid.push({
+            id: null,
+            element: input,
+            label: `Przychód dla stawki ${
+              RYCZALT_RATE_LABELS[input.dataset.for] || ""
+            }`,
+            message: input.getAttribute("title") || "",
+          });
+        }
+      } else {
+        input.classList.remove("error");
+        input.removeAttribute("aria-invalid");
+        input.removeAttribute("title");
+      }
+    });
+    const ratesError = document.getElementById("rateInputs-error");
+    if (ratesError && !(deferred && deferred.classList.contains("rate-input"))) {
+      const message = rateErrors.length
+        ? "Popraw kwotę przychodu przy zaznaczonej stawce (np. 12 345,67)."
+        : "";
+      if (ratesError.textContent !== message) ratesError.textContent = message;
+      ratesError.classList.toggle("visible", !!message);
+    }
+    check("zusStartDate", true, validateStartDate);
+    // data urodzenia służy tylko do zwolnienia z FP/FS – przy wyłączonych
+    // składkach społecznych (sekcja zwinięta) nie może blokować wyników
+    check("zusBirthDate", DOM.zusEnabled.checked, validateBirthDate);
+    return { valid: invalid.length === 0, invalid, deferred: !!deferred };
   }
 
   /* ==================================================
-     Tax Calculation Functions  (UNCHANGED — financial logic)
+     Tax Calculation Functions
   ================================================== */
+  /* Skala podatkowa wg wzoru z art. 27 ust. 1 ustawy o PIT:
+       podstawa ≤ 120 000 zł: 12% × podstawa − 3 600 zł (kwota zmniejszająca
+       podatek; wynik nie mniejszy niż 0),
+       podstawa > 120 000 zł: 10 800 zł + 32% × nadwyżka ponad 120 000 zł.
+     (Liczbowo to samo co 12% od nadwyżki ponad 30 000 zł.) */
   function getScalePitDetails(income) {
-    const taxableIncome = Math.max(income, 0);
-    const taxFreeAmount = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const inTaxFree = Math.min(taxableIncome, taxFreeAmount);
-    const in12Bracket = Math.min(
-      Math.max(taxableIncome - taxFreeAmount, 0),
-      TAX_BAND_12,
+    const C = TAX_CONSTANTS;
+    const taxableIncome = Math.max(taxMath.round2(income), 0);
+    const threshold12 = C.TAX_THRESHOLD_12;
+    const decreasingAmount = C.TAX_DECREASING_AMOUNT;
+    // 12% × 120 000 − 3 600 = 10 800 zł
+    const taxAtThreshold = taxMath.round2(
+      threshold12 * C.PIT_RATE_12 - decreasingAmount,
     );
-    const in32Bracket = Math.max(taxableIncome - threshold12, 0);
-    const tax12 = taxMath.round2(in12Bracket * TAX_CONSTANTS.PIT_RATE_12);
-    const tax32 = taxMath.round2(in32Bracket * TAX_CONSTANTS.PIT_RATE_32);
-    const totalPit = taxMath.round2(tax12 + tax32);
+    let tax12Gross = 0;
+    let excess = 0;
+    let tax32 = 0;
+    let totalPit;
+    if (taxableIncome <= threshold12) {
+      tax12Gross = taxMath.round2(taxableIncome * C.PIT_RATE_12);
+      totalPit = Math.max(taxMath.round2(tax12Gross - decreasingAmount), 0);
+    } else {
+      excess = taxMath.round2(taxableIncome - threshold12);
+      tax32 = taxMath.round2(excess * C.PIT_RATE_32);
+      totalPit = taxMath.round2(taxAtThreshold + tax32);
+    }
 
     return {
       taxableIncome,
-      inTaxFree,
-      in12Bracket,
-      in32Bracket,
-      tax12,
+      upToThreshold: taxableIncome <= threshold12,
+      threshold12,
+      decreasingAmount,
+      taxAtThreshold,
+      tax12Gross,
+      excess,
       tax32,
       totalPit,
     };
@@ -257,26 +526,26 @@
     return getSolidarityLevyDetails(baseIncome).levy;
   }
 
+  /* Strata z działalności nie pomniejsza dochodu małżonka (art. 6 ust. 2
+     w zw. z art. 9 ust. 2–3 ustawy o PIT) – dochód podatnika ≥ 0. */
   function calculateJointScalePitOnly(income, spouseIncome) {
-    const jointIncome = taxMath.round2(income + spouseIncome);
+    const jointIncome = taxMath.round2(
+      Math.max(income, 0) + Math.max(spouseIncome, 0),
+    );
     const halfIncome = taxMath.round2(jointIncome / 2);
     return taxMath.round2(calculateScalePitOnly(halfIncome) * 2);
   }
 
-  function calculateScaleTaxTotal(income, healthScale) {
+  /* Rozliczenie wspólne: wynik ma być porównywalny z wariantami
+     indywidualnymi (które obejmują tylko podatnika). Dlatego od PIT
+     wspólnego pary odejmujemy PIT, który małżonek zapłaciłby sam wg skali.
+     Danina małżonka jest taka sama w obu scenariuszach, więc jej nie
+     wliczamy. Wynik może być ujemny, gdy wspólne rozliczenie obniża
+     podatek małżonka bardziej, niż wynosi podatek podatnika. */
+  function calculateJointScalePitAttributed(income, spouseIncome) {
     return taxMath.round2(
-      calculateScalePitOnly(income) +
-        calculateSolidarityLevy(income) +
-        healthScale,
-    );
-  }
-
-  function calculateJointScaleTaxTotal(income, spouseIncome, healthScale) {
-    return taxMath.round2(
-      calculateJointScalePitOnly(income, spouseIncome) +
-        calculateSolidarityLevy(income) +
-        calculateSolidarityLevy(spouseIncome) +
-        healthScale,
+      calculateJointScalePitOnly(income, spouseIncome) -
+        calculateScalePitOnly(spouseIncome),
     );
   }
 
@@ -294,78 +563,616 @@
     return getLinearPitDetails(baseIncome).pit;
   }
 
-  function calculateLinearTaxTotal(
-    income,
-    healthLinearDeduction,
-    healthLinear,
-  ) {
-    const pitBase = Math.max(income - healthLinearDeduction, 0);
-    return taxMath.round2(
-      calculateLinearPitOnly(pitBase) +
-        calculateSolidarityLevy(pitBase) +
-        healthLinear,
-    );
-  }
-
-  function calculateLinearIpBoxTaxTotal(
-    income,
-    ipBoxCoeff,
-    healthLinearDeduction,
-    healthLinear,
-  ) {
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
-      income,
-      ipBoxCoeff,
-    );
-    const ipBoxPit = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
-    const standardPitBase = Math.max(regularIncome - healthLinearDeduction, 0);
-
-    return taxMath.round2(
-      ipBoxPit +
-        calculateLinearPitOnly(standardPitBase) +
-        calculateSolidarityLevy(standardPitBase) +
-        healthLinear,
-    );
-  }
-
+  /* Współczynnik IP BOX stosujemy do dochodu z działalności przed składkami
+     ZUS; przy dochodzie ujemnym dochodu kwalifikowanego nie ma (wcześniej
+     powstawał ujemny „podatek” 5%). Składki ZUS przypisujemy do części
+     opodatkowanej skalą / liniowo – nigdy do dochodu z IP BOX. */
   function getIpBoxIncomeSplit(income, ipBoxCoeff) {
-    const ipBoxIncome = taxMath.round2(income * ipBoxCoeff);
+    const coeff = Number.isFinite(ipBoxCoeff)
+      ? Math.min(Math.max(ipBoxCoeff, 0), 1)
+      : 0;
+    const ipBoxIncome = income > 0 ? taxMath.round2(income * coeff) : 0;
     const regularIncome = taxMath.round2(income - ipBoxIncome);
     return { ipBoxIncome, regularIncome };
   }
 
-  function calculateScaleIpBoxTaxTotal(income, ipBoxCoeff, healthScale) {
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
-      income,
-      ipBoxCoeff,
+  const RYCZALT_RATES = {
+    ryczalt2: TAX_CONSTANTS.RYCZALT_RATE_2,
+    ryczalt3: TAX_CONSTANTS.RYCZALT_RATE_3,
+    ryczalt5_5: TAX_CONSTANTS.RYCZALT_RATE_5_5,
+    ryczalt8_5: TAX_CONSTANTS.RYCZALT_RATE_8_5,
+    ryczalt10: TAX_CONSTANTS.RYCZALT_RATE_10,
+    ryczalt12: TAX_CONSTANTS.RYCZALT_RATE_12,
+    ryczalt14: TAX_CONSTANTS.RYCZALT_RATE_14,
+    ryczalt15: TAX_CONSTANTS.RYCZALT_RATE_15,
+    ryczalt17: TAX_CONSTANTS.RYCZALT_RATE_17,
+  };
+
+  /* Art. 11 ust. 3 ustawy o ryczałcie: przy przychodach opodatkowanych
+     różnymi stawkami odliczenie dzieli się w stosunku, w jakim przychód
+     danej stawki pozostaje do ogólnej kwoty przychodów. */
+  function getRyczaltDeductionShare(deduction, rateRevenue, totalRevenue) {
+    if (totalRevenue <= 0) return 0;
+    return taxMath.round2((deduction * rateRevenue) / totalRevenue);
+  }
+
+  /* Podział kwoty proporcjonalnie do wag, w groszach, metodą największych
+     reszt – udziały sumują się dokładnie do kwoty (dla sumy wag = total).
+     Gdy suma wag < total (część przychodu bez stawki), rozdzielana jest
+     tylko odpowiednia część kwoty. */
+  function splitProportionally(amount, weights, totalWeight) {
+    const denominator = Math.max(
+      totalWeight,
+      weights.reduce((sum, weight) => sum + Math.max(weight, 0), 0),
     );
-    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    if (denominator <= 0) return weights.map(() => 0);
+    const amountCents = Math.round(taxMath.round2(amount) * 100);
+    const weightSum = weights.reduce((sum, weight) => sum + Math.max(weight, 0), 0);
+    const targetCents = Math.round((amountCents * weightSum) / denominator);
+    const raw = weights.map(
+      (weight) => (amountCents * Math.max(weight, 0)) / denominator,
+    );
+    const cents = raw.map((value) => Math.floor(value));
+    let remainder = targetCents - cents.reduce((sum, value) => sum + value, 0);
+    raw
+      .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+      .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+      .forEach(({ index }) => {
+        if (remainder > 0) {
+          cents[index] += 1;
+          remainder -= 1;
+        }
+      });
+    return cents.map((value) => value / 100);
+  }
+
+  /* 8,5% do 100 000 zł i 12,5% od nadwyżki to dwie różne stawki, więc
+     odliczenie dzielimy między nie proporcjonalnie do przychodu. */
+  function getRyczalt85125Details(rateRevenue, deduction) {
+    const threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
+    const revenue85 = Math.min(Math.max(rateRevenue, 0), threshold);
+    const revenue125 = Math.max(rateRevenue - threshold, 0);
+    const deduction85 =
+      rateRevenue > threshold
+        ? getRyczaltDeductionShare(deduction, revenue85, rateRevenue)
+        : deduction;
+    const deduction125 = taxMath.round2(deduction - deduction85);
+    const base85 = Math.max(revenue85 - deduction85, 0);
+    const base125 = Math.max(revenue125 - deduction125, 0);
+    const tax85 = taxMath.round2(base85 * TAX_CONSTANTS.RYCZALT_RATE_8_5);
+    const tax125 = taxMath.round2(base125 * TAX_CONSTANTS.RYCZALT_RATE_12_5);
+
+    return {
+      threshold,
+      revenue85,
+      revenue125,
+      deduction85,
+      deduction125,
+      base85,
+      base125,
+      tax85,
+      tax125,
+      tax: taxMath.round2(tax85 + tax125),
+    };
+  }
+
+  function calculateRyczaltRateTax(rateId, rateRevenue, deduction) {
+    if (rateId === "ryczalt8_5_12_5") {
+      return getRyczalt85125Details(rateRevenue, deduction).tax;
+    }
     return taxMath.round2(
-      ipBoxTax +
-        calculateScalePitOnly(regularIncome) +
-        calculateSolidarityLevy(regularIncome) +
-        healthScale,
+      Math.max(rateRevenue - deduction, 0) * RYCZALT_RATES[rateId],
     );
   }
 
-  function calculateJointScaleIpBoxTaxTotal(
-    income,
-    spouseIncome,
-    ipBoxCoeff,
-    healthScale,
-  ) {
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
+  /* ==================================================
+     Składki ZUS, inne dochody i wybór sposobu odliczenia składek
+     (czyste funkcje – bez DOM; dane wejściowe przekazywane jawnie)
+
+     Oznaczenia:
+       D   – dochód z działalności przed składkami ZUS (przychód − koszty),
+       S   – składki społeczne odliczalne (emerytalna, rentowa, chorobowa,
+             wypadkowa) należne za 2026 r. (założenie kasowe: zapłacone w 2026),
+       FP  – Fundusz Pracy + Fundusz Solidarnościowy (tylko koszt uzyskania
+             przychodu na skali i liniowym; na ryczałcie nieodliczalne),
+       O   – inne dochody opodatkowane skalą (np. etat),
+       n   – liczba miesięcy podlegania ubezpieczeniu zdrowotnemu w 2026.
+     Wynik wariantu = podatki łącznie (z innymi dochodami) − PIT od samych
+     innych dochodów + składka zdrowotna + składki społeczne ZUS,
+     czyli obciążenie przypisane działalności.
+     Składek nie dzielimy między sposoby odliczenia – wyjątek: nadwyżka
+     składek ponad przychód ryczałtowy odliczana od dochodu ze skali
+     (art. 26 ust. 13a ustawy o PIT; SPEC addendum A5).
+  ================================================== */
+
+  /* Sposoby odliczenia składek społecznych porównywane w każdym wariancie.
+     Kolejność = preferencja przy równym wyniku. */
+  const SOCIAL_DEDUCTION_METHODS = {
+    scale: ["income", "costs"],
+    linear: ["linear", "costs", "scale"],
+    ryczalt: ["ryczalt", "scale"],
+  };
+
+  const SOCIAL_DEDUCTION_LABELS = {
+    scale: {
+      none: "brak składek społecznych do odliczenia",
+      income: "od dochodu (art. 26 ust. 1 pkt 2 ustawy o PIT)",
+      costs: "w kosztach uzyskania przychodu",
+    },
+    linear: {
+      none: "brak składek społecznych do odliczenia",
+      linear:
+        "od dochodu z działalności (art. 30c ust. 2 pkt 1 ustawy o PIT)",
+      costs: "w kosztach uzyskania przychodu",
+      scale: "od innych dochodów ze skali (art. 26 ust. 1 pkt 2 i ust. 13a)",
+    },
+    ryczalt: {
+      none: "brak składek społecznych do odliczenia",
+      ryczalt:
+        "od przychodu po odliczeniu 50% zdrowotnej (art. 11 ust. 1 i 1a ustawy o ryczałcie), nadwyżka od innych dochodów ze skali (art. 26 ust. 13a)",
+      scale: "od innych dochodów ze skali (art. 26 ust. 1 pkt 2 i ust. 13a)",
+    },
+  };
+
+  const SOCIAL_DEDUCTION_SHORT_LABELS = {
+    none: "brak do odliczenia",
+    income: "od dochodu",
+    costs: "w kosztach",
+    linear: "od dochodu liniowego",
+    scale: "od innych dochodów ze skali",
+    ryczalt: "od przychodu",
+  };
+
+  /* Krótki opis tego, jak składki społeczne faktycznie odliczono w danym
+     wariancie (dla ryczałtu – wg kwot, nie tylko nazwy metody). */
+  function getSocialMethodLabel(evaluation) {
+    const { best, method } = evaluation;
+    if (best && best.form === "ryczalt" && method !== "none") {
+      const fromRevenue = best.socialFromRevenue > 0;
+      const fromScale = best.socialFromScale > 0;
+      if (fromRevenue && fromScale) {
+        return "od przychodu i (nadwyżka) od dochodu ze skali";
+      }
+      if (fromRevenue) return "od przychodu";
+      if (fromScale && method === "ryczalt") {
+        return "od dochodu ze skali (przychód w całości pokryty odliczeniem 50% zdrowotnej)";
+      }
+      if (fromScale) return "od dochodu ze skali";
+      return "nieodliczone (brak przychodu po odliczeniu 50% zdrowotnej i brak dochodu ze skali)";
+    }
+    return SOCIAL_DEDUCTION_SHORT_LABELS[method];
+  }
+
+  /* PIT (i danina), który podatnik zapłaciłby od samych innych dochodów –
+     indywidualnie wg skali, bez działalności. Odejmowany w każdym wariancie. */
+  function getOtherIncomeBaseline(otherIncome) {
+    const pit = calculateScalePitOnly(otherIncome);
+    const levy = calculateSolidarityLevy(otherIncome);
+    return {
+      income: otherIncome,
+      pit,
+      levy,
+      total: taxMath.round2(pit + levy),
+    };
+  }
+
+  function buildCalculationContext(inputs, schedule) {
+    const income = taxMath.round2(inputs.revenue - inputs.costs);
+    const otherIncome = Math.max(inputs.otherIncome || 0, 0);
+    return {
+      revenue: inputs.revenue,
+      costs: inputs.costs,
       income,
+      otherIncome,
+      schedule,
+      zusEnabled: schedule.enabled,
+      social: schedule.totals.social,
+      fpfs: schedule.totals.fpfs,
+      socialTotal: schedule.totals.total,
+      healthMonths: schedule.healthMonths,
+      // art. 81 ust. 2 u.ś.o.z.: dochód pomniejszony o składki społeczne
+      // (FP+FS jako koszt obniża dochód), niezależnie od miejsca odliczenia
+      healthBaseIncome: taxMath.round2(
+        income - schedule.totals.fpfs - schedule.totals.social,
+      ),
+      baseline: getOtherIncomeBaseline(otherIncome),
+    };
+  }
+
+  function getVariantTotal(taxes, health, ctx) {
+    return taxMath.round2(
+      taxes - ctx.baseline.total + health + ctx.socialTotal,
+    );
+  }
+
+  /* Skala (indywidualnie / wspólnie, z IP BOX lub bez).
+     method: "income" – art. 26 od łącznego dochodu ze skali (JDG + inne),
+             "costs"  – składki w kosztach działalności (strata JDG nie
+                        pomniejsza innych dochodów w tym samym roku). */
+  function computeScaleOption(ctx, method, ipBoxCoeff, spouseIncome) {
+    // FP+FS (i składki społeczne przy "costs") to koszty całej działalności –
+    // przy IP BOX dzielone proporcjonalnie wg współczynnika (addendum A1, A9)
+    const socialInCosts = method === "costs" ? ctx.social : 0;
+    const businessAfterCosts = taxMath.round2(
+      ctx.income - ctx.fpfs - socialInCosts,
+    );
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
+      businessAfterCosts,
       ipBoxCoeff,
     );
-    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
-    return taxMath.round2(
-      ipBoxTax +
-        calculateJointScalePitOnly(regularIncome, spouseIncome) +
-        calculateSolidarityLevy(regularIncome) +
-        calculateSolidarityLevy(spouseIncome) +
-        healthScale,
+    const scaleIncome = taxMath.round2(
+      Math.max(regularIncome, 0) + ctx.otherIncome,
     );
+    const socialDeducted =
+      method === "costs" ? 0 : Math.min(ctx.social, scaleIncome);
+    const pitBase = taxMath.round2(scaleIncome - socialDeducted);
+    const health = taxMath.calculateHealthScale(
+      ctx.healthBaseIncome,
+      ctx.healthMonths,
+    );
+    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    const joint = spouseIncome !== null && spouseIncome !== undefined;
+    const pit = joint
+      ? calculateJointScalePitAttributed(pitBase, spouseIncome)
+      : calculateScalePitOnly(pitBase);
+    const levy = calculateSolidarityLevy(pitBase);
+    const taxes = taxMath.round2(ipBoxTax + pit + levy);
+
+    return {
+      form: "scale",
+      method,
+      ipBoxCoeff,
+      ipBoxIncome,
+      regularIncome,
+      socialInCosts,
+      businessAfterCosts,
+      scaleIncome,
+      socialDeducted,
+      pitBase,
+      joint,
+      spouseIncome: joint ? spouseIncome : 0,
+      pit,
+      levy,
+      ipBoxTax,
+      health,
+      taxes,
+      total: getVariantTotal(taxes, health, ctx),
+    };
+  }
+
+  /* Liniowy (z IP BOX lub bez). Inne dochody opodatkowane osobno skalą.
+     method: "linear" – od dochodu liniowego (art. 30c ust. 2 pkt 1),
+             "costs"  – w kosztach działalności,
+             "scale"  – od innych dochodów ze skali (art. 26).
+     Nadwyżka ponad dochód z wybranego źródła przepada (bez dzielenia). */
+  function computeLinearOption(ctx, method, ipBoxCoeff) {
+    const socialInCosts = method === "costs" ? ctx.social : 0;
+    const businessAfterCosts = taxMath.round2(
+      ctx.income - ctx.fpfs - socialInCosts,
+    );
+    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
+      businessAfterCosts,
+      ipBoxCoeff,
+    );
+    const health = taxMath.calculateHealthLinear(
+      ctx.healthBaseIncome,
+      ctx.healthMonths,
+    );
+    const healthDeduction = Math.min(
+      health,
+      TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT,
+    );
+    // Zdrowotna odliczana od dochodu liniowego (nie w KUP – bez efektu
+    // obniżenia własnej podstawy, addendum A4); limit roczny bez proporcji
+    const healthDeducted = Math.min(
+      healthDeduction,
+      Math.max(regularIncome, 0),
+    );
+    const linearAvailable = taxMath.round2(
+      Math.max(regularIncome, 0) - healthDeducted,
+    );
+    let socialFromLinear = 0;
+    let socialFromScale = 0;
+    if (method === "scale") {
+      socialFromScale = Math.min(ctx.social, ctx.otherIncome);
+    } else if (method !== "costs") {
+      socialFromLinear = Math.min(ctx.social, linearAvailable);
+    }
+    const linearBase = taxMath.round2(linearAvailable - socialFromLinear);
+    const scaleBase = taxMath.round2(ctx.otherIncome - socialFromScale);
+    const linearPit = calculateLinearPitOnly(linearBase);
+    const scalePit = calculateScalePitOnly(scaleBase);
+    // art. 30h ust. 2: podstawa daniny = dochody z art. 27 i 30c po odliczeniach
+    const levyBase = taxMath.round2(linearBase + scaleBase);
+    const levy = calculateSolidarityLevy(levyBase);
+    const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
+    const taxes = taxMath.round2(ipBoxTax + linearPit + scalePit + levy);
+
+    return {
+      form: "linear",
+      method,
+      ipBoxCoeff,
+      ipBoxIncome,
+      regularIncome,
+      socialInCosts,
+      businessAfterCosts,
+      healthDeduction,
+      healthDeducted,
+      linearAvailable,
+      socialFromLinear,
+      socialFromScale,
+      linearBase,
+      scaleBase,
+      linearPit,
+      scalePit,
+      levyBase,
+      levy,
+      ipBoxTax,
+      health,
+      taxes,
+      total: getVariantTotal(taxes, health, ctx),
+    };
+  }
+
+  /* Ryczałt dla podanych przychodów przypisanych stawkom
+     ({ rateId: przychód }; jedna stawka = cały przychód).
+     method: "ryczalt" – od przychodu (nadwyżka od dochodu ze skali,
+                         art. 26 ust. 13a),
+             "scale"   – od innych dochodów ze skali (nadwyżka przepada).
+     Próg składki zdrowotnej: przychód pomniejszony o składki społeczne
+     NIEodliczone od dochodu na podstawie ustawy o PIT, tj. odliczone od
+     przychodu albo nigdzie (art. 81 ust. 2g u.ś.o.z. literalnie, addendum A6).
+     Odliczenia dzielone między stawki proporcjonalnie do przychodu
+     (art. 11 ust. 3 ustawy o ryczałcie), w groszach metodą największych reszt.
+     businessRevenue – łączny przychód z działalności (tryb „Wiele stawek”:
+     pole „Przychód roczny”); próg zdrowotnej i „ogólna kwota przychodów”
+     liczone są od niego, a nie od sumy przydziałów (B10). */
+  function computeRyczaltOption(ctx, method, allocations, businessRevenue) {
+    const rateIds = Object.keys(allocations);
+    const allocatedTotal = taxMath.round2(
+      rateIds.reduce((sum, id) => sum + (allocations[id] || 0), 0),
+    );
+    const revenueTotal = taxMath.round2(
+      Math.max(
+        Number.isFinite(businessRevenue) ? businessRevenue : 0,
+        allocatedTotal,
+      ),
+    );
+    /* Podział składek społecznych dla danej (zakładanej) składki zdrowotnej.
+       Metoda "ryczalt": najpierw 50% zdrowotnej (art. 11 ust. 1a – tego
+       odliczenia nie można przenieść na skalę), potem składki społeczne do
+       wysokości pozostałego przychodu; reszta od dochodu ze skali
+       (art. 26 ust. 13a). Odliczenie składek w całości od przychodu
+       marnowałoby odliczenie zdrowotnej, gdy przychód jest mały. */
+    const splitSocial = (healthDeductionGuess) => {
+      if (method === "scale") {
+        return {
+          socialFromRevenue: 0,
+          socialFromScale: Math.min(ctx.social, ctx.otherIncome),
+        };
+      }
+      const revenueRoom = Math.max(
+        taxMath.round2(revenueTotal - healthDeductionGuess),
+        0,
+      );
+      const fromRevenue = Math.min(ctx.social, revenueRoom);
+      return {
+        socialFromRevenue: fromRevenue,
+        socialFromScale: Math.min(
+          taxMath.round2(ctx.social - fromRevenue),
+          ctx.otherIncome,
+        ),
+      };
+    };
+    /* Próg zdrowotnej zależy od podziału składek (art. 81 ust. 2g), a podział
+       od kwoty zdrowotnej – szukamy punktu stałego, zaczynając od najniższego
+       progu (odwzorowanie jest monotoniczne: wyższa zdrowotna → mniej
+       składek od przychodu → wyższy przychód do progu). */
+    const evaluateTier = (healthMonthlyGuess) => {
+      const guessHealth = taxMath.round2(healthMonthlyGuess * ctx.healthMonths);
+      const guessDeduction = taxMath.round2(
+        guessHealth * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR,
+      );
+      const split = splitSocial(guessDeduction);
+      const notFromScale = taxMath.round2(ctx.social - split.socialFromScale);
+      const threshold = taxMath.round2(revenueTotal - notFromScale);
+      return {
+        ...split,
+        socialNotFromScale: notFromScale,
+        thresholdRevenue: threshold,
+        healthMonthly: taxMath.getRyczaltHealthMonthlyForRevenue(threshold),
+      };
+    };
+    let tier = evaluateTier(taxMath.getRyczaltHealthMonthlyForRevenue(0));
+    for (let step = 0; step < 3; step++) {
+      const next = evaluateTier(tier.healthMonthly);
+      const stable = next.healthMonthly === tier.healthMonthly;
+      tier = next;
+      if (stable) break;
+    }
+    const {
+      socialFromRevenue,
+      socialFromScale,
+      socialNotFromScale,
+      thresholdRevenue,
+      healthMonthly,
+    } = tier;
+    const health = taxMath.getRyczaltHealthAnnualForRevenue(
+      thresholdRevenue,
+      ctx.healthMonths,
+    );
+    const healthDeduction = taxMath.round2(
+      health * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR,
+    );
+    const totalDeduction = taxMath.round2(socialFromRevenue + healthDeduction);
+    const rates = {};
+    let ryczaltTax = 0;
+    const shares = splitProportionally(
+      totalDeduction,
+      rateIds.map((rateId) => allocations[rateId] || 0),
+      revenueTotal,
+    );
+    rateIds.forEach((rateId, index) => {
+      const rateRevenue = allocations[rateId] || 0;
+      const deduction = shares[index];
+      const tax = calculateRyczaltRateTax(rateId, rateRevenue, deduction);
+      rates[rateId] = { rateRevenue, deduction, tax };
+      ryczaltTax += tax;
+    });
+    ryczaltTax = taxMath.round2(ryczaltTax);
+    const scaleBase = taxMath.round2(ctx.otherIncome - socialFromScale);
+    const scalePit = calculateScalePitOnly(scaleBase);
+    const levy = calculateSolidarityLevy(scaleBase);
+    const taxes = taxMath.round2(ryczaltTax + scalePit + levy);
+
+    return {
+      form: "ryczalt",
+      method,
+      revenueTotal,
+      allocatedTotal,
+      socialFromRevenue,
+      socialFromScale,
+      socialNotFromScale,
+      thresholdRevenue,
+      healthMonthly,
+      health,
+      healthDeduction,
+      totalDeduction,
+      rates,
+      ryczaltTax,
+      scaleBase,
+      scalePit,
+      levy,
+      taxes,
+      total: getVariantTotal(taxes, health, ctx),
+    };
+  }
+
+  /* Liczy wariant dla każdego legalnego sposobu odliczenia składek
+     społecznych i wybiera ten z najniższym łącznym obciążeniem (przy równym
+     wyniku – pierwszy z listy SOCIAL_DEDUCTION_METHODS). */
+  function evaluateSocialDeduction(form, ctx, computeOption) {
+    let methods = SOCIAL_DEDUCTION_METHODS[form];
+    if (ctx.social <= 0) {
+      methods = [methods[0]];
+    } else if (ctx.otherIncome <= 0) {
+      methods = methods.filter((method) => method !== "scale");
+    }
+    const options = methods.map((method) => computeOption(method));
+    let best = options[0];
+    options.forEach((option) => {
+      if (option.total < best.total - 0.004) best = option;
+    });
+    return {
+      form,
+      options,
+      best,
+      method: ctx.social > 0 ? best.method : "none",
+      total: best.total,
+    };
+  }
+
+  /* Warianty harmonogramu ZUS do porównania w każdym wariancie podatkowym:
+     przy wakacjach składkowych – każdy dozwolony miesiąc oraz rezygnacja
+     z wakacji (addendum A2); w pozostałych przypadkach jeden harmonogram. */
+  function getScheduleCandidates(schedule) {
+    const eligible = schedule.holiday.eligibleMonths || [];
+    if (!schedule.holiday.requested || eligible.length === 0) {
+      return [schedule];
+    }
+    return [
+      ...eligible.map((month) => taxMath.applySocialHoliday(schedule, month)),
+      taxMath.applySocialHoliday(schedule, null),
+    ];
+  }
+
+  /* Wariant podatkowy: dla każdego harmonogramu (miesiąc wakacji) i każdego
+     sposobu odliczenia składek liczy obciążenie i wybiera najniższe
+     (przy remisie – wcześniejszy miesiąc wakacji). */
+  function evaluateVariant(form, inputs, candidates, computeOption) {
+    let bestEvaluation = null;
+    const holidayCandidates = [];
+    candidates.forEach((schedule) => {
+      const ctx = buildCalculationContext(inputs, schedule);
+      const evaluation = evaluateSocialDeduction(form, ctx, (method) =>
+        computeOption(ctx, method),
+      );
+      evaluation.ctx = ctx;
+      evaluation.schedule = schedule;
+      if (candidates.length > 1) {
+        holidayCandidates.push({
+          month: schedule.holiday.month,
+          saving: schedule.holiday.saving,
+          total: evaluation.total,
+        });
+      }
+      if (!bestEvaluation || evaluation.total < bestEvaluation.total - 0.004) {
+        bestEvaluation = evaluation;
+      }
+    });
+    bestEvaluation.holidayCandidates = holidayCandidates;
+    bestEvaluation.holidayMonth = bestEvaluation.schedule.holiday.month;
+    return bestEvaluation;
+  }
+
+  /* Wszystkie warianty dla podanych danych wejściowych i harmonogramu ZUS. */
+  function computeVariants(inputs, schedule) {
+    const ctx = buildCalculationContext(inputs, schedule);
+    const candidates = getScheduleCandidates(schedule);
+    const variants = {};
+    const spouseIncome = inputs.jointTaxation ? inputs.spouseIncome : null;
+    const ipBoxCoeff = inputs.ipBoxEnabled ? inputs.ipBoxCoeff : 0;
+    const evaluate = (form, computeOption) =>
+      evaluateVariant(form, inputs, candidates, computeOption);
+
+    variants.taxScale = evaluate("scale", (c, method) =>
+      computeScaleOption(c, method, 0, null),
+    );
+    if (inputs.jointTaxation) {
+      variants.taxScaleJoint = evaluate("scale", (c, method) =>
+        computeScaleOption(c, method, 0, spouseIncome),
+      );
+    }
+    variants.taxLinear = evaluate("linear", (c, method) =>
+      computeLinearOption(c, method, 0),
+    );
+    if (inputs.ipBoxEnabled) {
+      variants.taxScaleIpBox = evaluate("scale", (c, method) =>
+        computeScaleOption(c, method, ipBoxCoeff, null),
+      );
+      if (inputs.jointTaxation) {
+        variants.taxScaleIpBoxJoint = evaluate("scale", (c, method) =>
+          computeScaleOption(c, method, ipBoxCoeff, spouseIncome),
+        );
+      }
+      variants.taxLinearIpBox = evaluate("linear", (c, method) =>
+        computeLinearOption(c, method, ipBoxCoeff),
+      );
+    }
+
+    if (inputs.isMultipleRates) {
+      variants.ratesTotal = evaluate("ryczalt", (c, method) =>
+        computeRyczaltOption(
+          c,
+          method,
+          inputs.allocatedRevenues,
+          inputs.revenue,
+        ),
+      );
+    } else {
+      RYCZALT_VARIANT_IDS.forEach((rateId) => {
+        variants[rateId] = evaluate("ryczalt", (c, method) =>
+          computeRyczaltOption(
+            c,
+            method,
+            { [rateId]: inputs.revenue },
+            inputs.revenue,
+          ),
+        );
+      });
+    }
+
+    return { inputs, ctx, schedule, variants };
   }
 
   /* ==================================================
@@ -415,333 +1222,647 @@
           (!requiresJoint || jointOn) && (!requiresIpBox || ipBoxOn);
         row.classList.toggle("show", visible);
       });
+    // przy rozliczeniu wspólnym wiersze indywidualne dostają etykietę tekstową
+    document.querySelectorAll("[data-joint-only]").forEach((badge) => {
+      badge.hidden = !jointOn;
+    });
+  }
+
+  /* Przychody przypisane stawkom w trybie „Wiele stawek" (tylko widoczne
+     pola) oraz ich suma — jedno źródło dla wyniku, sumy i szczegółów. */
+  function getAllocatedRevenues() {
+    const revenues = {};
+    let total = 0;
+    document.querySelectorAll(".rate-input.show").forEach((input) => {
+      const value = amountOf(input.value);
+      revenues[input.dataset.for] = value;
+      total += value;
+    });
+    return { revenues, total };
+  }
+
+  function isAllocationComplete(totalRevenue, usedRevenue) {
+    return Math.abs(taxMath.round2(usedRevenue - totalRevenue)) < 0.005;
+  }
+
+  /* Stan podziału przychodu w trybie „Wiele stawek” (jedno źródło dla
+     komunikatu pod stawkami, karty najlepszego wariantu i eksportu). */
+  function getAllocationStatus(totalRevenue) {
+    const usedRevenue = getAllocatedRevenues().total;
+    const difference = taxMath.round2(usedRevenue - totalRevenue);
+    let state = "complete";
+    if (usedRevenue <= 0) state = "empty";
+    else if (difference > 0.004) state = "over";
+    else if (difference < -0.004) state = "under";
+    return {
+      state,
+      used: taxMath.round2(usedRevenue),
+      total: totalRevenue,
+      unallocated: taxMath.round2(Math.max(-difference, 0)),
+      over: taxMath.round2(Math.max(difference, 0)),
+    };
+  }
+
+  /* RC2: przy niepełnym podziale próg zdrowotnej i proporcje odliczeń
+     liczone są od CAŁEGO przychodu, a ryczałt tylko od kwot przypisanych –
+     wynik jest niepełny i nie trafia do rankingu. */
+  function getAllocationWarningText(status) {
+    if (status.state === "over") {
+      return `Przypisano o ${formatPLN(
+        status.over,
+      )} więcej niż przychód roczny — popraw podział. Suma ryczałtu jest pominięta w rankingu.`;
+    }
+    if (status.state === "under") {
+      return `Nieprzypisane ${formatPLN(
+        status.unallocated,
+      )} przychodu: ryczałt liczony tylko od kwot przypisanych stawkom, a próg składki zdrowotnej i proporcje odliczeń — od całego przychodu (${formatPLN(
+        status.total,
+      )}). Wynik jest niepełny i pominięty w rankingu.`;
+    }
+    return "";
   }
 
   function updateRemainingRevenue() {
-    const totalRevenue = parsePLN(DOM.revenueInput.value);
-    const rateInputsShown = document.querySelectorAll(".rate-input.show");
-    let usedRevenue = 0;
-    rateInputsShown.forEach((input) => {
-      if (input.value) usedRevenue += parsePLN(input.value);
-    });
-    const difference = usedRevenue - totalRevenue;
     if (!DOM.revenueInfoText) return;
-    if (difference > 0) {
-      DOM.revenueInfoText.innerHTML = `<span style="color: var(--error)">Przekroczono przychód o ${formatPLN(
-        difference,
-      )}</span>`;
-    } else {
-      const remainingRevenue = totalRevenue - usedRevenue;
-      DOM.revenueInfoText.textContent = `Przychód do rozdysponowania: ${formatPLN(
-        remainingRevenue,
-      )}`;
+    // niedokończony wpis przychodu (fokus) – zostaw poprzedni komunikat
+    if (
+      document.activeElement === DOM.revenueInput &&
+      isPendingInput(DOM.revenueInput)
+    ) {
+      return;
+    }
+    const status = getAllocationStatus(amountOf(DOM.revenueInput.value));
+    const container = DOM.revenueInfoText.parentElement;
+    const warning = status.state === "over" || status.state === "under";
+    if (container) container.classList.toggle("is-warning", warning);
+    const text = warning
+      ? getAllocationWarningText(status)
+      : `Przychód do rozdysponowania: ${formatPLN(
+          taxMath.round2(status.total - status.used),
+        )}`;
+    if (DOM.revenueInfoText.textContent !== text) {
+      DOM.revenueInfoText.textContent = text;
     }
   }
 
   /* ==================================================
      Main Calculation Function
   ================================================== */
-  function calculate() {
-    const rawRevenue = DOM.revenueInput.value;
-    const rawCosts = DOM.costsInput.value;
-    const revenue =
-      parseFloat(rawRevenue.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
-    const costs =
-      parseFloat(rawCosts.replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
-    const income = revenue - costs;
+  function getCheckedValue(radios, fallback) {
+    const checked = Array.from(radios || []).find((radio) => radio.checked);
+    return checked ? checked.value : fallback;
+  }
 
-    document.getElementById("income").value = formatPLN(income);
+  /* Opcje harmonogramu ZUS z formularza (nieprawidłowe daty są pomijane). */
+  function getZusOptions() {
+    const sex = getCheckedValue(DOM.zusSexRadios, "");
+    return {
+      enabled: !!(DOM.zusEnabled && DOM.zusEnabled.checked),
+      startDate: getValidDateValue(DOM.zusStartDate),
+      path: getCheckedValue(DOM.zusPathRadios, "full"),
+      sickness: !!(DOM.zusSickness && DOM.zusSickness.checked),
+      employment: !!(DOM.zusEmployment && DOM.zusEmployment.checked),
+      holiday: !!(DOM.zusHoliday && DOM.zusHoliday.checked),
+      birthDate: getValidDateValue(DOM.zusBirthDate),
+      sex: sex === "K" || sex === "M" ? sex : null,
+    };
+  }
 
-    const ipBoxCoeff = parseFloat(DOM.ipBoxCoeffInput.value) / 100;
-    const healthContribLimit = TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT;
-
-    const healthLinear = taxMath.calculateHealthLinear(income);
-    setCalculationValue("healthLinear", healthLinear);
-
-    const healthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
-    setCalculationValue("healthRyczalt", healthRyczalt);
-
-    const healthScale = taxMath.calculateHealthScale(income);
-    setCalculationValue("healthScale", healthScale);
-    const healthLinearDeduction = Math.min(healthLinear, healthContribLimit);
-    setCalculationValue("healthLinearDeduction", healthLinearDeduction);
-
-    let healthRyczaltDeduction;
-    if (DOM.multipleRatesToggle.checked) {
-      let totalAllocatedRevenue = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        totalAllocatedRevenue += parsePLN(input.value) || 0;
-      });
-      const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
-        totalAllocatedRevenue,
-      );
-      healthRyczaltDeduction =
-        ratesHealthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
-    } else {
-      healthRyczaltDeduction =
-        healthRyczalt * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR;
-    }
-    setCalculationValue("healthRyczaltDeduction", healthRyczaltDeduction);
-
-    const jointTaxationEnabled =
-      document.querySelector('input[name="jointTaxation"]:checked').value ===
-      "yes";
-    const spouseIncome = jointTaxationEnabled
-      ? parsePLN(document.getElementById("spouseIncome").value)
-      : 0;
-
-    const taxScale = calculateScaleTaxTotal(
-      income,
-      getCalculationValue("healthScale"),
-    );
-    document.getElementById("taxScale").value = formatPLN(taxScale);
-    if (jointTaxationEnabled) {
-      const taxScaleJoint = calculateJointScaleTaxTotal(
-        income,
-        spouseIncome,
-        getCalculationValue("healthScale"),
-      );
-      document.getElementById("taxScaleJoint").value = formatPLN(taxScaleJoint);
-    }
-
-    const taxLinear = calculateLinearTaxTotal(
-      income,
-      healthLinearDeduction,
-      healthLinear,
-    );
-    document.getElementById("taxLinear").value = formatPLN(taxLinear);
-
+  function gatherInputs() {
+    const isMultipleRates = DOM.multipleRatesToggle.checked;
+    const jointTaxation = isJointTaxationEnabled();
     const ipBoxEnabled = isIpBoxEnabled();
-    if (ipBoxEnabled) {
-      const taxScaleIpBox = calculateScaleIpBoxTaxTotal(
-        income,
-        ipBoxCoeff,
-        getCalculationValue("healthScale"),
-      );
-      document.getElementById("taxScaleIpBox").value = formatPLN(taxScaleIpBox);
-      if (jointTaxationEnabled) {
-        const taxScaleIpBoxJoint = calculateJointScaleIpBoxTaxTotal(
-          income,
-          spouseIncome,
-          ipBoxCoeff,
-          getCalculationValue("healthScale"),
-        );
-        document.getElementById("taxScaleIpBoxJoint").value =
-          formatPLN(taxScaleIpBoxJoint);
-      } else {
-        document.getElementById("taxScaleIpBoxJoint").value = "";
-      }
+    return {
+      revenue: amountOf(DOM.revenueInput.value),
+      costs: amountOf(DOM.costsInput.value),
+      otherIncome: amountOf(DOM.otherIncomeInput.value),
+      ipBoxEnabled,
+      ipBoxCoeff: ipBoxEnabled ? getIpBoxCoeffValue() : 0,
+      jointTaxation,
+      spouseIncome: jointTaxation ? amountOf(DOM.spouseIncomeInput.value) : 0,
+      isMultipleRates,
+      allocatedRevenues: isMultipleRates ? getAllocatedRevenues().revenues : {},
+      zus: getZusOptions(),
+    };
+  }
 
-      const taxLinearIpBox = calculateLinearIpBoxTaxTotal(
-        income,
-        ipBoxCoeff,
-        healthLinearDeduction,
-        healthLinear,
-      );
-      document.getElementById("taxLinearIpBox").value =
-        formatPLN(taxLinearIpBox);
+  /* Pełne obliczenie na podstawie aktualnego formularza (bez DOM-u wyników). */
+  function computeFromForm() {
+    const inputs = gatherInputs();
+    const schedule = taxMath.buildSocialSchedule(inputs.zus);
+    return computeVariants(inputs, schedule);
+  }
+
+  /* Surowe liczby wariantu w atrybutach data-* (odczyt programowy):
+     data-total   – wynik wariantu (= taxes − baseline + health + social),
+     data-taxes   – PIT/ryczałt/IP BOX + danina łącznie z innymi dochodami,
+     data-baseline– PIT + danina od samych innych dochodów (odejmowane),
+     data-health  – składka zdrowotna z działalności,
+     data-social  – składki społeczne ZUS + FP/FS w tym wariancie,
+     data-method  – wybrany sposób odliczenia składek społecznych,
+     data-holiday-month – miesiąc wakacji składkowych (1–12) lub brak. */
+  const VARIANT_DATA_KEYS = [
+    "total",
+    "taxes",
+    "baseline",
+    "health",
+    "social",
+    "method",
+    "holidayMonth",
+  ];
+
+  function writeVariantData(element, evaluation) {
+    const { best, ctx } = evaluation;
+    element.dataset.total = String(evaluation.total);
+    element.dataset.taxes = String(best.taxes);
+    element.dataset.baseline = String(ctx.baseline.total);
+    element.dataset.health = String(best.health);
+    element.dataset.social = String(ctx.socialTotal);
+    element.dataset.method = evaluation.method;
+    if (evaluation.holidayMonth) {
+      element.dataset.holidayMonth = String(evaluation.holidayMonth);
     } else {
-      clearIpBoxResultFields();
+      delete element.dataset.holidayMonth;
     }
+  }
 
-    const allocatedRevenues = {};
-    if (DOM.multipleRatesToggle.checked) {
-      const rateInputsVisible = document.querySelectorAll(".rate-input.show");
-      rateInputsVisible.forEach((input) => {
-        allocatedRevenues[input.dataset.for] = parsePLN(input.value) || 0;
-      });
-    }
+  function setVariantOutput(element, evaluation) {
+    if (!element) return;
+    element.value = formatPLN(evaluation.total);
+    writeVariantData(element, evaluation);
+  }
 
-    function getAllocatedOrFullRateValue(rateId) {
-      if (DOM.multipleRatesToggle.checked) {
-        const rateInput = document.querySelector(
-          `.rate-input[data-for="${rateId}"]`,
-        );
-        if (!rateInput || !rateInput.value) return 0;
-        return allocatedRevenues[rateId] || 0;
-      }
-      return revenue;
-    }
+  function clearVariantOutput(element) {
+    if (!element) return;
+    element.value = "";
+    VARIANT_DATA_KEYS.forEach((key) => delete element.dataset[key]);
+  }
 
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt2") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt2 = base * TAX_CONSTANTS.RYCZALT_RATE_2;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt2 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt2").value = formatPLN(ryczalt2);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt3") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt3 = base * TAX_CONSTANTS.RYCZALT_RATE_3;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt3 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt3").value = formatPLN(ryczalt3);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt5_5") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt5_5 = base * TAX_CONSTANTS.RYCZALT_RATE_5_5;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt5_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt5_5").value = formatPLN(ryczalt5_5);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt8_5") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt8_5 = base * TAX_CONSTANTS.RYCZALT_RATE_8_5;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt8_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt8_5").value = formatPLN(ryczalt8_5);
-    }
-    {
-      const allocated = getAllocatedOrFullRateValue("ryczalt8_5_12_5");
-      let ryczalt8_5_12_5;
-      const ryczalt85Threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
-      const rate85 = TAX_CONSTANTS.RYCZALT_RATE_8_5;
-      const rate125 = TAX_CONSTANTS.RYCZALT_RATE_12_5;
-      const taxAt85Threshold = ryczalt85Threshold * rate85;
+  function setText(element, text) {
+    if (element && element.textContent !== text) element.textContent = text;
+  }
 
-      if (allocated <= ryczalt85Threshold) {
-        ryczalt8_5_12_5 =
-          Math.max(
-            allocated - getCalculationValue("healthRyczaltDeduction"),
-            0,
-          ) * rate85;
+  /* field – kontrolka, która wywołała przeliczenie w trakcie pisania
+     (zdarzenie input/change pola z fokusem); jej niedokończony wpis nie
+     powoduje błędu – zostają ostatnie poprawne wyniki. */
+  function calculate(field = null) {
+    const typingField =
+      field && field.nodeType === 1 && document.activeElement === field
+        ? field
+        : null;
+    const validation = validateAllInputs(typingField);
+    updateZusPathAvailability();
+    if (!validation.valid) {
+      renderInvalidState(validation);
+      return;
+    }
+    if (validation.deferred) return;
+    if (DOM.resultsSection) delete DOM.resultsSection.dataset.state;
+
+    const result = computeFromForm();
+    const { inputs, ctx, variants } = result;
+
+    document.getElementById("income").value = formatPLN(ctx.income);
+
+    PIT_VARIANT_IDS.forEach((id) => {
+      const element = document.getElementById(id);
+      if (variants[id]) setVariantOutput(element, variants[id]);
+      else clearVariantOutput(element);
+    });
+
+    /* Ryczałt: w trybie jednej stawki każdy wariant to alternatywa dla
+       całego przychodu (odliczenia + składka zdrowotna + ZUS). W trybie
+       „Wiele stawek" pole stawki pokazuje tylko jej część ryczałtu, a
+       składki i PIT od innych dochodów są doliczane raz w sumie. */
+    RYCZALT_VARIANT_IDS.forEach((rateId) => {
+      const element = document.getElementById(rateId);
+      if (inputs.isMultipleRates) {
+        const rate = variants.ratesTotal.best.rates[rateId];
+        clearVariantOutput(element);
+        element.value = formatPLN(rate ? rate.tax : 0);
+        element.dataset.total = String(rate ? rate.tax : 0);
       } else {
-        ryczalt8_5_12_5 =
-          Math.max(
-            allocated -
-              (getCalculationValue("healthRyczaltDeduction") +
-                ryczalt85Threshold),
-            0,
-          ) *
-            rate125 +
-          taxAt85Threshold;
+        setVariantOutput(element, variants[rateId]);
       }
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt8_5_12_5 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt8_5_12_5").value =
-        formatPLN(ryczalt8_5_12_5);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt10") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt10 = base * TAX_CONSTANTS.RYCZALT_RATE_10;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt10 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt10").value = formatPLN(ryczalt10);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt12") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt12 = base * TAX_CONSTANTS.RYCZALT_RATE_12;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt12 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt12").value = formatPLN(ryczalt12);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt14") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt14 = base * TAX_CONSTANTS.RYCZALT_RATE_14;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt14 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt14").value = formatPLN(ryczalt14);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt15") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt15 = base * TAX_CONSTANTS.RYCZALT_RATE_15;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt15 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt15").value = formatPLN(ryczalt15);
-    }
-    {
-      const base = Math.max(
-        getAllocatedOrFullRateValue("ryczalt17") -
-          getCalculationValue("healthRyczaltDeduction"),
-        0,
-      );
-      let ryczalt17 = base * TAX_CONSTANTS.RYCZALT_RATE_17;
-      if (!DOM.multipleRatesToggle.checked)
-        ryczalt17 += getCalculationValue("healthRyczalt");
-      document.getElementById("ryczalt17").value = formatPLN(ryczalt17);
-    }
+    });
 
-    updateRatesTotal();
-    updateRevenueTags(revenue, allocatedRevenues);
-    rankAndSummarize(revenue, income);
+    updateRatesTotal(result);
+    if (inputs.isMultipleRates) updateRemainingRevenue();
+    renderZusStatus(result);
+    updateRevenueTags(inputs.revenue, inputs.allocatedRevenues);
+    renderRowDetails(result);
+    rankAndSummarize(result);
     refreshBreakdownIfOpen();
+  }
+
+  /* Błędne dane: żadnych wyników ani rankingu – jasny komunikat w panelu
+     wyników z listą pól do poprawienia. */
+  function renderInvalidState(validation) {
+    if (DOM.resultsSection) DOM.resultsSection.dataset.state = "invalid";
+    document.getElementById("income").value = "—";
+    COMPARISON_VARIANT_IDS.forEach((id) =>
+      clearVariantOutput(document.getElementById(id)),
+    );
+    const ratesTotalValue = document.getElementById("ratesTotalValue");
+    if (ratesTotalValue) {
+      ratesTotalValue.textContent = "";
+      VARIANT_DATA_KEYS.forEach((key) => delete ratesTotalValue.dataset[key]);
+    }
+    document.getElementById("ratesTotal").classList.add("hidden");
+    if (DOM.zusSummary) DOM.zusSummary.classList.add("hidden");
+    document
+      .querySelectorAll(".results-row, #ratesTotal")
+      .forEach((row) => row.classList.remove("is-best"));
+    document
+      .querySelectorAll(".results-row [data-bar]")
+      .forEach((bar) => (bar.style.width = "0%"));
+    document
+      .querySelectorAll(".results-row [data-detail]")
+      .forEach((detail) => (detail.textContent = ""));
+
+    if (validation.invalid.some((item) => item.id === "zusStartDate")) {
+      setText(DOM.zusStartHint, "");
+    }
+    if (validation.invalid.some((item) => item.id === "zusBirthDate")) {
+      setText(DOM.zusBirthHint, "");
+    }
+    DOM.bestCard.dataset.state = "invalid";
+    DOM.bestCardTitle.textContent = "Popraw dane";
+    DOM.bestCardAmount.textContent = "—";
+    DOM.bestCardSavings.textContent =
+      "Popraw zaznaczone pola, aby zobaczyć wyniki.";
+    const list = document.createElement("ul");
+    list.className = "best-card-errors";
+    validation.invalid.forEach((item) => {
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "best-card-error-link";
+      button.textContent = item.message
+        ? `${item.label}: ${item.message}`
+        : item.label;
+      const target =
+        item.element || (item.id && document.getElementById(item.id));
+      button.addEventListener("click", () => {
+        if (!target || !target.focus) return;
+        if (target.scrollIntoView) {
+          target.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+        target.focus({ preventScroll: true });
+      });
+      li.appendChild(button);
+      list.appendChild(li);
+    });
+    DOM.bestCardSavings.appendChild(list);
+    if (DOM.breakdownDetails && DOM.breakdownDetails.open && DOM.breakdownPre) {
+      DOM.breakdownPre.textContent = INVALID_EXPORT_TEXT;
+    }
+    announceResult("Wyniki ukryte: popraw zaznaczone pola.");
+    updateMobileJump(null);
   }
 
   /* ==================================================
      Update Rates Total
   ================================================== */
-  function updateRatesTotal() {
+  function updateRatesTotal(result) {
     const ratesTotalElement = document.getElementById("ratesTotal");
     const ratesTotalValueElement = document.getElementById("ratesTotalValue");
     const ratesHealthRyczaltElement = document.getElementById(
       "ratesHealthRyczaltValue",
     );
-
-    if (!DOM.multipleRatesToggle.checked) {
-      ratesTotalElement.classList.add("hidden");
-      return;
-    }
+    const ratesSocialRow = document.getElementById("ratesSocialRow");
+    const ratesSocialElement = document.getElementById("ratesSocialValue");
+    const ratesOtherRow = document.getElementById("ratesOtherPitRow");
+    const ratesOtherElement = document.getElementById("ratesOtherPitValue");
 
     const anyRateSelected = Array.from(DOM.ryczaltCheckboxes).some(
       (checkbox) => checkbox.checked,
     );
-    if (!anyRateSelected) {
+    const evaluation = result && result.variants.ratesTotal;
+    if (!DOM.multipleRatesToggle.checked || !anyRateSelected || !evaluation) {
       ratesTotalElement.classList.add("hidden");
       return;
     }
 
-    let totalAllocatedRevenue = 0;
-    document.querySelectorAll(".rate-input.show").forEach((input) => {
-      totalAllocatedRevenue += parsePLN(input.value) || 0;
-    });
-
-    const ratesHealthRyczalt = taxMath.getRyczaltHealthAnnualForRevenue(
-      totalAllocatedRevenue,
+    const { best, ctx } = evaluation;
+    const otherIncomeEffect = taxMath.round2(
+      best.scalePit + best.levy - ctx.baseline.total,
     );
 
-    let total = 0;
-    RYCZALT_VARIANT_IDS.forEach((id) => {
-      const input = document.getElementById(id);
-      if (input && input.closest(".input-group").style.display !== "none") {
-        total += parsePLN(input.value);
-      }
-    });
-
     ratesTotalElement.classList.remove("hidden");
-    ratesHealthRyczaltElement.textContent = formatPLN(ratesHealthRyczalt);
-    ratesTotalValueElement.textContent = formatPLN(total + ratesHealthRyczalt);
+    ratesHealthRyczaltElement.textContent = formatPLN(best.health);
+    if (ratesSocialElement) {
+      ratesSocialElement.textContent = formatPLN(ctx.socialTotal);
+      ratesSocialRow.classList.toggle("hidden", !ctx.zusEnabled);
+    }
+    if (ratesOtherElement) {
+      ratesOtherElement.textContent = formatPLN(otherIncomeEffect);
+      ratesOtherRow.classList.toggle("hidden", ctx.otherIncome <= 0);
+    }
+    ratesTotalValueElement.textContent = formatPLN(evaluation.total);
+    writeVariantData(ratesTotalValueElement, evaluation);
+  }
+
+  /* ==================================================
+     Składki ZUS – statusy pod polami i podsumowanie w wynikach
+  ================================================== */
+  const ZUS_REGIME_LABELS = {
+    full: "pełny ZUS",
+    pref: "mały ZUS",
+    ulga: "ulga na start",
+    inactive: "przed rozpoczęciem działalności",
+    employment: "etat – bez składek społecznych z JDG",
+    off: "składki nieuwzględniane",
+    holiday: "wakacje składkowe",
+  };
+
+  const ROMAN_MONTHS = [
+    "I",
+    "II",
+    "III",
+    "IV",
+    "V",
+    "VI",
+    "VII",
+    "VIII",
+    "IX",
+    "X",
+    "XI",
+    "XII",
+  ];
+
+  function formatMonthYear(monthObj) {
+    if (!monthObj) return "";
+    return `${String(monthObj.m).padStart(2, "0")}.${monthObj.y}`;
+  }
+
+  function getMonthRegimeKey(entry) {
+    return entry.holiday ? "holiday" : entry.regime;
+  }
+
+  /* Grupuje kolejne miesiące o tym samym trybie: „I–VI ulga na start · …”. */
+  function getScheduleRanges(schedule) {
+    const ranges = [];
+    schedule.months.forEach((entry) => {
+      const key = getMonthRegimeKey(entry);
+      const last = ranges[ranges.length - 1];
+      if (last && last.key === key) last.to = entry.month;
+      else ranges.push({ key, from: entry.month, to: entry.month });
+    });
+    return ranges.map((range) => {
+      const months =
+        range.from === range.to
+          ? ROMAN_MONTHS[range.from - 1]
+          : `${ROMAN_MONTHS[range.from - 1]}–${ROMAN_MONTHS[range.to - 1]}`;
+      return `${months} ${ZUS_REGIME_LABELS[range.key]}`;
+    });
+  }
+
+  function getZusPathHintText(schedule) {
+    if (!schedule.enabled) return "";
+    if (schedule.startsAfterYear) {
+      return "Data rozpoczęcia po 2026 r. — brak składek w 2026 r.";
+    }
+    if (schedule.employment) {
+      return "Umowa o pracę ≥ minimalnego: bez obowiązkowych składek społecznych z JDG przez cały rok — ulga na start i mały ZUS nie są stosowane (zdrowotna nadal należna).";
+    }
+    if (!schedule.startDate) {
+      const selected = getCheckedValue(DOM.zusPathRadios, "full");
+      return selected === "full"
+        ? "Ulga na start i mały ZUS wymagają daty rozpoczęcia działalności. Bez daty przyjmujemy działalność sprzed 2026 r. — pełny ZUS przez cały rok."
+        : "Wybrana ścieżka nie jest stosowana: ulga na start i mały ZUS wymagają daty rozpoczęcia działalności. Bez daty liczymy pełny ZUS przez cały 2026 r. — wpisz datę powyżej.";
+    }
+    if (schedule.path === "ulga") {
+      return `Ulga na start do ${formatMonthYear(
+        schedule.ulgaEnd,
+      )}, mały ZUS do ${formatMonthYear(schedule.prefEnd)}, potem pełny ZUS.`;
+    }
+    if (schedule.path === "pref") {
+      return `Mały ZUS do ${formatMonthYear(
+        schedule.prefEnd,
+      )}, potem pełny ZUS.`;
+    }
+    return "Pełny ZUS od dnia rozpoczęcia działalności.";
+  }
+
+  /* Ulga na start i mały ZUS mają sens tylko z datą rozpoczęcia – bez niej
+     opcje są wyłączone (zaznaczona wcześniej opcja zostaje, ale nie jest
+     stosowana; wyjaśnia to podpowiedź pod polem). */
+  function updateZusPathAvailability() {
+    const hasStart = !!getValidDateValue(DOM.zusStartDate);
+    DOM.zusPathRadios.forEach((radio) => {
+      if (radio.value === "full") return;
+      radio.disabled = !hasStart;
+      const option = radio.closest(".seg-opt");
+      if (option) option.classList.toggle("is-disabled", !hasStart);
+    });
+    if (DOM.zusPathHint) {
+      const selected = getCheckedValue(DOM.zusPathRadios, "full");
+      DOM.zusPathHint.dataset.state =
+        !hasStart && selected !== "full" ? "warn" : "";
+    }
+  }
+
+  function getZusHolidayStatusText(schedule) {
+    const { holiday } = schedule;
+    if (!schedule.enabled || !holiday.requested) return "";
+    if (holiday.eligibleMonths && holiday.eligibleMonths.length) {
+      const first = { y: schedule.year, m: holiday.eligibleMonths[0] };
+      const requestFirst = taxMath.monthFromIndex(
+        taxMath.monthIndex(first.y, first.m) - 1,
+      );
+      const defaultText = holiday.applied
+        ? ` Zwykle najkorzystniejszy jest miesiąc z najwyższymi składkami: ${formatMonthYear(
+            { y: schedule.year, m: holiday.month },
+          )} (−${formatPLN(holiday.saving)}).`
+        : "";
+      return `Przysługują za jeden miesiąc od ${formatMonthYear(
+        first,
+      )} (wniosek RWS najwcześniej w ${formatMonthYear(
+        requestFirst,
+      )}). Miesiąc dobierany osobno dla każdego wariantu.${defaultText}`;
+    }
+    if (holiday.reason === "employment") {
+      return "Nie przysługują: przy umowie o pracę ≥ minimalnego nie podlegasz obowiązkowo ubezpieczeniom społecznym z JDG.";
+    }
+    if (holiday.reason === "too-late") {
+      const afterUlga = schedule.path === "ulga" && schedule.startDate;
+      return `Nie przysługują w 2026 r.: pierwszy miesiąc podlegania ubezpieczeniom społecznym to ${formatMonthYear(
+        holiday.firstSocialMonth,
+      )}${
+        afterUlga ? " (w uldze na start wakacje nie przysługują)" : ""
+      }, a wniosek składa się w miesiącu poprzedzającym zwolnienie — najwcześniej za ${formatMonthYear(
+        holiday.earliestMonth,
+      )}.`;
+    }
+    return "Nie przysługują w 2026 r.: brak miesiąca, za który można uzyskać zwolnienie.";
+  }
+
+  function getZusBirthHintText(schedule, zusOptions) {
+    const defaultText =
+      "Opcjonalnie — tylko do zwolnienia z FP i FS (kobiety 55+, mężczyźni 60+).";
+    if (!zusOptions.birthDate) return defaultText;
+    if (!zusOptions.sex) {
+      return "Wybierz płeć, aby uwzględnić zwolnienie z FP i FS.";
+    }
+    const from = schedule.fpExemptFrom;
+    if (!from) return defaultText;
+    const fromIdx = taxMath.monthIndex(from.y, from.m);
+    if (fromIdx <= taxMath.monthIndex(schedule.year, 1)) {
+      return "Zwolnienie z FP i FS przez cały 2026 r.";
+    }
+    if (fromIdx > taxMath.monthIndex(schedule.year, 12)) {
+      return `Zwolnienie z FP i FS dopiero od ${formatMonthYear(
+        from,
+      )} (po 2026 r.).`;
+    }
+    return `Zwolnienie z FP i FS od ${formatMonthYear(from)}.`;
+  }
+
+  function formatDatePL(dateObj) {
+    if (!dateObj) return "";
+    return `${String(dateObj.d).padStart(2, "0")}.${String(dateObj.m).padStart(
+      2,
+      "0",
+    )}.${dateObj.y}`;
+  }
+
+  function getZusStartHintText(schedule) {
+    const n = schedule.healthMonths;
+    if (!schedule.startDate) {
+      return "Puste = działalność przez cały 2026 r. (12 mies. składki zdrowotnej, pełny ZUS).";
+    }
+    if (schedule.startsAfterYear) {
+      return "Działalność rozpoczyna się po 2026 r. — brak składek w 2026 r.";
+    }
+    if (schedule.startsBeforeYear) {
+      return `Działalność od ${formatDatePL(
+        schedule.startDate,
+      )} — składka zdrowotna za 12 mies. 2026 r.`;
+    }
+    return `Składka zdrowotna za ${n} mies. 2026 r. (od ${formatMonthYear(
+      schedule.startDate,
+    )}, pełna kwota także za niepełny miesiąc).`;
+  }
+
+  const MONTH_NAMES = [
+    "styczeń",
+    "luty",
+    "marzec",
+    "kwiecień",
+    "maj",
+    "czerwiec",
+    "lipiec",
+    "sierpień",
+    "wrzesień",
+    "październik",
+    "listopad",
+    "grudzień",
+  ];
+
+  /* Kwota do chipu miesiąca: pełne złote (dokładne kwoty – w etykiecie
+     dostępnej, w tabeli w szczegółach i w eksporcie). */
+  function formatChipAmount(value) {
+    return new Intl.NumberFormat("pl-PL", {
+      maximumFractionDigits: 0,
+    }).format(Math.round(value));
+  }
+
+  function renderZusStatus(result) {
+    const { schedule, ctx, inputs } = result;
+
+    setText(DOM.zusStartHint, getZusStartHintText(schedule));
+    setText(DOM.zusPathHint, getZusPathHintText(schedule));
+    if (DOM.zusHolidayStatus) {
+      setText(DOM.zusHolidayStatus, getZusHolidayStatusText(schedule));
+      DOM.zusHolidayStatus.dataset.state = schedule.holiday.applied
+        ? "applied"
+        : schedule.holiday.reason || "";
+    }
+    setText(DOM.zusBirthHint, getZusBirthHintText(schedule, inputs.zus));
+    setText(
+      DOM.comparePitMeta,
+      schedule.enabled ? "PIT + zdrowotna + ZUS, zł" : "PIT + zdrowotna, zł",
+    );
+
+    if (!DOM.zusSummary) return;
+    DOM.zusSummary.classList.toggle("hidden", !schedule.enabled);
+    DOM.zusSocialTotal.textContent = formatPLN(schedule.totals.total);
+    DOM.zusSocialTotal.dataset.total = String(schedule.totals.total);
+    DOM.zusSocialTotal.dataset.social = String(schedule.totals.social);
+    DOM.zusSocialTotal.dataset.fpfs = String(schedule.totals.fpfs);
+    DOM.zusFpTotal.textContent = formatPLN(schedule.totals.fpfs);
+    DOM.zusHealthMonths.textContent = String(ctx.healthMonths);
+    setText(DOM.zusSummaryMeta, "wliczone w każdy wariant");
+    if (DOM.zusScheduleSummary) {
+      DOM.zusScheduleSummary.textContent = getScheduleRanges(schedule).join(
+        " · ",
+      );
+    }
+    if (DOM.zusMonths) {
+      DOM.zusMonths.textContent = "";
+      const regimesUsed = [];
+      let anyPartial = false;
+      schedule.months.forEach((entry) => {
+        const item = document.createElement("li");
+        const key = getMonthRegimeKey(entry);
+        if (!regimesUsed.includes(key)) regimesUsed.push(key);
+        item.dataset.regime = key;
+        if (entry.partial) {
+          item.dataset.partial = "true";
+          anyPartial = true;
+        }
+        const amount = entry.total;
+        const label = document.createElement("span");
+        label.className = "zus-month-label";
+        label.setAttribute("aria-hidden", "true");
+        label.textContent = `${ROMAN_MONTHS[entry.month - 1]}${
+          entry.partial ? "*" : ""
+        }`;
+        const value = document.createElement("span");
+        value.className = "zus-month-amount";
+        value.setAttribute("aria-hidden", "true");
+        value.textContent = formatChipAmount(amount);
+        const srText = document.createElement("span");
+        srText.className = "sr-only";
+        srText.textContent = `${MONTH_NAMES[entry.month - 1]}: ${
+          ZUS_REGIME_LABELS[key]
+        }${entry.partial ? " (niepełny miesiąc)" : ""}, ${formatPLN(amount)}${
+          entry.holiday
+            ? ` (zwolnione ${formatPLN(entry.waived.total)})`
+            : ""
+        }`;
+        item.title = srText.textContent;
+        item.append(label, value, srText);
+        DOM.zusMonths.appendChild(item);
+      });
+      renderZusLegend(regimesUsed, anyPartial);
+    }
+  }
+
+  function renderZusLegend(regimesUsed, anyPartial) {
+    const legend = document.getElementById("zusLegend");
+    if (!legend) return;
+    legend.textContent = "";
+    regimesUsed.forEach((key) => {
+      const item = document.createElement("li");
+      item.dataset.regime = key;
+      const swatch = document.createElement("span");
+      swatch.className = "zus-legend-swatch";
+      swatch.setAttribute("aria-hidden", "true");
+      item.append(swatch, document.createTextNode(ZUS_REGIME_LABELS[key]));
+      legend.appendChild(item);
+    });
+    if (anyPartial) {
+      const item = document.createElement("li");
+      item.className = "zus-legend-partial";
+      item.textContent = "* niepełny miesiąc (podstawa proporcjonalna)";
+      legend.appendChild(item);
+    }
+    const unit = document.createElement("li");
+    unit.className = "zus-legend-unit";
+    unit.textContent = "kwoty: składki społeczne + FP/FS w miesiącu, zł";
+    legend.appendChild(unit);
   }
 
   /* ==================================================
@@ -755,110 +1876,224 @@
       if (!tagEl) return;
       if (DOM.multipleRatesToggle.checked) {
         const allocated = allocatedRevenues[id] || 0;
-        tagEl.textContent = allocated
-          ? `od ${formatPLN(allocated)} przychodu`
-          : "";
+        tagEl.textContent = `część ryczałtu${
+          allocated ? ` · od ${formatPLN(allocated)} przychodu` : ""
+        }`;
       } else {
         tagEl.textContent = revenue ? `od ${formatPLN(revenue)} przychodu` : "";
       }
     });
   }
 
-  function getVisibleResultVariant(id) {
-    const input = document.getElementById(id);
-    if (!input) return null;
-    const row = input.closest(".input-group");
-    if (!row) return null;
+  /* ==================================================
+     Linia składników pod każdym wynikiem
+  ================================================== */
+  const RYCZALT_TIER_LABELS = [
+    "próg I (do 60 tys.)",
+    "próg II (60–300 tys.)",
+    "próg III (ponad 300 tys.)",
+  ];
 
-    const inlineHidden = row.style.display === "none";
-    const computedHidden =
-      !inlineHidden &&
-      typeof window !== "undefined" &&
-      window.getComputedStyle &&
-      window.getComputedStyle(row).display === "none";
-    if (inlineHidden || computedHidden) return null;
-
-    const raw = (input.value || "").trim();
-    if (!raw) return null;
-    const value = parsePLN(raw);
-    if (!Number.isFinite(value)) return null;
-
-    return { id, value, row };
+  function getRyczaltTierLabel(thresholdRevenue) {
+    if (thresholdRevenue > TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH) {
+      return RYCZALT_TIER_LABELS[2];
+    }
+    if (thresholdRevenue > TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW) {
+      return RYCZALT_TIER_LABELS[1];
+    }
+    return RYCZALT_TIER_LABELS[0];
   }
 
-  function getVisibleRatesTotalVariant() {
-    const row = document.getElementById("ratesTotal");
-    const valueElement = document.getElementById("ratesTotalValue");
-    if (!row || !valueElement || row.classList.contains("hidden")) return null;
-
-    const value = parsePLN(valueElement.textContent || "");
-    if (!Number.isFinite(value)) return null;
-
-    return { id: "ratesTotal", value, row };
+  function getVariantDetailText(evaluation) {
+    const { best, ctx } = evaluation;
+    const taxes = taxMath.round2(best.taxes - ctx.baseline.total);
+    let taxLabel = "PIT";
+    if (best.form === "ryczalt") {
+      taxLabel = ctx.otherIncome > 0 ? "ryczałt + zmiana PIT" : "ryczałt";
+    } else if (best.joint) {
+      taxLabel = "PIT przypisany";
+    }
+    if (best.ipBoxCoeff > 0) taxLabel += " (z IP BOX 5%)";
+    const parts = [
+      `${taxLabel} ${formatAmountPL(taxes)}`,
+      best.form === "ryczalt"
+        ? `zdrowotna ${formatAmountPL(best.health)} (${getRyczaltTierLabel(
+            best.thresholdRevenue,
+          )}, ${formatAmountPL(best.healthMonthly)}/mies.)`
+        : `zdrowotna ${formatAmountPL(best.health)}`,
+    ];
+    if (ctx.zusEnabled) {
+      parts.push(`ZUS społ. ${formatAmountPL(ctx.socialTotal)}`);
+      if (ctx.social > 0) {
+        parts.push(`składki: ${getSocialMethodLabel(evaluation)}`);
+      }
+      if (evaluation.holidayMonth) {
+        parts.push(`wakacje: ${ROMAN_MONTHS[evaluation.holidayMonth - 1]}`);
+      }
+    }
+    return parts.join(" · ");
   }
 
-  function sortPitComparisonRows() {
+  function ensureRowDetail(row) {
+    let detail = row.querySelector("[data-detail]");
+    if (!detail) {
+      detail = document.createElement("span");
+      detail.className = "results-row-detail";
+      detail.dataset.detail = "";
+      row.appendChild(detail);
+    }
+    return detail;
+  }
+
+  function renderRowDetails(result) {
+    const { inputs, variants } = result;
+    COMPARISON_VARIANT_IDS.forEach((id) => {
+      const row = document.querySelector(`.results-row[data-variant="${id}"]`);
+      if (!row) return;
+      const detail = ensureRowDetail(row);
+      const isRatePart =
+        inputs.isMultipleRates && RYCZALT_VARIANT_IDS.includes(id);
+      row.classList.toggle("is-rate-part", isRatePart);
+      let text = "";
+      if (isRatePart) {
+        text =
+          "Sam ryczałt od tej stawki — bez składki zdrowotnej, ZUS i PIT od innych dochodów; pełne obciążenie w wierszu „Łącznie” poniżej.";
+      } else if (variants[id]) {
+        text = getVariantDetailText(variants[id]);
+      }
+      setText(detail, text);
+    });
+    const ratesDetail = document.getElementById("ratesTotalDetail");
+    if (ratesDetail) {
+      setText(
+        ratesDetail,
+        variants.ratesTotal ? getVariantDetailText(variants.ratesTotal) : "",
+      );
+    }
+  }
+
+  /* ==================================================
+     Ranking (z wyniku obliczeń – jedno źródło dla karty, kolejności
+     wierszy i eksportu)
+  ================================================== */
+  function getCheckedRateIds() {
+    return RYCZALT_VARIANT_IDS.filter((rateId) => {
+      const checkbox = document.querySelector(
+        `input[type="checkbox"][data-target="${rateId}"]`,
+      );
+      return checkbox && checkbox.checked;
+    });
+  }
+
+  function buildRanking(result) {
+    const { inputs, variants, ctx } = result;
+    const entries = [];
+    const excluded = [];
+    const add = (id, index) => {
+      const evaluation = variants[id];
+      if (!evaluation) return;
+      const total = evaluation.total;
+      // tylko warianty wspólne mogą być ujemne (zob.
+      // calculateJointScalePitAttributed); inne ≤ 0 nie są realną opcją
+      if (total === 0) return;
+      if (total < 0 && !JOINT_VARIANT_IDS.includes(id)) return;
+      entries.push({ id, index, total, label: VARIANT_LABELS[id] || id });
+    };
+    PIT_VARIANT_IDS.forEach((id, index) => add(id, index));
+    const rateIds = getCheckedRateIds();
+    let allocation = null;
+    if (inputs.isMultipleRates) {
+      if (rateIds.length && variants.ratesTotal) {
+        allocation = getAllocationStatus(inputs.revenue);
+        if (allocation.state === "complete") {
+          if (variants.ratesTotal.total > 0) {
+            add("ratesTotal", COMPARISON_VARIANT_IDS.length);
+          }
+        } else {
+          excluded.push({
+            id: "ratesTotal",
+            reason:
+              allocation.state === "empty"
+                ? "Ryczałt (wiele stawek) pominięty — nie przypisano przychodu do stawek."
+                : allocation.state === "under"
+                  ? `Ryczałt (wiele stawek) pominięty — nieprzypisane ${formatPLN(
+                      allocation.unallocated,
+                    )} przychodu.`
+                  : `Ryczałt (wiele stawek) pominięty — przypisano o ${formatPLN(
+                      allocation.over,
+                    )} więcej niż przychód.`,
+          });
+        }
+      }
+    } else {
+      rateIds.forEach((id) => add(id, COMPARISON_VARIANT_IDS.indexOf(id)));
+    }
+    entries.sort((a, b) => a.total - b.total || a.index - b.index);
+    return {
+      entries,
+      excluded,
+      allocation,
+      meaningful: inputs.revenue > 0 || ctx.income !== 0,
+    };
+  }
+
+  /* Kolejność wierszy: od najniższego wyniku. W trybie „Wiele stawek”
+     wiersze części ryczałtu stoją razem, bezpośrednio przed sumą „Łącznie”,
+     a cała grupa jest ustawiana wg sumy (pominięta w rankingu – na końcu). */
+  function sortComparisonRows(result, ranking) {
     const container = document.getElementById("comparePit");
     if (!container) return;
-
-    const visibleVariants = COMPARISON_VARIANT_IDS.map((id, index) => {
-      const variant = getVisibleResultVariant(id);
-      return variant ? { ...variant, index } : null;
-    }).filter(Boolean);
-    const ratesTotalVariant = getVisibleRatesTotalVariant();
-    if (ratesTotalVariant) {
-      visibleVariants.push({
-        ...ratesTotalVariant,
+    const { inputs, variants } = result;
+    const units = [];
+    PIT_VARIANT_IDS.forEach((id, index) => {
+      if (!variants[id]) return;
+      const row = container.querySelector(`.results-row[data-variant="${id}"]`);
+      if (row) units.push({ rows: [row], value: variants[id].total, index });
+    });
+    const rateIds = getCheckedRateIds();
+    if (inputs.isMultipleRates) {
+      const ranked = ranking.entries.some((entry) => entry.id === "ratesTotal");
+      const rows = rateIds
+        .map((id) => container.querySelector(`.results-row[data-variant="${id}"]`))
+        .filter(Boolean);
+      const totalBlock = document.getElementById("ratesTotal");
+      if (totalBlock) rows.push(totalBlock);
+      units.push({
+        rows,
+        value:
+          ranked && variants.ratesTotal ? variants.ratesTotal.total : Infinity,
         index: COMPARISON_VARIANT_IDS.length,
       });
-    }
-
-    visibleVariants
-      .sort((a, b) => a.value - b.value || a.index - b.index)
-      .forEach(({ row }) => {
-        container.appendChild(row);
+    } else {
+      rateIds.forEach((id) => {
+        const row = container.querySelector(`.results-row[data-variant="${id}"]`);
+        if (row && variants[id]) {
+          units.push({
+            rows: [row],
+            value: variants[id].total,
+            index: COMPARISON_VARIANT_IDS.indexOf(id),
+          });
+        }
       });
+      const totalBlock = document.getElementById("ratesTotal");
+      if (totalBlock) container.appendChild(totalBlock);
+    }
+    units
+      .sort((a, b) => a.value - b.value || a.index - b.index)
+      .forEach((unit) => unit.rows.forEach((row) => container.appendChild(row)));
+  }
+
+  function getRowForVariant(id) {
+    if (id === "ratesTotal") return document.getElementById("ratesTotal");
+    return document.querySelector(`.results-row[data-variant="${id}"]`);
   }
 
   /* ==================================================
      Rank visible variants & populate the best card
   ================================================== */
-  function rankAndSummarize(revenue, income) {
-    const isMultiRate = !!(
-      DOM.multipleRatesToggle && DOM.multipleRatesToggle.checked
-    );
-    const variants = [];
-
-    const collectVariant = (id) => {
-      const variant = getVisibleResultVariant(id);
-      if (!variant) return;
-      const { value } = variant;
-      if (value <= 0) return;
-      variants.push(variant);
-    };
-
-    PIT_VARIANT_IDS.forEach(collectVariant);
-
-    if (isMultiRate) {
-      // in multi-rate mode the per-rate field shows only that rate's PIT
-      // share (without health). The user-meaningful ryczałt cost is the
-      // aggregated "Łącznie PIT + składka zdrowotna". Compare that as one option,
-      // but only once the user actually allocated some revenue to a rate.
-      let allocatedRevenue = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        allocatedRevenue += parsePLN(input.value) || 0;
-      });
-      const ratesTotalVariant = getVisibleRatesTotalVariant();
-      if (
-        ratesTotalVariant &&
-        allocatedRevenue > 0 &&
-        ratesTotalVariant.value > 0
-      ) {
-        variants.push(ratesTotalVariant);
-      }
-    } else {
-      RYCZALT_VARIANT_IDS.forEach(collectVariant);
-    }
+  function rankAndSummarize(result) {
+    const ranking = buildRanking(result);
+    const variants = ranking.entries;
 
     document
       .querySelectorAll(".results-row, #ratesTotal")
@@ -867,50 +2102,120 @@
       .querySelectorAll(".results-row [data-bar]")
       .forEach((b) => (b.style.width = "0%"));
 
-    sortPitComparisonRows();
+    sortComparisonRows(result, ranking);
 
-    const meaningful = revenue > 0 || income !== 0;
-
-    if (!variants.length || !meaningful) {
+    if (!variants.length || !ranking.meaningful) {
       DOM.bestCard.dataset.state = "empty";
       DOM.bestCardTitle.textContent = "—";
       DOM.bestCardAmount.textContent = "—";
       DOM.bestCardSavings.textContent =
         "Wprowadź dane, aby zobaczyć najkorzystniejszy wariant.";
+      appendExcludedNotes(ranking);
+      announceResult("");
+      updateMobileJump(null);
       return;
     }
 
-    const sorted = [...variants].sort((a, b) => a.value - b.value);
-    const best = sorted[0];
-    const worst = sorted[sorted.length - 1];
-    const second = sorted[1];
+    const best = variants[0];
+    const worst = variants[variants.length - 1];
+    const second = variants[1];
 
-    best.row.classList.add("is-best");
+    const bestRow = getRowForVariant(best.id);
+    if (bestRow) bestRow.classList.add("is-best");
 
-    const maxVal = Math.max(...variants.map((v) => v.value), 1);
+    const maxVal = Math.max(...variants.map((v) => v.total), 1);
     variants.forEach((v) => {
-      const bar = v.row.querySelector("[data-bar]");
+      const row = getRowForVariant(v.id);
+      const bar = row && row.querySelector("[data-bar]");
       if (!bar) return;
-      const pct = maxVal > 0 ? (v.value / maxVal) * 100 : 0;
+      const pct = maxVal > 0 ? Math.max(v.total / maxVal, 0) * 100 : 0;
       bar.style.width = pct.toFixed(1) + "%";
     });
 
     DOM.bestCard.dataset.state = "ranked";
-    DOM.bestCardTitle.textContent = VARIANT_LABELS[best.id] || best.id;
-    DOM.bestCardAmount.textContent = formatPLN(best.value);
+    DOM.bestCardTitle.textContent = best.label;
+    DOM.bestCardAmount.textContent = formatPLN(best.total);
 
-    if (second && second.value > best.value) {
-      const delta = second.value - best.value;
+    if (second && second.total > best.total) {
+      const delta = taxMath.round2(second.total - best.total);
       DOM.bestCardSavings.innerHTML =
         `<strong>−${formatPLN(delta)}</strong>` +
-        ` vs. drugi najlepszy wariant (${VARIANT_LABELS[second.id] || second.id})`;
-    } else if (worst && worst.value > best.value) {
-      const delta = worst.value - best.value;
-      DOM.bestCardSavings.innerHTML = `<strong>−${formatPLN(delta)}</strong> vs. najwyższy wariant`;
+        ` vs. drugi najlepszy wariant (${second.label})`;
+    } else if (second && worst.total > best.total) {
+      const tied = variants
+        .filter((v) => Math.abs(v.total - best.total) < 0.005)
+        .map((v) => v.label);
+      const delta = taxMath.round2(worst.total - best.total);
+      DOM.bestCardSavings.innerHTML = `<strong>−${formatPLN(
+        delta,
+      )}</strong> vs. najwyższy wariant`;
+      const note = document.createElement("span");
+      note.className = "best-card-note";
+      note.textContent = `Ex aequo: ${tied.join(" / ")}.`;
+      DOM.bestCardSavings.appendChild(note);
+    } else if (variants.length > 1) {
+      DOM.bestCardSavings.textContent =
+        "Wszystkie porównywane warianty dają tę samą kwotę.";
     } else {
       DOM.bestCardSavings.textContent =
-        "Tylko jeden widoczny wariant — wybierz więcej, aby porównać.";
+        "Tylko jeden porównywany wariant — wybierz więcej, aby porównać.";
     }
+
+    if (best.total < 0) {
+      const note = document.createElement("span");
+      note.className = "best-card-note";
+      note.textContent =
+        "Kwota ujemna: wspólne rozliczenie obniża PIT małżonka bardziej, niż wynosi Twoje obciążenie (oszczędność gospodarstwa domowego).";
+      DOM.bestCardSavings.appendChild(note);
+    }
+    if (/^ryczalt|^ratesTotal$/.test(best.id)) {
+      const note = document.createElement("span");
+      note.className = "best-card-note";
+      note.textContent =
+        "Stawka ryczałtu zależy od rodzaju działalności (art. 12 ustawy o ryczałcie) — zweryfikuj ją dla klienta.";
+      DOM.bestCardSavings.appendChild(note);
+    }
+    appendExcludedNotes(ranking);
+    announceResult(
+      `Najniższe obciążenie: ${best.label}, ${formatPLN(best.total)}.`,
+    );
+    updateMobileJump(best);
+  }
+
+  function appendExcludedNotes(ranking) {
+    ranking.excluded.forEach((item) => {
+      const note = document.createElement("span");
+      note.className = "best-card-note best-card-note--warn";
+      note.textContent = item.reason;
+      DOM.bestCardSavings.appendChild(note);
+    });
+  }
+
+  /* Krótki komunikat dla czytników ekranu (zamiast ogłaszania całej sekcji
+     wyników przy każdym naciśnięciu klawisza) – z opóźnieniem. */
+  let announceTimeout = null;
+  function announceResult(text) {
+    const live = document.getElementById("resultsLive");
+    if (!live) return;
+    if (announceTimeout) clearTimeout(announceTimeout);
+    announceTimeout = setTimeout(() => {
+      setText(live, text);
+      announceTimeout = null;
+    }, 700);
+  }
+
+  /* Pasek „Przejdź do wyników” (tylko na wąskich ekranach, CSS). */
+  function updateMobileJump(best) {
+    const summary = document.getElementById("mobileJumpSummary");
+    if (!summary) return;
+    setText(
+      summary,
+      best
+        ? `${best.label} · ${formatPLN(best.total)}`
+        : DOM.bestCard.dataset.state === "invalid"
+          ? "Popraw zaznaczone pola"
+          : "Wprowadź dane",
+    );
   }
 
   /* ==================================================
@@ -926,33 +2231,60 @@
   /* ==================================================
      Event Handlers
   ================================================== */
-  function handleCalculate() {
-    const isRevenueValid = validateInput(DOM.revenueInput.value, "revenue");
-    const isCostsValid = validateInput(DOM.costsInput.value, "costs");
-    const isIpBoxValid = isIpBoxEnabled()
-      ? validateIpBoxCoeff(DOM.ipBoxCoeffInput.value)
-      : true;
-
-    if (isRevenueValid && isCostsValid && isIpBoxValid) {
-      DOM.revenueInput.value = formatPLN(parsePLN(DOM.revenueInput.value));
-      DOM.costsInput.value = formatPLN(parsePLN(DOM.costsInput.value));
-      calculate();
+  /* Zwinięte sekcje (IP BOX, dochód małżonka, składki społeczne) nie
+     mogą przyjmować fokusu ani być czytane – inert + aria-hidden. */
+  function setRevealed(element, revealed) {
+    if (!element) return;
+    element.classList.toggle("is-revealed", revealed);
+    if (revealed) {
+      element.removeAttribute("inert");
+      element.removeAttribute("aria-hidden");
+    } else {
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
     }
+  }
 
+  function syncRyczaltRowVisibility() {
     DOM.ryczaltCheckboxes.forEach((checkbox) => {
-      const targetId = checkbox.dataset.target;
-      const targetInput = document.getElementById(targetId);
-      const targetGroup = targetInput.closest(".input-group");
-      targetGroup.style.display = checkbox.checked ? "grid" : "none";
+      const targetInput = document.getElementById(checkbox.dataset.target);
+      const targetGroup = targetInput && targetInput.closest(".input-group");
+      if (targetGroup) {
+        targetGroup.style.display = checkbox.checked ? "grid" : "none";
+      }
     });
+  }
 
-    const jointTaxationSelected = document.querySelector(
-      'input[name="jointTaxation"]:checked',
-    ).value;
-    if (jointTaxationSelected === "no") {
-      DOM.spouseIncomeCard.classList.remove("is-revealed");
+  /* Formatuje pole kwotowe („12 345,67 zł”) tylko, gdy wartość jest
+     poprawna – błędnej nie zmieniamy, żeby użytkownik widział, co wpisał. */
+  function formatAmountField(input, { formatEmpty = false } = {}) {
+    if (!input) return;
+    if (input.value.trim() === "" && !formatEmpty) return;
+    const checked = checkAmount(input.value);
+    // bez „zł” tam, gdzie jednostka stoi obok pola (.input-suffix);
+    // pola przychodu stawek (chipy) nie mają przyrostka
+    const hasSuffix = !!(
+      input.parentElement && input.parentElement.querySelector(".input-suffix")
+    );
+    if (checked.ok) {
+      input.value = hasSuffix
+        ? formatAmountPL(checked.value)
+        : formatPLN(checked.value);
+    }
+  }
+
+  function handleCalculate() {
+    syncRyczaltRowVisibility();
+    if (!isJointTaxationEnabled()) {
+      setRevealed(DOM.spouseIncomeCard, false);
       DOM.spouseIncomeInput.setAttribute("readonly", "");
-      DOM.spouseIncomeInput.value = formatPLN(0);
+      DOM.spouseIncomeInput.value = formatAmountPL(0);
+    }
+    calculate();
+    if (DOM.bestCard.dataset.state !== "invalid") {
+      formatAmountField(DOM.revenueInput, { formatEmpty: true });
+      formatAmountField(DOM.costsInput, { formatEmpty: true });
+      formatAmountField(DOM.otherIncomeInput);
     }
   }
 
@@ -960,31 +2292,42 @@
      Reset
   ================================================== */
   function resetAll() {
+    if (
+      typeof window.confirm === "function" &&
+      !window.confirm("Wyzerować wszystkie dane? Tej operacji nie można cofnąć.")
+    ) {
+      return;
+    }
     DOM.revenueInput.value = "";
     DOM.costsInput.value = "";
-    document.getElementById("revenue-error").textContent = "";
-    document.getElementById("revenue-error").classList.remove("visible");
-    document.getElementById("costs-error").textContent = "";
-    document.getElementById("costs-error").classList.remove("visible");
-    DOM.revenueInput.classList.remove("error");
-    DOM.costsInput.classList.remove("error");
+    DOM.otherIncomeInput.value = "";
+
+    DOM.zusEnabled.checked = true;
+    setRevealed(DOM.zusReveal, true);
+    DOM.zusStartDate.value = "";
+    DOM.zusBirthDate.value = "";
+    DOM.zusPathRadios.forEach((radio) => {
+      radio.checked = radio.value === "full";
+    });
+    DOM.zusSexRadios.forEach((radio) => {
+      radio.checked = radio.value === "";
+    });
+    DOM.zusSickness.checked = true;
+    DOM.zusEmployment.checked = false;
+    DOM.zusHoliday.checked = false;
 
     DOM.ipBoxCoeffInput.value = "25";
     syncIpBoxRange();
-    document.getElementById("ipBoxCoeff-error").textContent = "";
-    document.getElementById("ipBoxCoeff-error").classList.remove("visible");
-    DOM.ipBoxCoeffInput.classList.remove("error");
-
     document.querySelector('input[name="ipBoxEnabled"][value="no"]').checked =
       true;
-    if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.remove("is-revealed");
+    setRevealed(DOM.ipBoxReveal, false);
     clearIpBoxResultFields();
 
     document.querySelector('input[name="jointTaxation"][value="no"]').checked =
       true;
-    DOM.spouseIncomeCard.classList.remove("is-revealed");
+    setRevealed(DOM.spouseIncomeCard, false);
     DOM.spouseIncomeInput.setAttribute("readonly", "");
-    DOM.spouseIncomeInput.value = formatPLN(0);
+    DOM.spouseIncomeInput.value = formatAmountPL(0);
     updateConditionalRowsVisibility();
 
     DOM.multipleRatesToggle.checked = false;
@@ -994,10 +2337,7 @@
       "flex-end";
     DOM.ryczaltCheckboxes.forEach((cb) => {
       cb.checked = false;
-      const targetId = cb.dataset.target;
-      const targetInput = document.getElementById(targetId);
-      const targetGroup = targetInput.closest(".input-group");
-      targetGroup.style.display = "none";
+      const targetInput = document.getElementById(cb.dataset.target);
       const rateInput = cb
         .closest(".checkbox-wrapper")
         .querySelector(".rate-input");
@@ -1008,6 +2348,7 @@
       }
       targetInput.value = formatPLN(0);
     });
+    syncRyczaltRowVisibility();
     document.getElementById("ratesTotal").classList.add("hidden");
     calculate();
     DOM.revenueInput.focus();
@@ -1021,6 +2362,7 @@
   [
     DOM.revenueInput,
     DOM.costsInput,
+    DOM.otherIncomeInput,
     DOM.ipBoxCoeffInput,
     DOM.spouseIncomeInput,
   ].forEach((input) => {
@@ -1028,59 +2370,52 @@
     input.addEventListener("click", selectInputValue);
   });
 
-  DOM.revenueInput.addEventListener("input", (e) => {
-    const isValid = validateInput(e.target.value, "revenue");
-    if (isValid) {
-      const cursorPos = e.target.selectionStart;
-      const originalValue = e.target.value;
+  /* Kwoty: przeliczenie przy każdej zmianie (calculate() sprawdza wszystkie
+     pola); po opuszczeniu pola poprawna kwota jest formatowana. */
+  [DOM.revenueInput, DOM.costsInput, DOM.otherIncomeInput].forEach((input) => {
+    input.addEventListener("input", () => {
+      calculate(input);
+      if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
+    });
+    input.addEventListener("blur", () => {
+      formatAmountField(input);
       calculate();
-      e.target.value = originalValue;
-      e.target.setSelectionRange(cursorPos, cursorPos);
-    }
-    if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
-  });
-  DOM.revenueInput.addEventListener("blur", (e) => {
-    if (e.target.value === "") return;
-    const originalValue = parsePLN(e.target.value);
-    e.target.value = formatPLN(originalValue);
-    calculate();
-    if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
+      if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
+    });
   });
 
-  DOM.costsInput.addEventListener("input", (e) => {
-    const isValid = validateInput(e.target.value, "costs");
-    if (isValid) {
-      const cursorPos = e.target.selectionStart;
-      const originalValue = e.target.value;
-      calculate();
-      e.target.value = originalValue;
-      e.target.setSelectionRange(cursorPos, cursorPos);
-    }
-  });
-  DOM.costsInput.addEventListener("blur", (e) => {
-    if (e.target.value === "") return;
-    const originalValue = parsePLN(e.target.value);
-    e.target.value = formatPLN(originalValue);
+  /* Składki ZUS: przełącznik sekcji, daty, ścieżka i opcje */
+  DOM.zusEnabled.addEventListener("change", () => {
+    setRevealed(DOM.zusReveal, DOM.zusEnabled.checked);
     calculate();
+  });
+  [DOM.zusStartDate, DOM.zusBirthDate].forEach((input) => {
+    // w trakcie wpisywania (fokus) niepełna data nie „miga” błędem;
+    // pełna walidacja przy opuszczeniu pola
+    ["input", "change"].forEach((type) => {
+      input.addEventListener(type, () => calculate(input));
+    });
+    input.addEventListener("blur", () => calculate());
+  });
+  [...DOM.zusPathRadios, ...DOM.zusSexRadios].forEach((radio) => {
+    radio.addEventListener("change", calculate);
+  });
+  [DOM.zusSickness, DOM.zusEmployment, DOM.zusHoliday].forEach((checkbox) => {
+    checkbox.addEventListener("change", calculate);
   });
 
   /* IP BOX: number input + range slider stay in sync */
   DOM.ipBoxCoeffInput.addEventListener("input", (e) => {
-    if (validateIpBoxCoeff(e.target.value)) {
-      syncIpBoxRange();
-      calculate();
-    }
-  });
-  DOM.ipBoxCoeffInput.addEventListener("blur", () => {
-    if (validateIpBoxCoeff(DOM.ipBoxCoeffInput.value)) {
+    if (!isPendingInput(e.target) && validateIpBoxCoeff(e.target.value)) {
       syncIpBoxRange();
     }
+    calculate(e.target);
   });
+  DOM.ipBoxCoeffInput.addEventListener("blur", () => calculate());
   if (DOM.ipBoxRange) {
     DOM.ipBoxRange.addEventListener("input", (e) => {
       DOM.ipBoxCoeffInput.value = e.target.value;
       syncIpBoxRange();
-      validateIpBoxCoeff(DOM.ipBoxCoeffInput.value);
       calculate();
     });
   }
@@ -1089,13 +2424,11 @@
   DOM.ipBoxEnabledRadios.forEach((radio) => {
     radio.addEventListener("change", (e) => {
       if (e.target.value === "yes") {
-        if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.add("is-revealed");
+        setRevealed(DOM.ipBoxReveal, true);
         syncIpBoxRange();
       } else {
-        if (DOM.ipBoxReveal) DOM.ipBoxReveal.classList.remove("is-revealed");
-        document.getElementById("ipBoxCoeff-error").textContent = "";
-        document.getElementById("ipBoxCoeff-error").classList.remove("visible");
-        DOM.ipBoxCoeffInput.classList.remove("error");
+        setRevealed(DOM.ipBoxReveal, false);
+        clearFieldError("ipBoxCoeff");
         clearIpBoxResultFields();
       }
       updateConditionalRowsVisibility();
@@ -1107,7 +2440,7 @@
     radio.addEventListener("change", (e) => {
       DOM.spouseIncomeCard.classList.remove("shake");
       if (e.target.value === "yes") {
-        DOM.spouseIncomeCard.classList.add("is-revealed");
+        setRevealed(DOM.spouseIncomeCard, true);
         DOM.spouseIncomeInput.removeAttribute("readonly");
         DOM.spouseIncomeInput.value = "";
         DOM.spouseIncomeInput.placeholder = "0,00";
@@ -1117,9 +2450,9 @@
         }, 500);
         DOM.spouseIncomeInput.focus();
       } else {
-        DOM.spouseIncomeCard.classList.remove("is-revealed");
+        setRevealed(DOM.spouseIncomeCard, false);
         DOM.spouseIncomeInput.setAttribute("readonly", "");
-        DOM.spouseIncomeInput.value = formatPLN(0);
+        DOM.spouseIncomeInput.value = formatAmountPL(0);
         DOM.spouseIncomeInput.placeholder = "";
       }
       updateConditionalRowsVisibility();
@@ -1127,15 +2460,13 @@
     });
   });
 
-  DOM.spouseIncomeInput.addEventListener("input", (e) => {
-    if (DOM.spouseIncomeCard.classList.contains("is-revealed")) {
-      const isValid = validateInput(e.target.value, "spouseIncome");
-      if (isValid) calculate();
-    }
+  DOM.spouseIncomeInput.addEventListener("input", () => {
+    if (isJointTaxationEnabled()) calculate(DOM.spouseIncomeInput);
   });
-  DOM.spouseIncomeInput.addEventListener("blur", (e) => {
-    if (DOM.spouseIncomeCard.classList.contains("is-revealed")) {
-      e.target.value = formatPLN(parsePLN(e.target.value));
+  DOM.spouseIncomeInput.addEventListener("blur", () => {
+    if (isJointTaxationEnabled()) {
+      formatAmountField(DOM.spouseIncomeInput);
+      calculate();
     }
   });
 
@@ -1166,7 +2497,6 @@
     });
     if (isEnabled) updateRemainingRevenue();
     calculate();
-    updateRatesTotal();
   });
 
   DOM.ryczaltCheckboxes.forEach((checkbox) => {
@@ -1203,17 +2533,14 @@
     resizeRateInput(input);
     input.addEventListener("input", (e) => {
       resizeRateInput(e.target);
-      if (!e.target.value) return;
-      const isValid = validateInput(e.target.value, e.target.dataset.for);
-      if (isValid) calculate();
+      calculate(e.target);
       if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("blur", (e) => {
-      if (e.target.value) {
-        e.target.value = formatPLN(parsePLN(e.target.value));
-        resizeRateInput(e.target);
-        updateRemainingRevenue();
-      }
+      formatAmountField(e.target);
+      resizeRateInput(e.target);
+      calculate();
+      if (DOM.multipleRatesToggle.checked) updateRemainingRevenue();
     });
     input.addEventListener("focus", (e) => {
       e.target.select();
@@ -1238,7 +2565,9 @@
   }
 
   /* ==================================================
-     Clipboard / Breakdown text builders (UNCHANGED)
+     Clipboard / Breakdown text builders
+     Tekst budowany wyłącznie z wyniku computeVariants(), więc szczegóły
+     zawsze odpowiadają kwotom pokazanym w wynikach.
   ================================================== */
   function formatNumberPL(value) {
     return (
@@ -1249,930 +2578,1318 @@
     );
   }
 
+  function formatAmountPL(value) {
+    return new Intl.NumberFormat("pl-PL", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
   function formatPercentPL(value) {
     return (value * 100).toLocaleString("pl-PL") + "%";
   }
 
-  function getHealthScaleBreakdown(income) {
-    const minHealth = taxMath.getMinHealthAnnual();
-    const calculatedHealth = taxMath.round2(
-      TAX_CONSTANTS.HEALTH_RATE_SCALE * income,
-    );
-    const healthScale = Math.max(calculatedHealth, minHealth);
-    const usesMinimum = calculatedHealth < minHealth;
+  const SEPARATOR_LINE = "=".repeat(50);
 
-    let text = `Składka zdrowotna (${formatPercentPL(
-      TAX_CONSTANTS.HEALTH_RATE_SCALE,
-    )} od dochodu):\n`;
-    text += `  ${formatNumberPL(income)} × ${formatPercentPL(
-      TAX_CONSTANTS.HEALTH_RATE_SCALE,
-    )} = ${formatNumberPL(calculatedHealth)}\n`;
-
-    if (usesMinimum) {
-      text += `  Minimalna składka zdrowotna: ${formatNumberPL(minHealth)}\n`;
-      text += `  (obliczona składka jest niższa od minimalnej, stosuje się minimalną)\n`;
-    }
-    text += `  Składka zdrowotna do zapłaty: ${formatNumberPL(healthScale)}\n`;
-
-    return { text, healthScale };
+  function toSentenceCase(title) {
+    return title.toLowerCase().replace(/ip box/g, "IP BOX");
   }
 
-  function getHealthLinearBreakdown(income) {
-    const minHealth = taxMath.getMinHealthAnnual();
-    const calculatedHealth = taxMath.round2(
-      TAX_CONSTANTS.HEALTH_RATE_LINEAR * income,
-    );
-    const healthLinear = Math.max(calculatedHealth, minHealth);
-    const usesMinimum = calculatedHealth < minHealth;
-    const deductionLimit = TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT;
-    const healthDeduction = Math.min(healthLinear, deductionLimit);
-
-    let text = `Składka zdrowotna (${formatPercentPL(
-      TAX_CONSTANTS.HEALTH_RATE_LINEAR,
-    )} od dochodu):\n`;
-    text += `  ${formatNumberPL(income)} × ${formatPercentPL(
-      TAX_CONSTANTS.HEALTH_RATE_LINEAR,
-    )} = ${formatNumberPL(calculatedHealth)}\n`;
-
-    if (usesMinimum) {
-      text += `  Minimalna składka zdrowotna: ${formatNumberPL(minHealth)}\n`;
-      text += `  (obliczona składka jest niższa od minimalnej, stosuje się minimalną)\n`;
-    }
-    text += `  Składka zdrowotna do zapłaty: ${formatNumberPL(healthLinear)}\n`;
-    text += `  Limit odliczenia od podstawy opodatkowania: ${formatNumberPL(
-      deductionLimit,
-    )}\n`;
-    text += `  Składka do odliczenia: ${formatNumberPL(healthDeduction)}\n`;
-
-    return { text, healthLinear, healthDeduction };
-  }
-
-  function getHealthRyczaltBreakdown(revenue) {
-    const avgSalary = TAX_CONSTANTS.AVG_SALARY_Q4_PREV;
-    const healthRate = TAX_CONSTANTS.HEALTH_RATE_RYCZALT;
-    const mult = taxMath.getRyczaltHealthMultiplier(revenue);
-    const monthlyHealth = taxMath.getRyczaltHealthMonthlyForRevenue(revenue);
-    const annualHealth = taxMath.getRyczaltHealthAnnualForRevenue(revenue);
-    const deduction = taxMath.round2(
-      annualHealth * TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR,
-    );
-
-    let thresholdDesc;
-    if (revenue <= TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW) {
-      thresholdDesc = `do ${formatNumberPL(
-        TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW,
-      )} przychodu, mnożnik ${mult * 100}%`;
-    } else if (revenue <= TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH) {
-      thresholdDesc = `${formatNumberPL(
-        TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW + 1,
-      )} - ${formatNumberPL(
-        TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH,
-      )} przychodu, mnożnik ${mult * 100}%`;
-    } else {
-      thresholdDesc = `powyżej ${formatNumberPL(
-        TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH,
-      )}, mnożnik ${mult * 100}%`;
-    }
-
-    let text = `Składka zdrowotna (ryczałt, ${thresholdDesc}):\n`;
-    text += `  Podstawa: przeciętne wynagrodzenie ${formatNumberPL(
-      avgSalary,
-    )} × ${mult * 100}% × ${formatPercentPL(healthRate)}\n`;
-    text += `  Miesięcznie: ${formatNumberPL(monthlyHealth)}\n`;
-    text += `  Rocznie: ${formatNumberPL(
-      monthlyHealth,
-    )} × 12 = ${formatNumberPL(annualHealth)}\n`;
-    text += `  Odliczenie od przychodu (50%): ${formatNumberPL(deduction)}\n`;
-
-    return { text, annualHealth, deduction };
-  }
-
-  function getScaleTaxBreakdown(income, healthScale) {
-    const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
+  /* PIT wg skali rozpisany wzorem z art. 27 ust. 1 ustawy o PIT. */
+  function getScalePitBracketLines(pitDetails, indent) {
     const rate12 = TAX_CONSTANTS.PIT_RATE_12;
     const rate32 = TAX_CONSTANTS.PIT_RATE_32;
-    const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-    const pitDetails = getScalePitDetails(income);
-    const levyDetails = getSolidarityLevyDetails(income);
-
-    let text = `\nObliczenie podatku (skala podatkowa):\n`;
-    text += `  Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
-      pitDetails.inTaxFree,
-    )} × 0% = 0,00 zł\n`;
-
-    if (pitDetails.in12Bracket > 0) {
-      text += `  I próg ${formatPercentPL(rate12)} (${formatNumberPL(
-        taxFree + 1,
-      )} - ${formatNumberPL(threshold12)}): ${formatNumberPL(
-        pitDetails.in12Bracket,
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(pitDetails.tax12)}\n`;
+    const d = pitDetails;
+    let text;
+    if (d.upToThreshold) {
+      text = `${indent}Art. 27 ust. 1 (podstawa do ${formatNumberPL(
+        d.threshold12,
+      )}): ${formatPercentPL(rate12)} × podstawa − ${formatNumberPL(
+        d.decreasingAmount,
+      )} (kwota zmniejszająca podatek)\n`;
+      text += `${indent}  ${formatNumberPL(d.taxableIncome)} × ${formatPercentPL(
+        rate12,
+      )} = ${formatNumberPL(d.tax12Gross)}\n`;
+      if (d.tax12Gross > d.decreasingAmount) {
+        text += `${indent}  ${formatNumberPL(d.tax12Gross)} − ${formatNumberPL(
+          d.decreasingAmount,
+        )} = ${formatNumberPL(d.totalPit)}\n`;
+      } else {
+        text += `${indent}  ${formatNumberPL(d.tax12Gross)} nie przekracza kwoty zmniejszającej ${formatNumberPL(
+          d.decreasingAmount,
+        )} → podatek 0,00 zł\n`;
+      }
+      return text;
     }
-
-    if (pitDetails.in32Bracket > 0) {
-      text += `  II próg ${formatPercentPL(rate32)} (${formatNumberPL(
-        threshold12 + 1,
-      )} i więcej): ${formatNumberPL(
-        pitDetails.in32Bracket,
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(pitDetails.tax32)}\n`;
-    }
-
-    if (levyDetails.levy > 0) {
-      text += `  Suma podatku wg skali: ${formatNumberPL(pitDetails.totalPit)}\n`;
-      text += `  Danina solidarnościowa ${formatPercentPL(
-        rateSolidarity,
-      )} (liczona odrębnie, powyżej ${formatNumberPL(
-        levyDetails.threshold,
-      )}): ${formatNumberPL(
-        levyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        levyDetails.levy,
-      )}\n`;
-    }
-
-    const totalTax = taxMath.round2(pitDetails.totalPit + levyDetails.levy);
-    text +=
-      levyDetails.levy > 0
-        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
-        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
-
-    const total = taxMath.round2(totalTax + healthScale);
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
-
+    text = `${indent}Art. 27 ust. 1 (podstawa ponad ${formatNumberPL(
+      d.threshold12,
+    )}): ${formatNumberPL(d.taxAtThreshold)} + ${formatPercentPL(
+      rate32,
+    )} × nadwyżka ponad ${formatNumberPL(d.threshold12)}\n`;
+    text += `${indent}  Nadwyżka: ${formatNumberPL(d.taxableIncome)} − ${formatNumberPL(
+      d.threshold12,
+    )} = ${formatNumberPL(d.excess)}\n`;
+    text += `${indent}  ${formatNumberPL(d.excess)} × ${formatPercentPL(
+      rate32,
+    )} = ${formatNumberPL(d.tax32)}\n`;
+    text += `${indent}  ${formatNumberPL(d.taxAtThreshold)} + ${formatNumberPL(
+      d.tax32,
+    )} = ${formatNumberPL(d.totalPit)}\n`;
     return text;
   }
 
-  function getScaleTaxJointBreakdown(income, spouseIncome, healthScale) {
-    const taxFree = TAX_CONSTANTS.TAX_FREE_AMOUNT;
-    const threshold12 = TAX_CONSTANTS.TAX_THRESHOLD_12;
-    const rate12 = TAX_CONSTANTS.PIT_RATE_12;
-    const rate32 = TAX_CONSTANTS.PIT_RATE_32;
-    const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-    const jointIncome = taxMath.round2(income + spouseIncome);
+  function getLevyLine(levyDetails, indent, baseDescription) {
+    const rate = TAX_CONSTANTS.SOLIDARITY_RATE;
+    return `${indent}Danina solidarnościowa ${formatPercentPL(
+      rate,
+    )} (art. 30h ustawy o PIT; ${baseDescription}; nadwyżka ponad ${formatNumberPL(
+      levyDetails.threshold,
+    )}): ${formatNumberPL(levyDetails.aboveThreshold)} × ${formatPercentPL(
+      rate,
+    )} = ${formatNumberPL(levyDetails.levy)}\n`;
+  }
+
+  /* Wspólna część breakdownu rozliczenia wspólnego: PIT wspólny pary,
+     PIT małżonka przy rozliczeniu indywidualnym i różnica przypisana
+     podatnikowi (zob. calculateJointScalePitAttributed). */
+  function getJointPitAttributionBreakdown(
+    scaleIncome,
+    spouseIncome,
+    scaleIncomeLabel,
+  ) {
+    const jointIncome = taxMath.round2(
+      Math.max(scaleIncome, 0) + Math.max(spouseIncome, 0),
+    );
     const halfIncome = taxMath.round2(jointIncome / 2);
     const halfPitDetails = getScalePitDetails(halfIncome);
-    const yourLevyDetails = getSolidarityLevyDetails(income);
-    const spouseLevyDetails = getSolidarityLevyDetails(spouseIncome);
     const jointPit = taxMath.round2(halfPitDetails.totalPit * 2);
-    const totalTax = taxMath.round2(
-      jointPit + yourLevyDetails.levy + spouseLevyDetails.levy,
-    );
+    const spousePitDetails = getScalePitDetails(spouseIncome);
+    const attributedPit = taxMath.round2(jointPit - spousePitDetails.totalPit);
 
-    let text = `\nObliczenie podatku (skala podatkowa - wspólnie z małżonkiem):\n`;
-    text += `  Dochód małżonka: ${formatNumberPL(spouseIncome)}\n`;
-    text += `  Łączny dochód: ${formatNumberPL(income)} + ${formatNumberPL(
-      spouseIncome,
-    )} = ${formatNumberPL(jointIncome)}\n`;
+    let text = `  ${scaleIncomeLabel}: ${formatNumberPL(
+      Math.max(scaleIncome, 0),
+    )} + ${formatNumberPL(spouseIncome)} (dochód małżonka) = ${formatNumberPL(
+      jointIncome,
+    )}\n`;
     text += `  Połowa łącznego dochodu: ${formatNumberPL(
       jointIncome,
     )} : 2 = ${formatNumberPL(halfIncome)}\n`;
-    text += `  Podatek od połowy łącznego dochodu:\n`;
-    text += `    Kwota wolna (do ${formatNumberPL(taxFree)}): ${formatNumberPL(
-      halfPitDetails.inTaxFree,
-    )} × 0% = 0,00 zł\n`;
 
-    if (halfPitDetails.in12Bracket > 0) {
-      text += `    I próg ${formatPercentPL(rate12)} (${formatNumberPL(
-        taxFree + 1,
-      )} - ${formatNumberPL(threshold12)}): ${formatNumberPL(
-        halfPitDetails.in12Bracket,
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(
-        halfPitDetails.tax12,
-      )}\n`;
-    }
-
-    if (halfPitDetails.in32Bracket > 0) {
-      text += `    II próg ${formatPercentPL(rate32)} (${formatNumberPL(
-        threshold12 + 1,
-      )} i więcej): ${formatNumberPL(
-        halfPitDetails.in32Bracket,
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(
-        halfPitDetails.tax32,
-      )}\n`;
-    }
-
-    text += `  Podatek od połowy dochodu: ${formatNumberPL(
+    text += `\n  1) PIT wspólny pary (od połowy łącznego dochodu × 2, art. 6 ust. 2):\n`;
+    text += getScalePitBracketLines(halfPitDetails, "    ");
+    text += `    Podatek od połowy dochodu: ${formatNumberPL(
       halfPitDetails.totalPit,
     )}\n`;
-    text += `  Podatek wspólny od skali: ${formatNumberPL(
+    text += `    PIT wspólny pary: ${formatNumberPL(
       halfPitDetails.totalPit,
     )} × 2 = ${formatNumberPL(jointPit)}\n`;
 
-    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
-      text += `  Danina solidarnościowa (liczona odrębnie dla każdego z małżonków):\n`;
-    }
-    if (yourLevyDetails.levy > 0) {
-      text += `    Danina solidarnościowa ${formatPercentPL(
-        rateSolidarity,
-      )} po Twojej stronie: ${formatNumberPL(
-        yourLevyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        yourLevyDetails.levy,
-      )}\n`;
-    }
-    if (spouseLevyDetails.levy > 0) {
-      text += `    Danina solidarnościowa ${formatPercentPL(
-        rateSolidarity,
-      )} po stronie małżonka: ${formatNumberPL(
-        spouseLevyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        spouseLevyDetails.levy,
-      )}\n`;
-    }
+    text += `\n  2) PIT małżonka przy rozliczeniu indywidualnym (skala):\n`;
+    text += getScalePitBracketLines(spousePitDetails, "    ");
+    text += `    PIT małżonka przy rozliczeniu indywidualnym: ${formatNumberPL(
+      spousePitDetails.totalPit,
+    )}\n`;
 
-    const total = taxMath.round2(totalTax + healthScale);
+    text += `\n  3) Różnica przypisana podatnikowi (1 - 2):\n`;
+    text += `    ${formatNumberPL(jointPit)} - ${formatNumberPL(
+      spousePitDetails.totalPit,
+    )} = ${formatNumberPL(attributedPit)}\n`;
+    text += `    (tyle PIT-u pary przypada na podatnika; kwotę można porównać\n`;
+    text += `    z wariantami indywidualnymi, bo małżonek i tak zapłaciłby\n`;
+    text += `    ${formatNumberPL(spousePitDetails.totalPit)} rozliczając się sam)\n`;
+
+    return { text, attributedPit };
+  }
+
+  /* ---------- Składki ZUS: tabela miesięczna ---------- */
+  const ZUS_TABLE_REGIME = {
+    full: "pełny",
+    pref: "mały",
+    ulga: "ulga",
+    inactive: "—",
+    employment: "etat",
+    off: "—",
+    holiday: "wakac.",
+  };
+
+  // Sposób liczenia 6 miesięcy ulgi na start (pełne miesiące kalendarzowe)
+  const ZUS_ULGA_GUIDANCE_URL =
+    "https://www.zus.pl/-/ulga-na-start-preferencyjna-podstawa-dzialalnosc-nieewidencjonowana-jakie-sa-warunki-uprawnienia-i-skutk-1";
+
+  const ZUS_PATH_LABELS = {
+    full: "pełny ZUS od rozpoczęcia działalności",
+    ulga: "ulga na start → mały ZUS (preferencyjny) → pełny ZUS",
+    pref: "mały ZUS (preferencyjny, bez ulgi na start) → pełny ZUS",
+  };
+
+  function getZusMonthlyTable(schedule) {
+    const columns = [
+      { title: "Mc", width: 3, align: "left" },
+      { title: "Tryb", width: 7, align: "left" },
+      { title: "Podstawa", width: 9 },
+      { title: "Emer.", width: 9 },
+      { title: "Rent.", width: 8 },
+      { title: "Chor.", width: 7 },
+      { title: "Wyp.", width: 7 },
+      { title: "FP+FS", width: 7 },
+      { title: "Razem", width: 9 },
+    ];
+    const formatRow = (cells) =>
+      cells
+        .map((cell, index) => {
+          const column = columns[index];
+          const value = String(cell);
+          return column.align === "left"
+            ? value.padEnd(column.width)
+            : value.padStart(column.width);
+        })
+        .join(" ")
+        .trimEnd();
+
+    let text = formatRow(columns.map((column) => column.title)) + "\n";
+    schedule.months.forEach((entry) => {
+      const key = entry.holiday ? "holiday" : entry.regime;
+      // w miesiącu wakacji składki są zwolnione: składniki = 0 (zgodnie z Σ);
+      // zwolniona kwota podana w przypisie pod tabelą
+      const shown = entry;
+      text +=
+        formatRow([
+          String(entry.month).padStart(2, "0"),
+          ZUS_TABLE_REGIME[key] + (entry.partial ? "*" : ""),
+          formatAmountPL(entry.base),
+          formatAmountPL(shown.pension),
+          formatAmountPL(shown.disability),
+          formatAmountPL(shown.sickness),
+          formatAmountPL(shown.accident),
+          formatAmountPL(shown.fpfs),
+          formatAmountPL(entry.total),
+        ]) + "\n";
+    });
+    const totals = schedule.totals;
     text +=
-      yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0
-        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
-        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
-
+      formatRow([
+        "Σ",
+        "",
+        "",
+        formatAmountPL(totals.pension),
+        formatAmountPL(totals.disability),
+        formatAmountPL(totals.sickness),
+        formatAmountPL(totals.accident),
+        formatAmountPL(totals.fpfs),
+        formatAmountPL(totals.total),
+      ]) + "\n";
     return text;
   }
 
-  function getIpBoxScaleJointBreakdown(
-    income,
-    spouseIncome,
-    ipBoxCoeff,
-    healthScale,
-  ) {
-    const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
-      income,
-      ipBoxCoeff,
-    );
-    const jointRegularIncome = taxMath.round2(regularIncome + spouseIncome);
-    const halfJointRegularIncome = taxMath.round2(jointRegularIncome / 2);
-    const halfPitDetails = getScalePitDetails(halfJointRegularIncome);
-    const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
-    const yourLevyDetails = getSolidarityLevyDetails(regularIncome);
-    const spouseLevyDetails = getSolidarityLevyDetails(spouseIncome);
-    const jointScalePit = taxMath.round2(halfPitDetails.totalPit * 2);
-    const totalTax = taxMath.round2(
-      ipBoxTax + jointScalePit + yourLevyDetails.levy + spouseLevyDetails.levy,
-    );
-    const total = taxMath.round2(totalTax + healthScale);
+  function getZusSectionText(result) {
+    const { schedule, ctx } = result;
+    const C = TAX_CONSTANTS;
+    let text = `\n${SEPARATOR_LINE}\n=== SKŁADKI ZUS 2026 ===\n${SEPARATOR_LINE}\n\n`;
 
-    let text = `\nObliczenie podatku (skala podatkowa z IP BOX - wspólnie z małżonkiem):\n`;
-    text += `  Podział dochodu:\n`;
-    text += `    - Dochód IP BOX (${ipBoxCoeff * 100}%): ${formatNumberPL(
-      ipBoxIncome,
-    )}\n`;
-    text += `    - Dochód pozostały (${(1 - ipBoxCoeff) * 100}%): ${formatNumberPL(
-      regularIncome,
-    )}\n`;
-    text += `  Dochód małżonka: ${formatNumberPL(spouseIncome)}\n`;
-    text += `  Łączny dochód opodatkowany skalą: ${formatNumberPL(
-      regularIncome,
-    )} + ${formatNumberPL(spouseIncome)} = ${formatNumberPL(
-      jointRegularIncome,
-    )}\n`;
-    text += `  Połowa dochodu opodatkowanego skalą: ${formatNumberPL(
-      jointRegularIncome,
-    )} : 2 = ${formatNumberPL(halfJointRegularIncome)}\n`;
-    text += `\n  Podatek IP BOX:\n`;
-    text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
-      ipBoxRate,
-    )} = ${formatNumberPL(ipBoxTax)}\n`;
-    text += `\n  Podatek od połowy dochodu opodatkowanego skalą:\n`;
-    text += `    Kwota wolna (do ${formatNumberPL(
-      TAX_CONSTANTS.TAX_FREE_AMOUNT,
-    )}): ${formatNumberPL(halfPitDetails.inTaxFree)} × 0% = 0,00 zł\n`;
+    text += `Data rozpoczęcia działalności: ${
+      schedule.startDate
+        ? formatDatePL(schedule.startDate)
+        : "brak (działalność prowadzona przed 2026 r. i przez cały rok)"
+    }\n`;
+    text += `Miesiące składki zdrowotnej w 2026 r.: ${schedule.healthMonths}`;
+    text += schedule.startDate && !schedule.startsBeforeYear
+      ? ` (od ${formatMonthYear(schedule.startDate)}; składka miesięczna i niepodzielna — pełna kwota także za niepełny miesiąc, art. 79 ust. 2 u.ś.o.z.)\n`
+      : "\n";
 
-    if (halfPitDetails.in12Bracket > 0) {
-      text += `    I próg ${formatPercentPL(
-        TAX_CONSTANTS.PIT_RATE_12,
-      )}: ${formatNumberPL(halfPitDetails.in12Bracket)} × ${formatPercentPL(
-        TAX_CONSTANTS.PIT_RATE_12,
-      )} = ${formatNumberPL(halfPitDetails.tax12)}\n`;
+    if (!schedule.enabled) {
+      text += `Składki społeczne: nieuwzględniane (przełącznik wyłączony).\n`;
+      return text;
     }
 
-    if (halfPitDetails.in32Bracket > 0) {
-      text += `    II próg ${formatPercentPL(
-        TAX_CONSTANTS.PIT_RATE_32,
-      )}: ${formatNumberPL(halfPitDetails.in32Bracket)} × ${formatPercentPL(
-        TAX_CONSTANTS.PIT_RATE_32,
-      )} = ${formatNumberPL(halfPitDetails.tax32)}\n`;
+    text += `Ścieżka składek: ${
+      schedule.employment
+        ? "nie dotyczy — umowa o pracę ≥ minimalnego wynagrodzenia: brak obowiązkowych składek społecznych z działalności, ulga na start i mały ZUS nie są wykorzystywane"
+        : schedule.startDate
+          ? ZUS_PATH_LABELS[schedule.path]
+          : "pełny ZUS przez cały rok (bez daty rozpoczęcia ulga na start i mały ZUS nie są stosowane)"
+    }\n`;
+    if (schedule.ulgaEnd) {
+      text += `  Ulga na start (art. 18 Prawa przedsiębiorców, 6 pełnych miesięcy kalendarzowych${
+        schedule.startDate.d !== 1
+          ? " od miesiąca następującego po niepełnym miesiącu rozpoczęcia"
+          : ", licząc miesiąc rozpoczęcia"
+      }): do ${formatMonthYear(schedule.ulgaEnd)}\n`;
+      text += `    (sposób liczenia wg ZUS: ${ZUS_ULGA_GUIDANCE_URL})\n`;
     }
-
-    text += `  Podatek od połowy dochodu: ${formatNumberPL(
-      halfPitDetails.totalPit,
-    )}\n`;
-    text += `  Podatek wspólny od części skalowej: ${formatNumberPL(
-      halfPitDetails.totalPit,
-    )} × 2 = ${formatNumberPL(jointScalePit)}\n`;
-
-    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
-      text += `\n  Danina solidarnościowa (liczona odrębnie dla każdego z małżonków):\n`;
+    if (schedule.prefEnd) {
+      text += `  Mały ZUS (art. 18a u.s.u.s., 24 pełne miesiące kalendarzowe${
+        schedule.path === "pref" && schedule.startDate.d !== 1
+          ? " + niepełny miesiąc rozpoczęcia"
+          : ""
+      }): do ${formatMonthYear(schedule.prefEnd)}\n`;
     }
-    if (yourLevyDetails.levy > 0) {
-      text += `    Danina solidarnościowa ${formatPercentPL(
-        TAX_CONSTANTS.SOLIDARITY_RATE,
-      )} po Twojej stronie: ${formatNumberPL(
-        yourLevyDetails.aboveThreshold,
-      )} × ${formatPercentPL(
-        TAX_CONSTANTS.SOLIDARITY_RATE,
-      )} = ${formatNumberPL(yourLevyDetails.levy)}\n`;
-    }
-    if (spouseLevyDetails.levy > 0) {
-      text += `    Danina solidarnościowa ${formatPercentPL(
-        TAX_CONSTANTS.SOLIDARITY_RATE,
-      )} po stronie małżonka: ${formatNumberPL(
-        spouseLevyDetails.aboveThreshold,
-      )} × ${formatPercentPL(
-        TAX_CONSTANTS.SOLIDARITY_RATE,
-      )} = ${formatNumberPL(spouseLevyDetails.levy)}\n`;
-    }
-
-    if (yourLevyDetails.levy > 0 || spouseLevyDetails.levy > 0) {
-      text += `\n  Łączny podatek i danina: ${formatNumberPL(
-        ipBoxTax,
-      )} + ${formatNumberPL(jointScalePit)}`;
-      if (yourLevyDetails.levy > 0) {
-        text += ` + ${formatNumberPL(yourLevyDetails.levy)}`;
+    text += `Składka chorobowa (dobrowolna): ${
+      schedule.sicknessEnabled ? "tak" : "nie"
+    }\n`;
+    text += `Umowa o pracę ≥ minimalnego wynagrodzenia: ${
+      schedule.employment
+        ? "tak — brak obowiązkowych składek społecznych z działalności (art. 9 ust. 1 i 1a u.s.u.s.)"
+        : "nie"
+    }\n`;
+    const zusOptions = result.inputs.zus;
+    let fpText = "brak danych — FP i FS należne";
+    if (zusOptions.birthDate && zusOptions.sex && schedule.fpExemptFrom) {
+      const fromIdx = taxMath.monthIndex(
+        schedule.fpExemptFrom.y,
+        schedule.fpExemptFrom.m,
+      );
+      if (fromIdx <= taxMath.monthIndex(schedule.year, 1)) {
+        fpText = "przez cały 2026 r.";
+      } else if (fromIdx > taxMath.monthIndex(schedule.year, 12)) {
+        fpText = `dopiero od ${formatMonthYear(schedule.fpExemptFrom)} (po 2026 r.)`;
+      } else {
+        fpText = `od ${formatMonthYear(schedule.fpExemptFrom)}`;
       }
-      if (spouseLevyDetails.levy > 0) {
-        text += ` + ${formatNumberPL(spouseLevyDetails.levy)}`;
+      fpText += ` (${zusOptions.sex === "K" ? "kobieta, 55 lat" : "mężczyzna, 60 lat"}; urodzenie ${formatDatePL(
+        taxMath.parseISODate(zusOptions.birthDate),
+      )}; art. 261 ustawy o rynku pracy)`;
+    }
+    text += `Zwolnienie z FP/FS ze względu na wiek: ${fpText}\n`;
+
+    const holiday = schedule.holiday;
+    if (holiday.requested) {
+      text += `Wakacje składkowe (art. 17a–17b u.s.u.s.): `;
+      if (holiday.eligibleMonths.length) {
+        text += `przysługują za jeden miesiąc spośród: ${holiday.eligibleMonths
+          .map((m) => ROMAN_MONTHS[m - 1])
+          .join(", ")}`;
+        text += holiday.firstSocialMonth
+          ? ` (pierwszy miesiąc podlegania ubezpieczeniom społecznym: ${formatMonthYear(
+              holiday.firstSocialMonth,
+            )}; wniosek RWS w miesiącu poprzedzającym zwolnienie, a w miesiącu przed wnioskiem trzeba podlegać ubezpieczeniom → najwcześniej ${formatMonthYear(
+              holiday.earliestMonth,
+            )})`
+          : " (ubezpieczenia społeczne od przed 2026 r.)";
+        text += `.\n  Miesiąc wybierany osobno dla każdego wariantu (najniższe obciążenie; także rezygnacja, jeśli wakacje się nie opłacają). Tabela poniżej: wakacje w ${formatMonthYear(
+          { y: schedule.year, m: holiday.month },
+        )} (miesiąc z najwyższymi składkami).\n`;
+      } else {
+        text += `${getZusHolidayStatusText(schedule)}\n`;
       }
-      text += ` = ${formatNumberPL(totalTax)}\n`;
+    }
+
+    text += `\nPodstawy 2026: pełna ${formatNumberPL(C.ZUS_FULL_BASE)} (60% × ${formatNumberPL(
+      C.ZUS_FORECAST_AVG_SALARY,
+    )}, art. 18 ust. 8 u.s.u.s.), mała ${formatNumberPL(
+      C.ZUS_PREF_BASE,
+    )} (30% × ${formatNumberPL(C.MIN_WAGE)}, art. 18a).\n`;
+    text += `Stopy: emerytalna ${formatPercentPL(
+      C.ZUS_RATE_PENSION,
+    )}, rentowe ${formatPercentPL(C.ZUS_RATE_DISABILITY)}, chorobowa ${formatPercentPL(
+      C.ZUS_RATE_SICKNESS,
+    )}, wypadkowa ${formatPercentPL(C.ZUS_RATE_ACCIDENT)}, FP ${formatPercentPL(
+      C.ZUS_RATE_FP,
+    )} + FS ${formatPercentPL(
+      C.ZUS_RATE_FS,
+    )} (łącznie, tylko przy podstawie ≥ minimalnego wynagrodzenia, czyli na pełnym ZUS). Każda składka zaokrąglana do grosza.\n\n`;
+
+    text += getZusMonthlyTable(schedule);
+    text += `\n* niepełny miesiąc: podstawa × dni podlegania / dni miesiąca (art. 18 ust. 9 u.s.u.s.)\n`;
+    const holidayEntry = schedule.months.find((entry) => entry.holiday);
+    if (holidayEntry) {
+      text += `wakac. = wakacje składkowe za ${formatMonthYear({
+        y: schedule.year,
+        m: holidayEntry.month,
+      })}: składki zwolnione (0 zł w tabeli i w Σ); zwolniono ${formatNumberPL(
+        holidayEntry.waived.total,
+      )} (emerytalna ${formatAmountPL(holidayEntry.waived.pension)}, rentowe ${formatAmountPL(
+        holidayEntry.waived.disability,
+      )}, chorobowa ${formatAmountPL(holidayEntry.waived.sickness)}, wypadkowa ${formatAmountPL(
+        holidayEntry.waived.accident,
+      )}, FP+FS ${formatAmountPL(holidayEntry.waived.fpfs)}).\n`;
+    }
+    text += `Tryb: pełny = pełny ZUS, mały = mały ZUS (preferencyjny), ulga = ulga na start (brak ubezpieczeń społecznych), wakac. = wakacje składkowe, etat = umowa o pracę (bez składek społecznych z JDG), — = poza działalnością / składki wyłączone.\n\n`;
+
+    text += `Składki społeczne do odliczenia (emerytalna, rentowa, chorobowa, wypadkowa): ${formatNumberPL(
+      schedule.totals.social,
+    )}\n`;
+    text += `FP + FS (koszt uzyskania przychodu na skali i liniowym; na ryczałcie nieodliczalne): ${formatNumberPL(
+      schedule.totals.fpfs,
+    )}\n`;
+    text += `Razem składki społeczne ZUS 2026: ${formatNumberPL(
+      schedule.totals.total,
+    )}\n`;
+    text += `(założenie kasowe: składki należne za 2026 r. zapłacone i odliczone w 2026 r.)\n`;
+    if (ctx.zusEnabled && schedule.holiday.eligibleMonths.length) {
+      text += `(kwota może się różnić w wariantach, które wybrały inny miesiąc wakacji lub z nich zrezygnowały)\n`;
+    }
+    return text;
+  }
+
+  /* ---------- Inne dochody: PIT „bez działalności” ---------- */
+  function getOtherIncomeSectionText(ctx) {
+    if (ctx.otherIncome <= 0) return "";
+    const details = getScalePitDetails(ctx.otherIncome);
+    let text = `\n--- INNE DOCHODY OPODATKOWANE SKALĄ ---\n\n`;
+    text += `Dochód: ${formatNumberPL(ctx.otherIncome)}\n`;
+    text += `PIT od samych innych dochodów (bez działalności, indywidualnie wg skali):\n`;
+    text += getScalePitBracketLines(details, "  ");
+    text += `  PIT: ${formatNumberPL(ctx.baseline.pit)}\n`;
+    if (ctx.baseline.levy > 0) {
+      text += `  Danina solidarnościowa od tych dochodów: ${formatNumberPL(
+        ctx.baseline.levy,
+      )}\n`;
+    }
+    text += `Kwota odejmowana od podatków każdego wariantu: ${formatNumberPL(
+      ctx.baseline.total,
+    )}\n`;
+    text += `(wynik wariantu = obciążenie przypisane działalności: łączne podatki − podatek, który i tak zapłaciłbyś od innych dochodów; składka zdrowotna od etatu jest poza zakresem)\n`;
+    return text;
+  }
+
+  /* ---------- Elementy wspólne dla wariantów ---------- */
+  function getVariantZusLine(evaluation) {
+    const { ctx, schedule } = evaluation;
+    if (!ctx.zusEnabled) {
+      return `Składki społeczne ZUS: nieuwzględniane\n`;
+    }
+    let text = `Składki ZUS w tym wariancie: społeczne ${formatNumberPL(
+      ctx.social,
+    )} + FP/FS ${formatNumberPL(ctx.fpfs)} = ${formatNumberPL(
+      ctx.socialTotal,
+    )}\n`;
+    const holiday = schedule.holiday;
+    if (holiday.requested && holiday.eligibleMonths.length) {
+      text += holiday.applied
+        ? `  Wakacje składkowe: ${formatMonthYear({
+            y: schedule.year,
+            m: holiday.month,
+          })} (zwolnienie ${formatNumberPL(holiday.saving)})\n`
+        : `  Wakacje składkowe: nieopłacalne w tym wariancie — pominięte\n`;
+    }
+    return text;
+  }
+
+  /* Porównanie miesięcy wakacji (kolejne miesiące o tym samym wyniku
+     są łączone w zakres). */
+  function getHolidayComparisonText(evaluation) {
+    const candidates = evaluation.holidayCandidates || [];
+    if (candidates.length < 2) return "";
+    const groups = [];
+    candidates.forEach((candidate) => {
+      const last = groups[groups.length - 1];
+      if (
+        last &&
+        candidate.month !== null &&
+        last.to !== null &&
+        candidate.month === last.to + 1 &&
+        Math.abs(candidate.total - last.total) < 0.005 &&
+        Math.abs(candidate.saving - last.saving) < 0.005
+      ) {
+        last.to = candidate.month;
+      } else {
+        groups.push({ ...candidate, from: candidate.month, to: candidate.month });
+      }
+    });
+    let text = `\nWakacje składkowe — porównanie (łączne obciążenie wariantu):\n`;
+    groups.forEach((group) => {
+      const chosen =
+        group.from === null
+          ? evaluation.holidayMonth === null
+          : evaluation.holidayMonth !== null &&
+            evaluation.holidayMonth >= group.from &&
+            evaluation.holidayMonth <= group.to;
+      const label =
+        group.from === null
+          ? "bez wakacji"
+          : `${
+              group.from === group.to
+                ? ROMAN_MONTHS[group.from - 1]
+                : `${ROMAN_MONTHS[group.from - 1]}–${ROMAN_MONTHS[group.to - 1]}`
+            } (zwolnienie ${formatNumberPL(group.saving)})`;
+      text += `  ${chosen ? "[x]" : "[ ]"} ${label}: ${formatNumberPL(group.total)}${
+        chosen ? "  ← wybrane" : ""
+      }\n`;
+    });
+    return text;
+  }
+
+  function getDeductionComparisonText(evaluation) {
+    const { ctx, options, best, form } = evaluation;
+    if (!ctx.zusEnabled) return "";
+    const labels = SOCIAL_DEDUCTION_LABELS[form];
+    if (ctx.social <= 0) {
+      return `\nOdliczenie składek społecznych: ${labels.none}\n`;
+    }
+    if (options.length === 1) {
+      return `\nOdliczenie składek społecznych (${formatNumberPL(
+        ctx.social,
+      )}): ${labels[best.method]} — jedyny sensowny sposób (brak innych dochodów ze skali)\n`;
+    }
+    let text = `\nOdliczenie składek społecznych (${formatNumberPL(
+      ctx.social,
+    )}) — porównanie sposobów (łączne obciążenie wariantu):\n`;
+    options.forEach((option) => {
+      const chosen = option === best;
+      const diff = taxMath.round2(option.total - best.total);
+      text += `  ${chosen ? "[x]" : "[ ]"} ${labels[option.method]}: ${formatNumberPL(
+        option.total,
+      )}${chosen ? "  ← wybrany" : diff > 0 ? ` (+${formatNumberPL(diff)})` : " (tyle samo)"}\n`;
+    });
+    if (options.length > 1) {
+      text += `  (przy równym wyniku wybierany jest pierwszy sposób; składek nie dzielimy między sposoby)\n`;
+    }
+    if (form === "scale" && evaluation.best.ipBoxCoeff > 0) {
+      text += `  (w kosztach składki pomniejszają proporcjonalnie także dochód z IP BOX; od dochodu – tylko dochód ze skali)\n`;
+    }
+    return text;
+  }
+
+  function getVariantHeaderText(title, evaluation, extraLines = "") {
+    const { ctx } = evaluation;
+    let text = `\n--- ${title} ---\n\n`;
+    text += `Dochód z działalności (przychód − koszty, przed składkami ZUS): ${formatNumberPL(
+      ctx.income,
+    )}\n`;
+    text += extraLines;
+    if (ctx.otherIncome > 0) {
+      text += `Inne dochody opodatkowane skalą: ${formatNumberPL(
+        ctx.otherIncome,
+      )}\n`;
+    }
+    text += getVariantZusLine(evaluation);
+    text += getHolidayComparisonText(evaluation);
+    text += getDeductionComparisonText(evaluation);
+    return text;
+  }
+
+  function getHealthIncomeBaseLines(ctx, rate) {
+    let text = "";
+    if (ctx.fpfs > 0 || ctx.social > 0) {
+      text += `  Podstawa (art. 81 ust. 2 u.ś.o.z.): dochód ${formatNumberPL(
+        ctx.income,
+      )} − FP/FS ${formatNumberPL(ctx.fpfs)} − składki społeczne ${formatNumberPL(
+        ctx.social,
+      )} = ${formatNumberPL(ctx.healthBaseIncome)}\n`;
     } else {
-      text += `\n  Łączny podatek: ${formatNumberPL(
-        ipBoxTax,
-      )} + ${formatNumberPL(jointScalePit)} = ${formatNumberPL(totalTax)}\n`;
+      text += `  Podstawa: dochód ${formatNumberPL(ctx.healthBaseIncome)}\n`;
     }
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
+    const calculated = taxMath.round2(Math.max(ctx.healthBaseIncome, 0) * rate);
+    text += `  ${formatNumberPL(Math.max(ctx.healthBaseIncome, 0))} × ${formatPercentPL(
+      rate,
+    )} = ${formatNumberPL(calculated)}\n`;
+    return { text, calculated };
+  }
 
+  function getHealthPitFormText(evaluation, rate, title) {
+    const { ctx, best } = evaluation;
+    let text = `\nSkładka zdrowotna (${title}):\n`;
+    const base = getHealthIncomeBaseLines(ctx, rate);
+    text += base.text;
+    const minHealth = taxMath.getMinHealthAnnual(ctx.healthMonths);
+    text += `  Minimalna (art. 81 ust. 2b / art. 79a): ${ctx.healthMonths} mies. × ${formatNumberPL(
+      taxMath.getMinHealthMonthly(),
+    )} = ${formatNumberPL(minHealth)}\n`;
+    if (base.calculated < minHealth) {
+      text += `  (obliczona składka jest niższa od minimalnej, stosuje się minimalną)\n`;
+    }
+    text += `  Składka zdrowotna do zapłaty: ${formatNumberPL(best.health)}\n`;
+    if (ctx.social > 0 || ctx.fpfs > 0) {
+      text += `  (podstawa nie zależy od sposobu odliczenia składek społecznych)\n`;
+    }
     return text;
   }
 
-  function getLinearTaxBreakdown(income, healthLinear, healthDeduction) {
-    const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
-    const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
+  function getTotalSummaryText(evaluation) {
+    const { ctx, best } = evaluation;
+    let text = "";
+    let taxesAttributed = best.taxes;
+    if (ctx.baseline.total > 0) {
+      taxesAttributed = taxMath.round2(best.taxes - ctx.baseline.total);
+      text += `\n  Podatki łącznie (z innymi dochodami): ${formatNumberPL(
+        best.taxes,
+      )}\n`;
+      text += `  − podatek od samych innych dochodów (bez działalności): ${formatNumberPL(
+        ctx.baseline.total,
+      )}\n`;
+      text += `  = podatki przypisane działalności: ${formatNumberPL(
+        taxesAttributed,
+      )}\n`;
+    }
+    const parts = [taxesAttributed, best.health];
+    let label = "PIT + składka zdrowotna";
+    if (ctx.zusEnabled) {
+      parts.push(ctx.socialTotal);
+      label += " + składki społeczne ZUS";
+    }
+    if (ctx.baseline.total > 0) label += "; obciążenie przypisane działalności";
+    text += `\nRAZEM (${label}):\n  ${parts
+      .map((part) => formatNumberPL(part))
+      .join(" + ")} = ${formatNumberPL(evaluation.total)}\n`;
+    return text;
+  }
 
-    let text = `\nObliczenie podatku (podatek liniowy):\n`;
+  function getIpBoxSplitLines(option, indent) {
+    let text = `${indent}Podział dochodu (udział dochodu kwalifikowanego IP BOX ${formatPercentPL(
+      option.ipBoxCoeff,
+    )}):\n`;
+    text += `${indent}  - Dochód IP BOX: ${formatNumberPL(
+      Math.max(option.businessAfterCosts, 0),
+    )} × ${formatPercentPL(option.ipBoxCoeff)} = ${formatNumberPL(
+      option.ipBoxIncome,
+    )}\n`;
+    text += `${indent}  - Dochód pozostały: ${formatNumberPL(
+      option.regularIncome,
+    )}\n`;
+    text += `${indent}Podatek IP BOX (art. 30ca): ${formatNumberPL(
+      option.ipBoxIncome,
+    )} × ${formatPercentPL(TAX_CONSTANTS.IP_BOX_RATE)} = ${formatNumberPL(
+      option.ipBoxTax,
+    )}\n`;
+    return text;
+  }
 
-    const taxBase = Math.max(income - healthDeduction, 0);
-    const pitDetails = getLinearPitDetails(taxBase);
-    const levyDetails = getSolidarityLevyDetails(taxBase);
+  function getBusinessAfterCostsLine(option, ctx, indent) {
+    const parts = [formatNumberPL(ctx.income)];
+    if (ctx.fpfs > 0) parts.push(`${formatNumberPL(ctx.fpfs)} (FP/FS w kosztach)`);
+    if (option.socialInCosts > 0) {
+      parts.push(`${formatNumberPL(option.socialInCosts)} (składki społeczne w kosztach)`);
+    }
+    if (parts.length === 1) {
+      return `${indent}Dochód z działalności: ${formatNumberPL(option.businessAfterCosts)}\n`;
+    }
+    return `${indent}Dochód z działalności po kosztach ZUS: ${parts.join(
+      " − ",
+    )} = ${formatNumberPL(option.businessAfterCosts)}\n`;
+  }
+
+  /* ---------- Skala (indywidualnie / wspólnie / IP BOX) ---------- */
+  function getScaleVariantText(title, evaluation) {
+    const { ctx, best } = evaluation;
+    const hasIpBox = best.ipBoxCoeff > 0;
+    let extra = "";
+    if (hasIpBox) extra += `Udział dochodu kwalifikowanego IP BOX: ${formatPercentPL(best.ipBoxCoeff)}\n`;
+    if (best.joint) extra += `Dochód małżonka: ${formatNumberPL(best.spouseIncome)}\n`;
+    let text = getVariantHeaderText(title, evaluation, extra);
+    text += getHealthPitFormText(
+      evaluation,
+      TAX_CONSTANTS.HEALTH_RATE_SCALE,
+      `skala${hasIpBox ? " z IP BOX" : ""}: 9% dochodu z całej działalności${
+        hasIpBox ? ", także z IP BOX" : ""
+      }, art. 79 ust. 1 i art. 81 ust. 2 u.ś.o.z.`,
+    );
+
+    text += `\nObliczenie podatku (${toSentenceCase(title)}${
+      ctx.zusEnabled && ctx.social > 0
+        ? `; składki społeczne: ${SOCIAL_DEDUCTION_SHORT_LABELS[best.method]}`
+        : ""
+    }):\n`;
+    text += getBusinessAfterCostsLine(best, ctx, "  ");
+    if (hasIpBox) text += getIpBoxSplitLines(best, "  ");
+    const regularLabel = hasIpBox
+      ? "Dochód z działalności opodatkowany skalą"
+      : "Dochód z działalności";
+    if (ctx.otherIncome > 0 || best.regularIncome < 0) {
+      if (hasIpBox || best.regularIncome < 0) {
+        text += `  ${regularLabel}${
+          best.regularIncome < 0
+            ? " (strata — nie pomniejsza innych dochodów)"
+            : ""
+        }: ${formatNumberPL(Math.max(best.regularIncome, 0))}\n`;
+      }
+      if (ctx.otherIncome > 0) {
+        text += `  Inne dochody opodatkowane skalą: ${formatNumberPL(ctx.otherIncome)}\n`;
+      }
+      text += `  Łączny dochód opodatkowany skalą: ${formatNumberPL(best.scaleIncome)}\n`;
+    }
+    if (best.socialDeducted > 0) {
+      text += `  Odliczenie składek społecznych od dochodu (art. 26 ust. 1 pkt 2): ${formatNumberPL(
+        best.socialDeducted,
+      )}\n`;
+      const lost = taxMath.round2(ctx.social - best.socialDeducted);
+      if (lost > 0 && best.method === "income") {
+        text += `  (nieodliczona nadwyżka ${formatNumberPL(lost)} przepada)\n`;
+      }
+    }
+    text += `  Podstawa opodatkowania: ${formatNumberPL(best.pitBase)}\n`;
+
+    let pitLabel;
+    if (best.joint) {
+      const attribution = getJointPitAttributionBreakdown(
+        best.pitBase,
+        best.spouseIncome,
+        "Łączny dochód (podstawa podatnika + dochód małżonka)",
+      );
+      text += attribution.text;
+      pitLabel = "PIT przypisany podatnikowi";
+    } else {
+      text += getScalePitBracketLines(getScalePitDetails(best.pitBase), "  ");
+      pitLabel = "Podatek wg skali";
+    }
+    text += `  ${pitLabel}: ${formatNumberPL(best.pit)}\n`;
+    const levyDetails = getSolidarityLevyDetails(best.pitBase);
+    if (levyDetails.levy > 0) {
+      text += getLevyLine(
+        levyDetails,
+        "  ",
+        `podstawa: dochód opodatkowany skalą po odliczeniach${
+          best.joint ? ", liczona odrębnie dla każdego z małżonków" : ""
+        }${hasIpBox ? ", bez dochodu z IP BOX" : ""}`,
+      );
+    }
+    const taxParts = [];
+    if (hasIpBox) taxParts.push(best.ipBoxTax);
+    taxParts.push(best.pit);
+    if (best.levy > 0) taxParts.push(best.levy);
+    text += `  Suma podatków: ${
+      taxParts.length > 1
+        ? `${taxParts.map((part) => formatNumberPL(part)).join(" + ")} = `
+        : ""
+    }${formatNumberPL(best.taxes)}\n`;
+    if (best.joint && getSolidarityLevyDetails(best.spouseIncome).levy > 0) {
+      text += `  (danina małżonka nie jest wliczana — zapłaciłby ją także przy rozliczeniu indywidualnym)\n`;
+    }
+    text += getTotalSummaryText(evaluation);
+    return text;
+  }
+
+  /* ---------- Liniowy (z IP BOX lub bez) ---------- */
+  function getLinearVariantText(title, evaluation) {
+    const { ctx, best } = evaluation;
+    const hasIpBox = best.ipBoxCoeff > 0;
+    const extra = hasIpBox
+      ? `Udział dochodu kwalifikowanego IP BOX: ${formatPercentPL(best.ipBoxCoeff)}\n`
+      : "";
+    let text = getVariantHeaderText(title, evaluation, extra);
+    text += getHealthPitFormText(
+      evaluation,
+      TAX_CONSTANTS.HEALTH_RATE_LINEAR,
+      `liniowy: 4,9% dochodu${hasIpBox ? " z całej działalności, także z IP BOX" : ""}, art. 79a u.ś.o.z.`,
+    );
+    text += `  Limit odliczenia (art. 30c ust. 2 pkt 2 ustawy o PIT, roczny): ${formatNumberPL(
+      TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT,
+    )}\n`;
+    text += `  Składka do odliczenia: ${formatNumberPL(best.healthDeduction)}\n`;
+
+    text += `\nObliczenie podatku (${toSentenceCase(title)}${
+      ctx.zusEnabled && ctx.social > 0
+        ? `; składki społeczne: ${SOCIAL_DEDUCTION_SHORT_LABELS[best.method]}`
+        : ""
+    }):\n`;
+    text += getBusinessAfterCostsLine(best, ctx, "  ");
+    if (hasIpBox) text += getIpBoxSplitLines(best, "  ");
+    text += `  Odliczenie składki zdrowotnej od dochodu (art. 30c ust. 2 pkt 2): ${formatNumberPL(
+      best.healthDeducted,
+    )}\n`;
+    if (best.socialFromLinear > 0) {
+      text += `  Odliczenie składek społecznych (art. 30c ust. 2 pkt 1): ${formatNumberPL(
+        best.socialFromLinear,
+      )}\n`;
+    }
+    const socialUsed = taxMath.round2(
+      best.socialInCosts + best.socialFromLinear + best.socialFromScale,
+    );
+    const socialLost = taxMath.round2(ctx.social - socialUsed);
+    if (ctx.social > 0 && socialLost > 0 && best.method !== "costs") {
+      text += `  (nieodliczona nadwyżka składek ${formatNumberPL(
+        socialLost,
+      )} przepada — bez dzielenia między źródła)\n`;
+    }
     text += `  Podstawa opodatkowania (PIT liniowy): ${formatNumberPL(
-      income,
-    )} - ${formatNumberPL(healthDeduction)} = ${formatNumberPL(taxBase)}\n`;
+      Math.max(best.regularIncome, 0),
+    )} − ${formatNumberPL(best.healthDeducted)}${
+      best.socialFromLinear > 0 ? ` − ${formatNumberPL(best.socialFromLinear)}` : ""
+    } = ${formatNumberPL(best.linearBase)}\n`;
+    text += `  Podatek liniowy ${formatPercentPL(
+      TAX_CONSTANTS.LINEAR_PIT_RATE,
+    )}: ${formatNumberPL(best.linearBase)} × ${formatPercentPL(
+      TAX_CONSTANTS.LINEAR_PIT_RATE,
+    )} = ${formatNumberPL(best.linearPit)}\n`;
 
-    if (pitDetails.pitBase > 0) {
-      text += `  Podatek liniowy ${formatPercentPL(linearRate)}: ${formatNumberPL(
-        pitDetails.pitBase,
-      )} × ${formatPercentPL(linearRate)} = ${formatNumberPL(
-        pitDetails.pit,
-      )}\n`;
+    if (ctx.otherIncome > 0) {
+      text += `\n  Inne dochody (skala, rozliczane osobno):\n`;
+      text += `    Dochód: ${formatNumberPL(ctx.otherIncome)}${
+        best.socialFromScale > 0
+          ? ` − składki społeczne (art. 26 ust. 1 pkt 2) ${formatNumberPL(
+              best.socialFromScale,
+            )} = ${formatNumberPL(best.scaleBase)}`
+          : ""
+      }\n`;
+      text += getScalePitBracketLines(getScalePitDetails(best.scaleBase), "    ");
+      text += `    PIT wg skali: ${formatNumberPL(best.scalePit)}\n`;
     }
 
+    const levyDetails = getSolidarityLevyDetails(best.levyBase);
     if (levyDetails.levy > 0) {
-      text += `  Danina solidarnościowa ${formatPercentPL(
-        rateSolidarity,
-      )} (odrębna należność rozliczana na formularzu DSF-1, nie będąca częścią PIT-u liniowego; podstawa to dochód po odliczeniach dopuszczonych w DSF-1, w uproszczeniu kalkulator przyjmuje podstawę ${formatNumberPL(
-        taxBase,
-      )}; danina dotyczy nadwyżki ponad ${formatNumberPL(
-        levyDetails.threshold,
-      )}):\n    ${formatNumberPL(
-        levyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        levyDetails.levy,
-      )}\n`;
+      text += getLevyLine(
+        levyDetails,
+        "  ",
+        `odrębna deklaracja DSF-1; podstawa: dochód liniowy${
+          ctx.otherIncome > 0 ? " + dochód ze skali" : ""
+        } po odliczeniach${hasIpBox ? ", bez dochodu z IP BOX" : ""} = ${formatNumberPL(
+          best.levyBase,
+        )}`,
+      );
     }
-
-    const totalTax = taxMath.round2(pitDetails.pit + levyDetails.levy);
-    text +=
-      levyDetails.levy > 0
-        ? `  Suma podatku i daniny: ${formatNumberPL(totalTax)}\n`
-        : `  Suma podatku: ${formatNumberPL(totalTax)}\n`;
-
-    const total = taxMath.round2(totalTax + healthLinear);
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
-
+    const taxParts = [];
+    if (hasIpBox) taxParts.push(best.ipBoxTax);
+    taxParts.push(best.linearPit);
+    if (ctx.otherIncome > 0) taxParts.push(best.scalePit);
+    if (best.levy > 0) taxParts.push(best.levy);
+    text += `  Suma podatków: ${
+      taxParts.length > 1
+        ? `${taxParts.map((part) => formatNumberPL(part)).join(" + ")} = `
+        : ""
+    }${formatNumberPL(best.taxes)}\n`;
+    text += getTotalSummaryText(evaluation);
     return text;
   }
 
-  function getIpBoxScaleBreakdown(income, ipBoxCoeff, healthScale) {
-    const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
-    const rate12 = TAX_CONSTANTS.PIT_RATE_12;
-    const rate32 = TAX_CONSTANTS.PIT_RATE_32;
-    const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
-      income,
-      ipBoxCoeff,
-    );
-    const regularPitDetails = getScalePitDetails(regularIncome);
-    const levyDetails = getSolidarityLevyDetails(regularIncome);
-
-    let text = `\nObliczenie podatku (skala podatkowa z IP BOX):\n`;
-    text += `  Podział dochodu:\n`;
-    text += `    - Dochód IP BOX (${ipBoxCoeff * 100}%): ${formatNumberPL(
-      ipBoxIncome,
-    )}\n`;
-    text += `    - Dochód pozostały (${
-      (1 - ipBoxCoeff) * 100
-    }%): ${formatNumberPL(regularIncome)}\n`;
-
-    const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
-    text += `\n  Podatek IP BOX:\n`;
-    text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
-      ipBoxRate,
-    )} = ${formatNumberPL(ipBoxTax)}\n`;
-
-    text += `\n  Podatek od pozostałego dochodu (skala):\n`;
-
-    text += `    Kwota wolna (do ${formatNumberPL(
-      TAX_CONSTANTS.TAX_FREE_AMOUNT,
-    )}): ${formatNumberPL(regularPitDetails.inTaxFree)} × 0% = 0,00 zł\n`;
-
-    if (regularPitDetails.in12Bracket > 0) {
-      text += `    I próg ${formatPercentPL(rate12)}: ${formatNumberPL(
-        regularPitDetails.in12Bracket,
-      )} × ${formatPercentPL(rate12)} = ${formatNumberPL(
-        regularPitDetails.tax12,
-      )}\n`;
-    }
-
-    if (regularPitDetails.in32Bracket > 0) {
-      text += `    II próg ${formatPercentPL(rate32)}: ${formatNumberPL(
-        regularPitDetails.in32Bracket,
-      )} × ${formatPercentPL(rate32)} = ${formatNumberPL(
-        regularPitDetails.tax32,
-      )}\n`;
-    }
-
-    text += `    Suma podatku od pozostałego dochodu wg skali: ${formatNumberPL(
-      regularPitDetails.totalPit,
-    )}\n`;
-
-    if (levyDetails.levy > 0) {
-      text += `    Danina solidarnościowa: ${formatNumberPL(
-        levyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        levyDetails.levy,
-      )}\n`;
-    }
-
-    const totalTax = taxMath.round2(
-      ipBoxTax + regularPitDetails.totalPit + levyDetails.levy,
-    );
-    if (levyDetails.levy > 0) {
-      text += `\n  Łączny podatek i danina: ${formatNumberPL(
-        ipBoxTax,
-      )} + ${formatNumberPL(regularPitDetails.totalPit)} + ${formatNumberPL(
-        levyDetails.levy,
-      )} = ${formatNumberPL(totalTax)}\n`;
-    } else {
-      text += `\n  Łączny podatek: ${formatNumberPL(
-        ipBoxTax,
-      )} + ${formatNumberPL(regularPitDetails.totalPit)} = ${formatNumberPL(
-        totalTax,
-      )}\n`;
-    }
-
-    const total = taxMath.round2(totalTax + healthScale);
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
-
-    return text;
+  /* ---------- Ryczałt ---------- */
+  function getRyczaltThresholdDescription(revenue) {
+    const low = TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW;
+    const high = TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH;
+    const mult = taxMath.getRyczaltHealthMultiplier(revenue);
+    let range;
+    if (revenue <= low) range = `nie przekracza ${formatNumberPL(low)}`;
+    else if (revenue <= high) {
+      range = `przekracza ${formatNumberPL(low)}, nie przekracza ${formatNumberPL(high)}`;
+    } else range = `przekracza ${formatNumberPL(high)}`;
+    return { range, mult };
   }
 
-  function getIpBoxLinearBreakdown(
-    income,
-    ipBoxCoeff,
-    healthLinear,
-    healthDeduction,
-  ) {
-    const ipBoxRate = TAX_CONSTANTS.IP_BOX_RATE;
-    const linearRate = TAX_CONSTANTS.LINEAR_PIT_RATE;
-    const rateSolidarity = TAX_CONSTANTS.SOLIDARITY_RATE;
-
-    const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
-      income,
-      ipBoxCoeff,
-    );
-    const taxBase = Math.max(regularIncome - healthDeduction, 0);
-    const pitDetails = getLinearPitDetails(taxBase);
-    const levyDetails = getSolidarityLevyDetails(taxBase);
-
-    let text = `\nObliczenie podatku (podatek liniowy z IP BOX):\n`;
-    text += `  Podział dochodu:\n`;
-    text += `    - Dochód IP BOX (${ipBoxCoeff * 100}%): ${formatNumberPL(
-      ipBoxIncome,
-    )}\n`;
-    text += `    - Dochód pozostały (${
-      (1 - ipBoxCoeff) * 100
-    }%): ${formatNumberPL(regularIncome)}\n`;
-
-    const ipBoxTax = taxMath.round2(ipBoxIncome * ipBoxRate);
-    text += `\n  Podatek IP BOX:\n`;
-    text += `    ${formatNumberPL(ipBoxIncome)} × ${formatPercentPL(
-      ipBoxRate,
-    )} = ${formatNumberPL(ipBoxTax)}\n`;
-
-    text += `\n  Podatek od pozostałego dochodu (liniowy):\n`;
-    text += `    Podstawa (PIT liniowy): ${formatNumberPL(
-      regularIncome,
-    )} - ${formatNumberPL(healthDeduction)} = ${formatNumberPL(taxBase)}\n`;
-
-    if (pitDetails.pitBase > 0) {
-      text += `    Podatek liniowy ${formatPercentPL(linearRate)}: ${formatNumberPL(
-        taxBase,
-      )} × ${formatPercentPL(
-        linearRate,
-      )} = ${formatNumberPL(pitDetails.pit)}\n`;
-    }
-
-    if (levyDetails.levy > 0) {
-      text += `    Danina solidarnościowa ${formatPercentPL(
-        rateSolidarity,
-      )} (odrębna należność rozliczana na formularzu DSF-1, poza PIT-em liniowym; podstawa to dochód stanowiący podstawę daniny po odliczeniach dopuszczonych w DSF-1 — dochód z IP BOX do niej nie wchodzi; w uproszczeniu kalkulator przyjmuje podstawę ${formatNumberPL(
-        taxBase,
-      )}, danina dotyczy nadwyżki ponad ${formatNumberPL(
-        levyDetails.threshold,
-      )}):\n    ${formatNumberPL(
-        levyDetails.aboveThreshold,
-      )} × ${formatPercentPL(rateSolidarity)} = ${formatNumberPL(
-        levyDetails.levy,
-      )}\n`;
-    }
-
-    const totalRegularTax = taxMath.round2(pitDetails.pit + levyDetails.levy);
-    const totalTax = taxMath.round2(ipBoxTax + totalRegularTax);
-    text +=
-      levyDetails.levy > 0
-        ? `\n  Łączny podatek i danina: ${formatNumberPL(
-            ipBoxTax,
-          )} + ${formatNumberPL(pitDetails.pit)} + ${formatNumberPL(
-            levyDetails.levy,
-          )} = ${formatNumberPL(totalTax)}\n`
-        : `\n  Łączny podatek: ${formatNumberPL(
-            ipBoxTax,
-          )} + ${formatNumberPL(totalRegularTax)} = ${formatNumberPL(
-            totalTax,
-          )}\n`;
-
-    const total = taxMath.round2(totalTax + healthLinear);
-    text += `\nRAZEM (PIT + składka zdrowotna): ${formatNumberPL(total)}\n`;
-
-    return text;
-  }
-
-  function getRyczaltBreakdown(
-    revenue,
-    rate,
-    rateName,
-    healthDeduction,
-    healthAnnual,
-    isMultipleRates,
-  ) {
-    const taxBase = Math.max(revenue - healthDeduction, 0);
-    const tax = taxMath.round2(taxBase * rate);
-
-    let text = `\nObliczenie ryczałtu (stawka ${rateName}):\n`;
-    text += `  Przychód: ${formatNumberPL(revenue)}\n`;
-    text += `  Odliczenie składki zdrowotnej: ${formatNumberPL(
-      healthDeduction,
-    )}\n`;
-    text += `  Podstawa opodatkowania: ${formatNumberPL(
-      revenue,
-    )} - ${formatNumberPL(healthDeduction)} = ${formatNumberPL(taxBase)}\n`;
-    text += `  Ryczałt: ${formatNumberPL(
-      taxBase,
-    )} × ${rateName} = ${formatNumberPL(tax)}\n`;
-
-    if (!isMultipleRates) {
-      const total = taxMath.round2(tax + healthAnnual);
-      text += `\nRAZEM (PIT + składka zdrowotna zdrowotna): ${formatNumberPL(
-        total,
-      )}\n`;
-    }
-
-    return text;
-  }
-
-  function getRyczalt85125Breakdown(
-    revenue,
-    healthDeduction,
-    healthAnnual,
-    isMultipleRates,
-  ) {
-    const threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
-    const rate85 = TAX_CONSTANTS.RYCZALT_RATE_8_5;
-    const rate125 = TAX_CONSTANTS.RYCZALT_RATE_12_5;
-
-    let text = `\nObliczenie ryczałtu (stawka 8,5% i 12,5%):\n`;
-    text += `  Przychód: ${formatNumberPL(revenue)}\n`;
-    text += `  Próg dla stawki 8,5%: ${formatNumberPL(threshold)}\n`;
-    text += `  Odliczenie składki zdrowotnej: ${formatNumberPL(
-      healthDeduction,
-    )}\n`;
-
-    let tax;
-    if (revenue <= threshold) {
-      const taxBase = Math.max(revenue - healthDeduction, 0);
-      tax = taxMath.round2(taxBase * rate85);
-      text += `  Cały przychód mieści się w progu 8,5%:\n`;
-      text += `  Podstawa: ${formatNumberPL(taxBase)}\n`;
-      text += `  Ryczałt: ${formatNumberPL(taxBase)} × 8,5% = ${formatNumberPL(
-        tax,
+  function getRyczaltHealthText(evaluation) {
+    const { ctx, best } = evaluation;
+    const avgSalary = TAX_CONSTANTS.AVG_SALARY_Q4_PREV;
+    const { range, mult } = getRyczaltThresholdDescription(best.thresholdRevenue);
+    let text = `\nSkładka zdrowotna (ryczałt, art. 81 ust. 2e–2g u.ś.o.z.):\n`;
+    if (best.socialNotFromScale > 0) {
+      text += `  Przychód do ustalenia progu (art. 81 ust. 2g): ${formatNumberPL(
+        best.revenueTotal,
+      )} − ${formatNumberPL(best.socialNotFromScale)} (składki społeczne nieodliczone od dochodu ze skali) = ${formatNumberPL(
+        best.thresholdRevenue,
       )}\n`;
     } else {
-      const tax85 = taxMath.round2(threshold * rate85);
-      const above = revenue - threshold;
-      const aboveBase = Math.max(above - healthDeduction, 0);
-      const tax125 = taxMath.round2(aboveBase * rate125);
-      tax = taxMath.round2(tax85 + tax125);
-
-      text += `  Część do ${formatNumberPL(threshold)} (8,5%): ${formatNumberPL(
-        threshold,
-      )} × 8,5% = ${formatNumberPL(tax85)}\n`;
-      text += `  Część powyżej progu: ${formatNumberPL(above)}\n`;
-      text += `  Po odliczeniu składki zdrowotnej: ${formatNumberPL(
-        aboveBase,
-      )}\n`;
-      text += `  Ryczałt 12,5%: ${formatNumberPL(
-        aboveBase,
-      )} × 12,5% = ${formatNumberPL(tax125)}\n`;
-      text += `  Suma ryczałtu: ${formatNumberPL(tax85)} + ${formatNumberPL(
-        tax125,
-      )} = ${formatNumberPL(tax)}\n`;
+      text += `  Przychód do ustalenia progu: ${formatNumberPL(best.thresholdRevenue)}${
+        ctx.social > 0
+          ? " (składki społeczne odliczone od dochodu ze skali nie obniżają przychodu – art. 81 ust. 2g)"
+          : ""
+      }\n`;
     }
+    text += `  Próg: przychód ${range} → podstawa ${formatPercentPL(
+      mult,
+    )} przeciętnego wynagrodzenia (${formatNumberPL(avgSalary)})\n`;
+    text += `  Miesięcznie: ${formatNumberPL(avgSalary)} × ${formatPercentPL(
+      mult,
+    )} × ${formatPercentPL(TAX_CONSTANTS.HEALTH_RATE_RYCZALT)} = ${formatNumberPL(
+      best.healthMonthly,
+    )}\n`;
+    text += `  Rocznie: ${formatNumberPL(best.healthMonthly)} × ${ctx.healthMonths} mies. = ${formatNumberPL(
+      best.health,
+    )}\n`;
+    text += `  Odliczenie od przychodu (50%, art. 11 ust. 1a ustawy o ryczałcie): ${formatNumberPL(
+      best.healthDeduction,
+    )}\n`;
+    return text;
+  }
 
-    if (!isMultipleRates) {
-      const total = taxMath.round2(tax + healthAnnual);
-      text += `\nRAZEM (PIT + składka zdrowotna zdrowotna): ${formatNumberPL(
-        total,
-      )}\n`;
+  function getRyczaltRateLines(rateId, rate, indent) {
+    const label = RYCZALT_RATE_LABELS[rateId];
+    const base = Math.max(taxMath.round2(rate.rateRevenue - rate.deduction), 0);
+    if (rateId !== "ryczalt8_5_12_5") {
+      const baseLine =
+        rate.deduction > rate.rateRevenue
+          ? `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+              rate.deduction,
+            )} < 0 → ${formatNumberPL(base)}\n`
+          : `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+              rate.deduction,
+            )} = ${formatNumberPL(base)}\n`;
+      return `${baseLine}${indent}Ryczałt: ${formatNumberPL(
+        base,
+      )} × ${label} = ${formatNumberPL(rate.tax)}\n`;
     }
+    const details = getRyczalt85125Details(rate.rateRevenue, rate.deduction);
+    let text = `${indent}Próg dla stawki 8,5% (art. 12 ust. 1 pkt 4): ${formatNumberPL(
+      details.threshold,
+    )}\n`;
+    if (rate.rateRevenue <= details.threshold) {
+      text += `${indent}Cały przychód mieści się w progu 8,5%: (${formatNumberPL(
+        rate.rateRevenue,
+      )} − ${formatNumberPL(rate.deduction)}) × 8,5% = ${formatNumberPL(details.tax)}\n`;
+      return text;
+    }
+    text += `${indent}Odliczenie dzielone proporcjonalnie do przychodu w każdej stawce (art. 11 ust. 3):\n`;
+    text += `${indent}  - na część 8,5%: ${formatNumberPL(rate.deduction)} × ${formatNumberPL(
+      details.revenue85,
+    )} / ${formatNumberPL(rate.rateRevenue)} = ${formatNumberPL(details.deduction85)}\n`;
+    text += `${indent}  - na część 12,5%: ${formatNumberPL(rate.deduction)} − ${formatNumberPL(
+      details.deduction85,
+    )} = ${formatNumberPL(details.deduction125)}\n`;
+    text += `${indent}Część do ${formatNumberPL(details.threshold)} (8,5%): (${formatNumberPL(
+      details.revenue85,
+    )} − ${formatNumberPL(details.deduction85)}) × 8,5% = ${formatNumberPL(details.tax85)}\n`;
+    text += `${indent}Część powyżej progu (12,5%): (${formatNumberPL(
+      details.revenue125,
+    )} − ${formatNumberPL(details.deduction125)}) × 12,5% = ${formatNumberPL(
+      details.tax125,
+    )}\n`;
+    text += `${indent}Suma ryczałtu: ${formatNumberPL(details.tax85)} + ${formatNumberPL(
+      details.tax125,
+    )} = ${formatNumberPL(details.tax)}\n`;
+    return text;
+  }
 
+  function getRyczaltDeductionLines(evaluation, indent) {
+    const { ctx, best } = evaluation;
+    let text = `${indent}Odliczenie 50% składki zdrowotnej (art. 11 ust. 1a): ${formatNumberPL(
+      best.healthDeduction,
+    )}\n`;
+    // 50% zdrowotnej ponad przychód nie da się odliczyć gdzie indziej
+    // (art. 11 ust. 1a dotyczy tylko przychodu ryczałtowego; brak
+    // odpowiednika w art. 26 ustawy o PIT)
+    const unusedHealth = taxMath.round2(
+      Math.max(best.healthDeduction - Math.max(best.revenueTotal, 0), 0),
+    );
+    if (unusedHealth > 0) {
+      text += `${indent}  (przychód ${formatNumberPL(
+        best.revenueTotal,
+      )} pokrywa tylko część tego odliczenia; nieodliczone ${formatNumberPL(
+        unusedHealth,
+      )} przepada — art. 11 ust. 1a pozwala pomniejszyć wyłącznie przychód ryczałtowy, nie można tego przenieść na dochód ze skali)\n`;
+    }
+    if (best.socialFromRevenue > 0) {
+      const capped =
+        best.method === "ryczalt" &&
+        best.socialFromRevenue < ctx.social &&
+        best.socialFromScale > 0;
+      text += `${indent}Odliczenie składek społecznych od przychodu (art. 11 ust. 1): ${formatNumberPL(
+        best.socialFromRevenue,
+      )}${
+        capped
+          ? ` (do wysokości przychodu pomniejszonego o 50% zdrowotnej: ${formatNumberPL(
+              best.revenueTotal,
+            )} − ${formatNumberPL(best.healthDeduction)})`
+          : ""
+      }\n`;
+      text += `${indent}Odliczenia od przychodu razem: ${formatNumberPL(
+        best.healthDeduction,
+      )} + ${formatNumberPL(best.socialFromRevenue)} = ${formatNumberPL(
+        best.totalDeduction,
+      )}\n`;
+    } else if (ctx.social > 0 && best.method === "ryczalt") {
+      text += `${indent}Odliczenie składek społecznych od przychodu: 0,00 zł (przychód w całości pokryty odliczeniem 50% zdrowotnej)\n`;
+    }
+    const lost = taxMath.round2(
+      ctx.social - best.socialFromRevenue - best.socialFromScale,
+    );
+    if (ctx.social > 0 && lost > 0) {
+      text += `${indent}(nieodliczona nadwyżka składek ${formatNumberPL(lost)} przepada)\n`;
+    }
+    text += getPit28NoteText(evaluation, indent);
+    return text;
+  }
+
+  /* Praktyczna wskazówka do zeznań: ile składek społecznych wpisać w PIT-28,
+     a ile odliczyć w PIT-36/PIT-37 (art. 26 ust. 13a ustawy o PIT). */
+  function getPit28NoteText(evaluation, indent) {
+    const { ctx, best } = evaluation;
+    if (!ctx.zusEnabled || ctx.social <= 0 || best.socialFromScale <= 0) {
+      return "";
+    }
+    return `${indent}W zeznaniach: w PIT-28 (część E.1, „Składki na ubezpieczenia społeczne”) wpisz ${formatNumberPL(
+      best.socialFromRevenue,
+    )}${
+      best.socialFromRevenue < ctx.social ? " — mniej niż zapłacone składki" : ""
+    }; pozostałe ${formatNumberPL(
+      best.socialFromScale,
+    )} odlicz od dochodu ze skali w PIT-36/PIT-37 (art. 26 ust. 1 pkt 2 i ust. 13a ustawy o PIT: składki nieodliczone od przychodu ryczałtowego).\n`;
+  }
+
+  function getRyczaltOtherIncomeLines(evaluation, indent) {
+    const { ctx, best } = evaluation;
+    if (ctx.otherIncome <= 0) return "";
+    let text = `\n${indent}Inne dochody (skala, rozliczane osobno):\n`;
+    text += `${indent}  Dochód: ${formatNumberPL(ctx.otherIncome)}${
+      best.socialFromScale > 0
+        ? ` − składki społeczne (art. 26 ust. 1 pkt 2${
+            best.method === "ryczalt"
+              ? " i ust. 13a — nadwyżka ponad przychód pomniejszony o 50% zdrowotnej"
+              : ""
+          }) ${formatNumberPL(best.socialFromScale)} = ${formatNumberPL(best.scaleBase)}`
+        : ""
+    }\n`;
+    text += getScalePitBracketLines(getScalePitDetails(best.scaleBase), `${indent}  `);
+    text += `${indent}  PIT wg skali: ${formatNumberPL(best.scalePit)}\n`;
+    if (best.levy > 0) {
+      text += getLevyLine(
+        getSolidarityLevyDetails(best.scaleBase),
+        `${indent}  `,
+        "podstawa: dochód ze skali po odliczeniach; ryczałt poza podstawą",
+      );
+    }
+    return text;
+  }
+
+  function getRyczaltTaxSumLine(evaluation, indent) {
+    const { ctx, best } = evaluation;
+    const parts = [best.ryczaltTax];
+    if (ctx.otherIncome > 0) parts.push(best.scalePit);
+    if (best.levy > 0) parts.push(best.levy);
+    return `${indent}Suma podatków: ${
+      parts.length > 1
+        ? `${parts.map((part) => formatNumberPL(part)).join(" + ")} = `
+        : ""
+    }${formatNumberPL(best.taxes)}\n`;
+  }
+
+  function getRyczaltSingleVariantText(rateId, evaluation) {
+    const { ctx, best } = evaluation;
+    const label = RYCZALT_RATE_LABELS[rateId];
+    const rate = best.rates[rateId];
+    let text = `\n--- RYCZAŁT ${label.toUpperCase()} ---\n\n`;
+    text += `Przychód: ${formatNumberPL(best.revenueTotal)}\n`;
+    if (ctx.otherIncome > 0) {
+      text += `Inne dochody opodatkowane skalą: ${formatNumberPL(ctx.otherIncome)}\n`;
+    }
+    text += getVariantZusLine(evaluation);
+    text += getHolidayComparisonText(evaluation);
+    text += getDeductionComparisonText(evaluation);
+    text += getRyczaltHealthText(evaluation);
+    text += `\nObliczenie ryczałtu (stawka ${label}${
+      ctx.zusEnabled && ctx.social > 0
+        ? `; składki społeczne: ${getSocialMethodLabel(evaluation)}`
+        : ""
+    }):\n`;
+    text += `  Przychód: ${formatNumberPL(rate.rateRevenue)}\n`;
+    text += getRyczaltDeductionLines(evaluation, "  ");
+    text += getRyczaltRateLines(rateId, rate, "  ");
+    text += getRyczaltOtherIncomeLines(evaluation, "  ");
+    text += getRyczaltTaxSumLine(evaluation, "  ");
+    text += getTotalSummaryText(evaluation);
+    return text;
+  }
+
+  function getRyczaltMultiVariantText(evaluation, visibleRateIds) {
+    const { ctx, best } = evaluation;
+    let text = `\n--- RYCZAŁT (WIELE STAWEK) ---\n\n`;
+    text += `Przychód z działalności: ${formatNumberPL(best.revenueTotal)}\n`;
+    text += `Suma przychodów przypisanych stawkom: ${formatNumberPL(
+      best.allocatedTotal,
+    )}\n`;
+    if (!isAllocationComplete(ctx.revenue, best.allocatedTotal)) {
+      text += `UWAGA: podział przychodu nie zgadza się z przychodem (${formatNumberPL(
+        ctx.revenue,
+      )}). Ryczałt liczony tylko od kwot przypisanych stawkom; próg składki zdrowotnej i proporcje odliczeń liczone od całego przychodu (art. 81 ust. 2e–2f u.ś.o.z., art. 11 ust. 3 ustawy o ryczałcie). Suma nie jest porównywana w rankingu.\n`;
+    }
+    if (ctx.otherIncome > 0) {
+      text += `Inne dochody opodatkowane skalą: ${formatNumberPL(ctx.otherIncome)}\n`;
+    }
+    text += getVariantZusLine(evaluation);
+    text += getHolidayComparisonText(evaluation);
+    text += getDeductionComparisonText(evaluation);
+    text += getRyczaltHealthText(evaluation);
+    text += `\nObliczenie ryczałtu${
+      ctx.zusEnabled && ctx.social > 0
+        ? ` (składki społeczne: ${getSocialMethodLabel(evaluation)})`
+        : ""
+    }:\n`;
+    text += getRyczaltDeductionLines(evaluation, "  ");
+    text += `  Odliczenia dzielone między stawki proporcjonalnie do przychodu (art. 11 ust. 3 ustawy o ryczałcie).\n`;
+    visibleRateIds.forEach((rateId) => {
+      const rate = best.rates[rateId];
+      if (!rate) return;
+      text += `\n  Stawka ${RYCZALT_RATE_LABELS[rateId]}: przychód ${formatNumberPL(
+        rate.rateRevenue,
+      )}\n`;
+      if (best.revenueTotal > 0) {
+        text += `    Część odliczeń: ${formatNumberPL(best.totalDeduction)} × ${formatNumberPL(
+          rate.rateRevenue,
+        )} / ${formatNumberPL(best.revenueTotal)} = ${formatNumberPL(
+          rate.deduction,
+        )} (grosze rozdzielane metodą największych reszt)\n`;
+      }
+      text += getRyczaltRateLines(rateId, rate, "    ");
+    });
+    text += `\n  Suma ryczałtu: ${formatNumberPL(best.ryczaltTax)}\n`;
+    text += getRyczaltOtherIncomeLines(evaluation, "  ");
+    text += getRyczaltTaxSumLine(evaluation, "  ");
+    text += getTotalSummaryText(evaluation);
+    return text;
+  }
+
+  const RYCZALT_RATE_LABELS = {
+    ryczalt2: "2%",
+    ryczalt3: "3%",
+    ryczalt5_5: "5,5%",
+    ryczalt8_5: "8,5%",
+    ryczalt8_5_12_5: "8,5% i 12,5%",
+    ryczalt10: "10%",
+    ryczalt12: "12%",
+    ryczalt14: "14%",
+    ryczalt15: "15%",
+    ryczalt17: "17%",
+  };
+
+  function getVariantSummaryLine(label, evaluation) {
+    if (!evaluation) return "";
+    const { ctx } = evaluation;
+    const notes = [];
+    if (ctx.zusEnabled && ctx.social > 0) {
+      notes.push(`składki: ${getSocialMethodLabel(evaluation)}`);
+    }
+    if (evaluation.holidayMonth) {
+      notes.push(`wakacje: ${ROMAN_MONTHS[evaluation.holidayMonth - 1]}`);
+    }
+    return `  ${label}: ${formatPLN(evaluation.total)}${
+      notes.length ? `  [${notes.join("; ")}]` : ""
+    }\n`;
+  }
+
+  function formatDateTimePL(date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}, ${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}`;
+  }
+
+  const INVALID_EXPORT_TEXT =
+    "Wyniki nie są dostępne: popraw zaznaczone pola formularza (błędne kwoty lub daty), aby zobaczyć obliczenia.";
+
+  /* Wszystkie dane wejściowe w jednym bloku (eksport dla doradcy). */
+  function getInputsSectionText(result) {
+    const { inputs, ctx, schedule } = result;
+    const zus = inputs.zus;
+    const yesNo = (value) => (value ? "tak" : "nie");
+    let text = `=== DANE WEJŚCIOWE ===\n`;
+    text += `Przychód roczny: ${formatNumberPL(inputs.revenue)}\n`;
+    text += `Koszty roczne (bez składek ZUS): ${formatNumberPL(inputs.costs)}\n`;
+    text += `Dochód z działalności (przed składkami ZUS): ${formatNumberPL(ctx.income)}\n`;
+    text += `Inne dochody opodatkowane skalą: ${formatNumberPL(ctx.otherIncome)}\n`;
+    text += `Wspólne rozliczenie z małżonkiem: ${
+      inputs.jointTaxation
+        ? `tak (dochód małżonka ${formatNumberPL(inputs.spouseIncome)})`
+        : "nie"
+    }\n`;
+    text += `IP BOX: ${
+      inputs.ipBoxEnabled
+        ? `tak — udział dochodu kwalifikowanego ${formatPercentPL(inputs.ipBoxCoeff)}`
+        : "nie"
+    }\n`;
+    const rateIds = getCheckedRateIds();
+    if (!rateIds.length) {
+      text += `Ryczałt: nie wybrano stawek\n`;
+    } else if (inputs.isMultipleRates) {
+      text += `Ryczałt (tryb „Wiele stawek”): ${rateIds
+        .map(
+          (id) =>
+            `${RYCZALT_RATE_LABELS[id]} — ${formatNumberPL(
+              inputs.allocatedRevenues[id] || 0,
+            )}`,
+        )
+        .join("; ")}\n`;
+    } else {
+      text += `Ryczałt — porównywane stawki: ${rateIds
+        .map((id) => RYCZALT_RATE_LABELS[id])
+        .join(", ")}\n`;
+    }
+    text += `Składki społeczne ZUS: ${
+      zus.enabled ? "uwzględniane" : "nieuwzględniane"
+    }\n`;
+    text += `Data rozpoczęcia działalności: ${
+      schedule.startDate
+        ? formatDatePL(schedule.startDate)
+        : "brak (działalność przed 2026 r.)"
+    }\n`;
+    if (zus.enabled) {
+      const pathLabels = {
+        full: "pełny ZUS",
+        ulga: "ulga na start → mały ZUS",
+        pref: "mały ZUS (bez ulgi)",
+      };
+      text += `Ścieżka składek (wybrana): ${pathLabels[zus.path] || zus.path}${
+        !schedule.startDate && zus.path !== "full"
+          ? " — nie stosowana bez daty rozpoczęcia (pełny ZUS)"
+          : schedule.employment && zus.path !== "full"
+            ? " — nie stosowana przy umowie o pracę"
+            : ""
+      }\n`;
+      text += `Składka chorobowa: ${yesNo(zus.sickness)}; umowa o pracę ≥ minimalnego: ${yesNo(
+        zus.employment,
+      )}; wakacje składkowe: ${yesNo(zus.holiday)}\n`;
+      text += `Data urodzenia / płeć: ${
+        zus.birthDate ? formatDatePL(taxMath.parseISODate(zus.birthDate)) : "brak"
+      } / ${zus.sex === "K" ? "kobieta" : zus.sex === "M" ? "mężczyzna" : "brak"}\n`;
+    }
+    return text;
+  }
+
+  /* Ranking – ta sama lista co w karcie „Najniższe obciążenie”. */
+  function getRankingSectionText(result) {
+    const ranking = buildRanking(result);
+    let text = `\n${SEPARATOR_LINE}\n=== RANKING (od najniższego obciążenia) ===\n${SEPARATOR_LINE}\n\n`;
+    if (!ranking.entries.length || !ranking.meaningful) {
+      text += `Brak wariantów do porównania (wprowadź przychód).\n`;
+    } else {
+      const best = ranking.entries[0];
+      ranking.entries.forEach((entry, index) => {
+        const diff = taxMath.round2(entry.total - best.total);
+        text += `${String(index + 1).padStart(2)}. ${entry.label}: ${formatPLN(
+          entry.total,
+        )}${
+          index === 0
+            ? "  ← najniższe"
+            : diff > 0
+              ? `  (+${formatPLN(diff)})`
+              : "  (ex aequo)"
+        }\n`;
+        const evaluation = result.variants[entry.id];
+        if (evaluation) text += `    ${getVariantDetailText(evaluation)}\n`;
+      });
+    }
+    ranking.excluded.forEach((item) => {
+      text += `Uwaga: ${item.reason}\n`;
+      if (ranking.allocation) {
+        const warning = getAllocationWarningText(ranking.allocation);
+        if (warning) text += `  ${warning}\n`;
+      }
+    });
+    text += `(kwoty w zł: PIT/ryczałt z daniną + składka zdrowotna${
+      result.ctx.zusEnabled ? " + składki społeczne ZUS z FP/FS" : ""
+    }; obciążenie przypisane działalności)\n`;
     return text;
   }
 
   function getFormattedValues() {
-    const revenueNum = parsePLN(DOM.revenueInput.value);
-    const costsNum = parsePLN(DOM.costsInput.value);
-    const incomeNum = revenueNum - costsNum;
-    const ipBoxOn = isIpBoxEnabled();
-    const ipBoxCoeffNum = ipBoxOn
-      ? parseFloat(DOM.ipBoxCoeffInput.value) / 100
-      : 0;
-    const isJointTaxation = document.querySelector(".joint-taxation-card.show");
-    const spouseIncomeNum = isJointTaxation
-      ? parsePLN(document.getElementById("spouseIncome").value)
-      : 0;
-    const isMultipleRates = DOM.multipleRatesToggle.checked;
+    if (!validateAllInputs().valid) return INVALID_EXPORT_TEXT;
+    const result = computeFromForm();
+    const { inputs, ctx, variants } = result;
+    const ipBoxOn = inputs.ipBoxEnabled;
+    const isJoint = inputs.jointTaxation;
+    const isMultipleRates = inputs.isMultipleRates;
+    const visibleRateIds = getCheckedRateIds();
 
-    const healthScaleData = getHealthScaleBreakdown(incomeNum);
-    const healthLinearData = getHealthLinearBreakdown(incomeNum);
+    let text = `KALKULATOR PODATKOWY 2026 — obliczenia dla JDG\n`;
+    text += `Data sporządzenia: ${formatDateTimePL(new Date())}\n`;
+    text += `Stan prawny na ${LEGAL_STATUS_DATE} (rok podatkowy 2026)\n\n`;
+    text += getInputsSectionText(result);
+    text += getRankingSectionText(result);
 
-    let ryczaltRevenueForHealth = revenueNum;
-    if (isMultipleRates) {
-      let totalAllocated = 0;
-      document.querySelectorAll(".rate-input.show").forEach((input) => {
-        totalAllocated += parsePLN(input.value) || 0;
-      });
-      ryczaltRevenueForHealth = totalAllocated;
-    }
-    const healthRyczaltData = getHealthRyczaltBreakdown(
-      ryczaltRevenueForHealth,
-    );
-
-    let text = `=== DANE PODSTAWOWE ===\n`;
-    text += `Przychód: ${formatNumberPL(revenueNum)}\n`;
-    text += `Koszty: ${formatNumberPL(costsNum)}\n`;
-    text += `Dochód: ${formatNumberPL(incomeNum)}\n`;
-    if (isJointTaxation) {
-      text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n`;
-    }
+    text += `\n${SEPARATOR_LINE}\n=== ZAKRES I ZAŁOŻENIA ===\n${SEPARATOR_LINE}\n\n`;
+    text += `Kwoty obejmują PIT (skala / liniowy / ryczałt, z daniną\n`;
+    text += `solidarnościową), składkę zdrowotną podatnika${
+      ctx.zusEnabled ? `\noraz składki społeczne ZUS (z FP/FS) za 2026 r.` : `.\nSkładki społeczne ZUS nie są uwzględniane (przełącznik wyłączony).`
+    }\n`;
+    text += `Dla każdego wariantu kalkulator porównuje legalne sposoby odliczenia\n`;
+    text += `składek społecznych i wybiera najtańszy (porównanie w szczegółach).\n`;
+    text += `Kwoty liczone z dokładnością do grosza — podstawy i podatek nie są\n`;
+    text += `zaokrąglane do pełnych złotych (art. 63 § 1 Ordynacji podatkowej);\n`;
+    text += `różnice względem zeznania rzędu 1 zł (uproszczenie).\n`;
     if (ipBoxOn) {
-      text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n`;
+      text += `IP BOX: dochód kwalifikowany (5%, art. 30ca) nie wchodzi do podstawy\n`;
+      text += `daniny (art. 30h ust. 2 – zamknięty katalog; art. 30c ust. 6).\n`;
+    }
+    if (ctx.otherIncome > 0) {
+      text += `Przy innych dochodach ze skali wynik to obciążenie przypisane\n`;
+      text += `działalności: od łącznych podatków odejmujemy podatek od samych\n`;
+      text += `innych dochodów (${formatNumberPL(ctx.baseline.total)}).\n`;
+    }
+    if (isJoint) {
+      text += `Przy wspólnym rozliczeniu PIT jest wspólny dla pary\n`;
+      text += `("2 × PIT((suma dochodów) / 2)"). Aby wynik był porównywalny\n`;
+      text += `z wariantami indywidualnymi, kalkulator odejmuje od PIT-u pary\n`;
+      text += `PIT, który małżonek zapłaciłby sam wg skali (wynik może być\n`;
+      text += `ujemny). Danina, składka zdrowotna i ZUS małżonka nie są wliczane.\n`;
     }
 
-    text += `\nZakres obliczeń: kwoty obejmują PIT (skala / liniowy / ryczałt)\n`;
-    text += `oraz składkę zdrowotną podatnika. Nie obejmują składek społecznych\n`;
-    text += `(ZUS) ani obciążeń publicznoprawnych po stronie małżonka\n`;
-    text += `(w tym jego składki zdrowotnej i ZUS).\n`;
-    if (isJointTaxation) {
-      text += `Przy wspólnym rozliczeniu przedstawione wartości nie stanowią\n`;
-      text += `więc pełnego obciążenia gospodarstwa domowego — odpowiadają\n`;
-      text += `części przypadającej na podatnika po zastosowaniu zasady\n`;
-      text += `"2 × PIT((suma dochodów) / 2)" dla skali.\n`;
-    }
+    text += getZusSectionText(result);
 
-    text += `\n${"=".repeat(50)}\n`;
+    text += `\n${SEPARATOR_LINE}\n`;
     text += `=== PODSUMOWANIE WYNIKÓW ===\n`;
-    text += `${"=".repeat(50)}\n\n`;
+    text += `${SEPARATOR_LINE}\n\n`;
 
-    const taxScaleValue = document.getElementById("taxScale").value;
-    const taxScaleIpBoxValue = document.getElementById("taxScaleIpBox").value;
     text += `SKALA PODATKOWA:\n`;
-    if (isJointTaxation) {
-      const taxScaleJointValue = document.getElementById("taxScaleJoint").value;
-      const taxScaleIpBoxJointValue =
-        document.getElementById("taxScaleIpBoxJoint").value;
-      text += `  Indywidualnie: ${taxScaleValue}\n`;
-      if (ipBoxOn) {
-        text += `  Indywidualnie (IP BOX): ${taxScaleIpBoxValue}\n`;
-      }
-      text += `  Wspólnie z małżonkiem: ${taxScaleJointValue}\n`;
-      if (ipBoxOn) {
-        text += `  Wspólnie z małżonkiem (IP BOX): ${taxScaleIpBoxJointValue}\n`;
-      }
-    } else {
-      text += `  Skala podatkowa: ${taxScaleValue}\n`;
-      if (ipBoxOn) {
-        text += `  Skala podatkowa (IP BOX): ${taxScaleIpBoxValue}\n`;
-      }
-    }
-
-    const taxLinearValue = document.getElementById("taxLinear").value;
-    const taxLinearIpBoxValue = document.getElementById("taxLinearIpBox").value;
-    text += `\nPODATEK LINIOWY:\n`;
-    text += `  Podatek liniowy: ${taxLinearValue}\n`;
-    if (ipBoxOn) {
-      text += `  Podatek liniowy (IP BOX): ${taxLinearIpBoxValue}\n`;
-    }
-
-    const anyRyczaltVisible = Array.from(DOM.ryczaltCheckboxes).some(
-      (checkbox) => checkbox.checked,
+    text += getVariantSummaryLine(
+      isJoint ? "Indywidualnie" : "Skala podatkowa",
+      variants.taxScale,
     );
-    const ryczaltRates = [
-      { id: "ryczalt2", label: "2%", rate: TAX_CONSTANTS.RYCZALT_RATE_2 },
-      { id: "ryczalt3", label: "3%", rate: TAX_CONSTANTS.RYCZALT_RATE_3 },
-      { id: "ryczalt5_5", label: "5,5%", rate: TAX_CONSTANTS.RYCZALT_RATE_5_5 },
-      { id: "ryczalt8_5", label: "8,5%", rate: TAX_CONSTANTS.RYCZALT_RATE_8_5 },
-      { id: "ryczalt8_5_12_5", label: "8,5% i 12,5%", rate: null },
-      { id: "ryczalt10", label: "10%", rate: TAX_CONSTANTS.RYCZALT_RATE_10 },
-      { id: "ryczalt12", label: "12%", rate: TAX_CONSTANTS.RYCZALT_RATE_12 },
-      { id: "ryczalt14", label: "14%", rate: TAX_CONSTANTS.RYCZALT_RATE_14 },
-      { id: "ryczalt15", label: "15%", rate: TAX_CONSTANTS.RYCZALT_RATE_15 },
-      { id: "ryczalt17", label: "17%", rate: TAX_CONSTANTS.RYCZALT_RATE_17 },
-    ];
-
-    if (anyRyczaltVisible) {
-      text += `\nRYCZAŁT:\n`;
-      ryczaltRates.forEach((rate) => {
-        const element = document.getElementById(rate.id);
-        if (
-          element &&
-          element.closest(".input-group").style.display !== "none"
-        ) {
-          text += `  ${rate.label}: ${element.value}\n`;
-        }
-      });
-
-      if (isMultipleRates) {
-        const ratesTotalValue = document.getElementById("ratesTotalValue");
-        if (ratesTotalValue) {
-          text += `  ---\n`;
-          text += `  SUMA (PIT + składka zdrowotna zdrowotna): ${ratesTotalValue.textContent}\n`;
-        }
-      }
-    }
-
-    text += `\n${"=".repeat(50)}\n`;
-    text += `=== SZCZEGÓŁY OBLICZEŃ ===\n`;
-    text += `${"=".repeat(50)}\n`;
-
-    text += `\n--- SKALA PODATKOWA ---\n`;
-    text += `\nDochód: ${formatNumberPL(incomeNum)}\n\n`;
-    text += healthScaleData.text;
-    text += getScaleTaxBreakdown(incomeNum, healthScaleData.healthScale);
-
-    if (ipBoxOn && ipBoxCoeffNum > 0) {
-      text += `\n--- SKALA PODATKOWA (IP BOX) ---\n`;
-      text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
-      text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
-      text += healthScaleData.text;
-      text += getIpBoxScaleBreakdown(
-        incomeNum,
-        ipBoxCoeffNum,
-        healthScaleData.healthScale,
+    if (ipBoxOn) {
+      text += getVariantSummaryLine(
+        isJoint ? "Indywidualnie (IP BOX)" : "Skala podatkowa (IP BOX)",
+        variants.taxScaleIpBox,
       );
     }
-
-    if (isJointTaxation) {
-      text += `\n--- SKALA PODATKOWA (WSPÓLNIE Z MAŁŻONKIEM) ---\n`;
-      text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
-      text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n\n`;
-      text += healthScaleData.text;
-      text += getScaleTaxJointBreakdown(
-        incomeNum,
-        spouseIncomeNum,
-        healthScaleData.healthScale,
-      );
-
-      if (ipBoxOn && ipBoxCoeffNum > 0) {
-        text += `\n--- SKALA PODATKOWA Z IP BOX (WSPÓLNIE Z MAŁŻONKIEM) ---\n`;
-        text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
-        text += `Dochód małżonka: ${formatNumberPL(spouseIncomeNum)}\n`;
-        text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
-        text += healthScaleData.text;
-        text += getIpBoxScaleJointBreakdown(
-          incomeNum,
-          spouseIncomeNum,
-          ipBoxCoeffNum,
-          healthScaleData.healthScale,
+    if (isJoint) {
+      text += getVariantSummaryLine("Wspólnie z małżonkiem", variants.taxScaleJoint);
+      if (ipBoxOn) {
+        text += getVariantSummaryLine(
+          "Wspólnie z małżonkiem (IP BOX)",
+          variants.taxScaleIpBoxJoint,
         );
       }
     }
 
-    text += `\n--- PODATEK LINIOWY ---\n`;
-    text += `\nDochód: ${formatNumberPL(incomeNum)}\n\n`;
-    text += healthLinearData.text;
-    text += getLinearTaxBreakdown(
-      incomeNum,
-      healthLinearData.healthLinear,
-      healthLinearData.healthDeduction,
-    );
+    text += `\nPODATEK LINIOWY:\n`;
+    text += getVariantSummaryLine("Podatek liniowy", variants.taxLinear);
+    if (ipBoxOn) {
+      text += getVariantSummaryLine("Podatek liniowy (IP BOX)", variants.taxLinearIpBox);
+    }
 
-    if (ipBoxOn && ipBoxCoeffNum > 0) {
-      text += `\n--- PODATEK LINIOWY (IP BOX) ---\n`;
-      text += `\nDochód: ${formatNumberPL(incomeNum)}\n`;
-      text += `Współczynnik IP BOX: ${ipBoxCoeffNum * 100}%\n\n`;
-      text += healthLinearData.text;
-      text += getIpBoxLinearBreakdown(
-        incomeNum,
-        ipBoxCoeffNum,
-        healthLinearData.healthLinear,
-        healthLinearData.healthDeduction,
+    if (visibleRateIds.length) {
+      text += `\nRYCZAŁT:\n`;
+      if (isMultipleRates) {
+        visibleRateIds.forEach((rateId) => {
+          const rate = variants.ratesTotal.best.rates[rateId];
+          text += `  ${RYCZALT_RATE_LABELS[rateId]}: ${formatPLN(
+            rate ? rate.tax : 0,
+          )} (część ryczałtu — sam podatek od tej stawki)\n`;
+        });
+        text += `  ---\n`;
+        text += getVariantSummaryLine(
+          `SUMA (ryczałt + składka zdrowotna${ctx.zusEnabled ? " + składki społeczne ZUS" : ""})`,
+          variants.ratesTotal,
+        );
+      } else {
+        visibleRateIds.forEach((rateId) => {
+          text += getVariantSummaryLine(RYCZALT_RATE_LABELS[rateId], variants[rateId]);
+        });
+      }
+    }
+
+    text += `\n${SEPARATOR_LINE}\n`;
+    text += `=== SZCZEGÓŁY OBLICZEŃ ===\n`;
+    text += `${SEPARATOR_LINE}\n`;
+
+    text += getOtherIncomeSectionText(ctx);
+    text += getScaleVariantText("SKALA PODATKOWA", variants.taxScale);
+    if (ipBoxOn) {
+      text += getScaleVariantText("SKALA PODATKOWA Z IP BOX", variants.taxScaleIpBox);
+    }
+    if (isJoint) {
+      text += getScaleVariantText(
+        "SKALA PODATKOWA WSPÓLNIE Z MAŁŻONKIEM",
+        variants.taxScaleJoint,
       );
+      if (ipBoxOn) {
+        text += getScaleVariantText(
+          "SKALA PODATKOWA Z IP BOX WSPÓLNIE Z MAŁŻONKIEM",
+          variants.taxScaleIpBoxJoint,
+        );
+      }
+    }
+    text += getLinearVariantText("PODATEK LINIOWY", variants.taxLinear);
+    if (ipBoxOn) {
+      text += getLinearVariantText("PODATEK LINIOWY Z IP BOX", variants.taxLinearIpBox);
     }
 
-    if (anyRyczaltVisible) {
-      text += `\n--- RYCZAŁT ---\n`;
-      text += `\nPrzychód: ${formatNumberPL(revenueNum)}\n`;
+    if (visibleRateIds.length) {
       if (isMultipleRates) {
-        text += `(Tryb wielu stawek - obliczenia dla każdej stawki osobno)\n`;
-      }
-      text += `\n`;
-      text += healthRyczaltData.text;
-
-      ryczaltRates.forEach((rateInfo) => {
-        const element = document.getElementById(rateInfo.id);
-        if (
-          element &&
-          element.closest(".input-group").style.display !== "none"
-        ) {
-          let rateRevenue = revenueNum;
-          if (isMultipleRates) {
-            const rateInput = document.querySelector(
-              `.rate-input[data-for="${rateInfo.id}"]`,
-            );
-            rateRevenue = rateInput ? parsePLN(rateInput.value) || 0 : 0;
-          }
-
-          if (rateInfo.id === "ryczalt8_5_12_5") {
-            text += getRyczalt85125Breakdown(
-              rateRevenue,
-              healthRyczaltData.deduction,
-              healthRyczaltData.annualHealth,
-              isMultipleRates,
-            );
-          } else if (rateInfo.rate !== null) {
-            text += getRyczaltBreakdown(
-              rateRevenue,
-              rateInfo.rate,
-              rateInfo.label,
-              healthRyczaltData.deduction,
-              healthRyczaltData.annualHealth,
-              isMultipleRates,
-            );
-          }
-        }
-      });
-
-      if (isMultipleRates) {
-        text += `\n--- SUMA RYCZAŁTU (WIELE STAWEK) ---\n`;
-        let totalAllocated = 0;
-        let totalRyczalt = 0;
-        document.querySelectorAll(".rate-input.show").forEach((input) => {
-          totalAllocated += parsePLN(input.value) || 0;
+        text += getRyczaltMultiVariantText(variants.ratesTotal, visibleRateIds);
+      } else {
+        visibleRateIds.forEach((rateId) => {
+          text += getRyczaltSingleVariantText(rateId, variants[rateId]);
         });
-        ryczaltRates.forEach((rateInfo) => {
-          const element = document.getElementById(rateInfo.id);
-          if (
-            element &&
-            element.closest(".input-group").style.display !== "none"
-          ) {
-            totalRyczalt += parsePLN(element.value) || 0;
-          }
-        });
-        const ratesHealth =
-          taxMath.getRyczaltHealthAnnualForRevenue(totalAllocated);
-        const ratesTotal = taxMath.round2(totalRyczalt + ratesHealth);
-        text += `  Suma przychodów rozdysponowanych: ${formatNumberPL(
-          totalAllocated,
-        )}\n`;
-        text += `  Suma ryczałtu: ${formatNumberPL(totalRyczalt)}\n`;
-        text += `  Składka zdrowotna: ${formatNumberPL(ratesHealth)}\n`;
-        text += `  RAZEM: ${formatNumberPL(ratesTotal)}\n`;
       }
     }
 
-    text += `\n${"=".repeat(50)}\n`;
+    text += `\n${SEPARATOR_LINE}\n`;
     text += `Obliczenia wykonane kalkulatorem podatkowym 2026\n`;
-    text += `Stan prawny: od ${TAX_CONSTANTS.EFFECTIVE_FROM}\n`;
+    text += `Stan prawny na ${LEGAL_STATUS_DATE} (rok podatkowy 2026)\n`;
 
     return text;
   }
@@ -2196,10 +3913,11 @@
     }
     DOM.copyPreview.textContent = getFormattedValues();
     DOM.copyPreview.scrollTop = 0;
+    lastFocusedBeforeModal = document.activeElement;
     DOM.copyModal.hidden = false;
     DOM.copyModal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    lastFocusedBeforeModal = document.activeElement;
+    setBackgroundInert(true);
     requestAnimationFrame(() => {
       DOM.copyModal.classList.add("open");
       if (DOM.copyModalCopy) DOM.copyModalCopy.focus();
@@ -2211,6 +3929,7 @@
     DOM.copyModal.classList.remove("open");
     DOM.copyModal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
+    setBackgroundInert(false);
     if (modalCloseTimeout) clearTimeout(modalCloseTimeout);
     modalCloseTimeout = setTimeout(() => {
       DOM.copyModal.hidden = true;
@@ -2301,7 +4020,59 @@
     DOM.copyModalCopy.addEventListener("click", copyResultsToClipboard);
   }
 
+  /* Pułapka fokusu w otwartym oknie: Tab / Shift+Tab krążą po jego
+     elementach (tło jest dodatkowo inert). */
+  function getOpenModal() {
+    return [DOM.copyModal, DOM.infoModal].find(
+      (modal) => modal && !modal.hidden && modal.classList.contains("open"),
+    );
+  }
+
+  function trapFocus(e) {
+    const modal = getOpenModal();
+    if (!modal || e.key !== "Tab") return;
+    const focusables = Array.from(
+      modal.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (!modal.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+    } else if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  /* Tło okna modalnego wyłączone z nawigacji (inert) na czas otwarcia. */
+  const MODAL_BACKGROUND = [
+    document.querySelector(".skip-link"),
+    document.querySelector(".topbar"),
+    document.getElementById("main"),
+    document.getElementById("mobileJump"),
+  ].filter(Boolean);
+
+  function setBackgroundInert(inert) {
+    MODAL_BACKGROUND.forEach((element) => {
+      if (inert) {
+        element.setAttribute("inert", "");
+        element.setAttribute("data-modal-inert", "");
+      } else {
+        element.removeAttribute("inert");
+        element.removeAttribute("data-modal-inert");
+      }
+    });
+  }
+
   document.addEventListener("keydown", (e) => {
+    trapFocus(e);
     if (
       e.key === "Escape" &&
       DOM.copyModal &&
@@ -2350,11 +4121,11 @@
       const label = document.createElement("span");
       label.textContent = item.label;
       dt.appendChild(label);
-      if (item.code) {
-        const code = document.createElement("span");
-        code.className = "info-list-code";
-        code.textContent = item.code;
-        dt.appendChild(code);
+      if (item.source) {
+        const source = document.createElement("span");
+        source.className = "info-list-source";
+        source.textContent = `Źródło: ${item.source}`;
+        dt.appendChild(source);
       }
 
       const dd = document.createElement("dd");
@@ -2368,6 +4139,36 @@
     return section;
   }
 
+  function createInfoTextSection(title, paragraphs) {
+    const section = document.createElement("section");
+    section.className = "info-section";
+
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    section.appendChild(heading);
+
+    paragraphs.forEach((paragraph) => {
+      const p = document.createElement("p");
+      p.className = "info-section-text";
+      // adresy URL jako klikalne odnośniki (reszta jako zwykły tekst)
+      paragraph.split(/(https:\/\/\S+?)(?=[\s)]|$)/).forEach((part) => {
+        if (/^https:\/\//.test(part)) {
+          const link = document.createElement("a");
+          link.href = part;
+          link.textContent = part;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          p.appendChild(link);
+        } else if (part) {
+          p.appendChild(document.createTextNode(part));
+        }
+      });
+      section.appendChild(p);
+    });
+
+    return section;
+  }
+
   function buildInfoModalContent() {
     if (!DOM.infoModalContent) return;
 
@@ -2376,21 +4177,179 @@
     const intro = document.createElement("p");
     intro.className = "info-modal-intro";
     intro.textContent =
-      "Poniżej znajdziesz wszystkie stałe podatkowe i współczynniki, które kalkulator bierze pod uwagę dla roku 2026.";
+      "Poniżej znajdziesz zakres wyniku, zasady i uproszczenia oraz wszystkie stałe podatkowe i składkowe, które kalkulator bierze pod uwagę dla roku 2026.";
     DOM.infoModalContent.appendChild(intro);
 
     DOM.infoModalContent.appendChild(
       createInfoSection("Okres obowiązywania", [
         {
-          label: "Stan prawny od",
-          code: "EFFECTIVE_FROM",
-          value: TAX_CONSTANTS.EFFECTIVE_FROM,
+          label: "Stan prawny na dzień",
+          value: LEGAL_STATUS_DATE,
         },
         {
-          label: "Pełny rok liczony stawkami od lutego 2026",
-          code: "ASSUME_FULL_YEAR_FROM_FEB",
-          value: TAX_CONSTANTS.ASSUME_FULL_YEAR_FROM_FEB ? "Tak" : "Nie",
+          label: "Rok podatkowy",
+          value: "2026 (1.01–31.12.2026)",
         },
+        {
+          label:
+            "Stawki składki zdrowotnej (skala, liniowy, IP BOX) — rok składkowy od 1.02.2026, stosowany do całego 2026 r.; ryczałt — rok kalendarzowy",
+          source: "art. 81 ust. 1a i 2e u.ś.o.z.",
+          value: formatDatePL(taxMath.parseISODate(TAX_CONSTANTS.EFFECTIVE_FROM)),
+        },
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Zakres wyniku", [
+        "Każdy wariant pokazuje roczne obciążenie za 2026 r.: PIT (ryczałt, IP BOX) z daniną solidarnościową + składka zdrowotna z działalności + składki społeczne ZUS z Funduszem Pracy i Funduszem Solidarnościowym (gdy przełącznik „Uwzględnij składki społeczne” jest włączony).",
+        "Przy innych dochodach opodatkowanych skalą wynik to obciążenie przypisane działalności: łączne podatki podatnika (z innymi dochodami) minus PIT i danina, które zapłaciłby od samych innych dochodów, rozliczając je indywidualnie wg skali. Składka zdrowotna od etatu jest poza zakresem (pobiera ją pracodawca).",
+        "Uproszczenie: kwoty liczone z dokładnością do grosza — podstawy opodatkowania i podatek nie są zaokrąglane do pełnych złotych, jak wymaga art. 63 § 1 Ordynacji podatkowej; różnice względem zeznania rzędu 1 zł. Zaokrąglenie do grosza „połówka w górę”. Pełne obliczenia z podstawami prawnymi: „Pokaż szczegółowe obliczenia” i „Eksport”.",
+        "PIT wg skali liczony wzorem z art. 27 ust. 1 ustawy o PIT: do 120 000 zł — 12% podstawy minus kwota zmniejszająca podatek 3 600 zł; powyżej — 10 800 zł + 32% nadwyżki ponad 120 000 zł.",
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Rozliczenie wspólne z małżonkiem", [
+        "PIT przy rozliczeniu wspólnym jest wspólny dla pary: 2 × PIT od połowy sumy dochodów (art. 6 ust. 2 ustawy o PIT). Pozostałe warianty (skala indywidualnie, liniowy, ryczałt) obejmują tylko podatnika.",
+        "Aby kwoty były porównywalne, wariant „wspólnie z małżonkiem” pokazuje: PIT wspólny pary − PIT, który małżonek zapłaciłby sam wg skali = różnica przypisana podatnikowi. Do tego doliczana jest Twoja danina solidarnościowa, Twoja składka zdrowotna i Twoje składki ZUS. Dochód podatnika do wspólnej sumy to jego dochód ze skali (działalność i inne dochody) po odliczeniu składek, nie mniej niż zero — strata z działalności nie pomniejsza dochodu małżonka (art. 9 ust. 2–3).",
+        "Danina solidarnościowa małżonka, jego składka zdrowotna i ZUS nie są wliczane — małżonek płaci je niezależnie od formy rozliczenia. Wynik może być ujemny, gdy wspólne rozliczenie obniża podatek małżonka bardziej, niż wynosi Twój podatek. Rozliczenie wspólne jest możliwe tylko przy skali (także z IP BOX); małżonek nie może być na liniowym ani ryczałcie od działalności (art. 6 ust. 8).",
+      ]),
+    );
+
+    const fullMonth = taxMath.getSocialContributionsForBase(
+      TAX_CONSTANTS.ZUS_FULL_BASE,
+      { sickness: true, funds: true },
+    );
+    const prefMonth = taxMath.getSocialContributionsForBase(
+      TAX_CONSTANTS.ZUS_PREF_BASE,
+      { sickness: true, funds: false },
+    );
+    DOM.infoModalContent.appendChild(
+      createInfoSection("Składki społeczne ZUS 2026 – parametry", [
+        {
+          label: "Prognozowane przeciętne wynagrodzenie 2026",
+          source: "M.P. 2025 poz. 1206; ustawa budżetowa na 2026 r. (Dz.U. 2026 poz. 62), art. 24",
+          value: formatPLN(TAX_CONSTANTS.ZUS_FORECAST_AVG_SALARY),
+        },
+        {
+          label: "Podstawa pełnego ZUS (60% prognozowanego wynagrodzenia)",
+          source: "art. 18 ust. 8 u.s.u.s. (Dz.U. 2026 poz. 199)",
+          value: formatPLN(TAX_CONSTANTS.ZUS_FULL_BASE),
+        },
+        {
+          label: "Podstawa małego ZUS (30% minimalnego wynagrodzenia)",
+          source: "art. 18a ust. 1 u.s.u.s.",
+          value: formatPLN(TAX_CONSTANTS.ZUS_PREF_BASE),
+        },
+        {
+          label: "Składka emerytalna",
+          source: "art. 22 ust. 1 pkt 1 u.s.u.s.",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_PENSION),
+        },
+        {
+          label: "Składki rentowe",
+          source: "art. 22 ust. 1 pkt 2 u.s.u.s.",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_DISABILITY),
+        },
+        {
+          label: "Składka chorobowa (dobrowolna)",
+          source: "art. 22 ust. 1 pkt 3 u.s.u.s.; art. 11 ust. 2 (dobrowolna)",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_SICKNESS),
+        },
+        {
+          label: "Składka wypadkowa (płatnik do 9 ubezpieczonych)",
+          source: "art. 28 ust. 1 ustawy o ubezpieczeniu społecznym z tytułu wypadków przy pracy",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_ACCIDENT),
+        },
+        {
+          label: "Fundusz Pracy",
+          source: "art. 259–261 ustawy o rynku pracy (Dz.U. 2025 poz. 620); Dz.U. 2026 poz. 62, art. 25",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_FP),
+        },
+        {
+          label: "Fundusz Solidarnościowy",
+          source: "ustawa budżetowa na 2026 r. (Dz.U. 2026 poz. 62), art. 26",
+          value: formatPercentPL(TAX_CONSTANTS.ZUS_RATE_FS),
+        },
+        {
+          label: "Ulga na start (miesiące)",
+          source: "art. 18 ust. 1 Prawa przedsiębiorców (Dz.U. 2025 poz. 1480)",
+          value: String(TAX_CONSTANTS.ZUS_ULGA_MONTHS),
+        },
+        {
+          label: "Mały ZUS (miesiące kalendarzowe)",
+          source: "art. 18a ust. 1 i art. 18aa ust. 3 u.s.u.s.",
+          value: String(TAX_CONSTANTS.ZUS_PREF_MONTHS),
+        },
+        {
+          label: "Zwolnienie z FP/FS – wiek kobiety / mężczyźni",
+          source: "art. 261 ustawy o rynku pracy",
+          value: `${TAX_CONSTANTS.ZUS_FP_EXEMPT_AGE_WOMEN} / ${TAX_CONSTANTS.ZUS_FP_EXEMPT_AGE_MEN} lat`,
+        },
+        {
+          label: "Pełny ZUS z chorobową i FP/FS (miesięcznie)",
+          source: "wyliczenie: podstawa × stopy, każda składka zaokrąglona do grosza",
+          value: formatPLN(fullMonth.total),
+        },
+        {
+          label: "  w tym FP + FS",
+          value: formatPLN(fullMonth.fpfs),
+        },
+        {
+          label: "Mały ZUS z chorobową (miesięcznie, bez FP/FS)",
+          source: "wyliczenie: podstawa × stopy, każda składka zaokrąglona do grosza",
+          value: formatPLN(prefMonth.total),
+        },
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Składki społeczne ZUS – zasady i założenia", [
+        "Harmonogram liczony miesiąc po miesiącu dla 2026 r. Puste pole daty rozpoczęcia oznacza działalność prowadzoną przed 2026 r. i przez cały rok: pełny ZUS od stycznia i 12 miesięcy składki zdrowotnej. Data sprzed 2026 r. służy do ustalenia, ile ulgi na start lub małego ZUS przypada na 2026 r.",
+        "Ulga na start (art. 18 Prawa przedsiębiorców): 6 miesięcy bez składek społecznych, liczonych jak ZUS — w pełnych miesiącach kalendarzowych. Start 1. dnia miesiąca — ten miesiąc jest pierwszym z sześciu; start w trakcie miesiąca — niepełny miesiąc jest wolny od składek i do tego 6 pełnych miesięcy (np. start 7.05 → ulga do 30.11). Źródło: https://www.zus.pl/-/ulga-na-start-preferencyjna-podstawa-dzialalnosc-nieewidencjonowana-jakie-sa-warunki-uprawnienia-i-skutk-1 (sekcja „Jak liczyć okres 6 miesięcy?”). Potem mały ZUS przez 24 pełne miesiące kalendarzowe (art. 18aa ust. 3 u.s.u.s.), potem pełny ZUS. Warunków skorzystania z ulgi i małego ZUS (pierwsza działalność albo 60 miesięcy przerwy, nie na rzecz byłego pracodawcy) kalkulator nie sprawdza.",
+        "Mały ZUS bez ulgi (art. 18a u.s.u.s.): od dnia rozpoczęcia — niepełny pierwszy miesiąc i 24 pełne miesiące kalendarzowe (przy starcie 1. dnia miesiąca: 24 miesiące od miesiąca startu). „Mały ZUS” oznacza preferencyjne składki od 30% minimalnego wynagrodzenia, nie Mały ZUS Plus (art. 18c), który nie jest modelowany.",
+        "Niepełny pierwszy miesiąc (pełny lub mały ZUS bez ulgi): podstawa × dni podlegania / liczba dni miesiąca (art. 18 ust. 9 u.s.u.s.). Każda składka jest zaokrąglana osobno do grosza, FP i FS łącznie (2,45%), jak w deklaracji ZUS DRA. Przyjmujemy najniższe podstawy, stopę wypadkowej 1,67% i brak innych tytułów do ubezpieczeń.",
+        "Fundusz Pracy i Fundusz Solidarnościowy są należne tylko przy podstawie co najmniej równej minimalnemu wynagrodzeniu, czyli na pełnym ZUS — także za niepełny pierwszy miesiąc, od podstawy proporcjonalnej (poradnik ZUS: za każdy miesiąc podlegania, choćby przez jeden dzień). Zwolnienie ze względu na wiek (kobiety 55, mężczyźni 60 lat; art. 261 ustawy o rynku pracy) obowiązuje od miesiąca po miesiącu urodzin, a przy urodzinach 1. dnia miesiąca — od tego miesiąca. Bez daty urodzenia i płci FP i FS są należne.",
+        "Umowa o pracę z wynagrodzeniem co najmniej minimalnym (4 806 zł) przez cały rok: z działalności nie ma obowiązkowych ubezpieczeń społecznych (art. 9 ust. 1 i 1a u.s.u.s.); dobrowolnych składek nie doliczamy, składka zdrowotna z działalności jest należna. Zbieg z umową zlecenia i etat poniżej minimalnego wynagrodzenia nie są modelowane — w takim przypadku nie zaznaczaj tej opcji.",
+        "Wakacje składkowe (art. 17a–17b u.s.u.s.): jeden miesiąc w roku bez składek społecznych i FP/FS (budżet opłaca je od najniższej podstawy); składka zdrowotna jest płatna. Kalkulator sprawdza termin: wniosek RWS składa się w miesiącu poprzedzającym zwolnienie, a w miesiącu przed wnioskiem trzeba podlegać ubezpieczeniom — więc zwolnienie najwcześniej za 2. miesiąc po pierwszym miesiącu podlegania (także niepełnym); nie w uldze na start i nie przy umowie o pracę. Pozostałe warunki (do 10 ubezpieczonych, przychód do 2 mln euro, wolny limit de minimis, nie dla byłego pracodawcy) zakładamy jako spełnione. Miesiąc jest wybierany osobno dla każdego wariantu — ten, przy którym obciążenie jest najniższe (łącznie z rezygnacją, gdy wakacje się nie opłacają). Niezapłaconych składek nie odlicza się.",
+        "Założenie kasowe: składki społeczne i zdrowotne należne za 2026 r. traktujemy jako zapłacone i odliczone w 2026 r. (w praktyce składkę za grudzień płaconą w styczniu odlicza się w roku zapłaty, a roczne rozliczenie zdrowotnej przypada na 2027 r.).",
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Odliczanie składek społecznych – wybór sposobu", [
+        "W każdym wariancie kalkulator liczy obciążenie przy każdym legalnym sposobie odliczenia składek na ubezpieczenia emerytalne, rentowe, chorobowe i wypadkowe i wybiera najniższe (przy równym wyniku — pierwszy z listy). Wszystkie sposoby z kwotami widać w szczegółach obliczeń.",
+        "Skala (także wspólnie i z IP BOX): od dochodu (art. 26 ust. 1 pkt 2 ustawy o PIT — od łącznego dochodu ze skali, również z etatu) albo w kosztach działalności. Strata z działalności nie pomniejsza innych dochodów w tym samym roku (jej rozliczenia w kolejnych latach kalkulator nie liczy). Przy rozliczeniu wspólnym składki pomniejszają tylko dochód podatnika.",
+        "Liniowy: w kosztach, od dochodu z działalności (art. 30c ust. 2 pkt 1) albo od innych dochodów ze skali (art. 26 ust. 1 pkt 2 i ust. 13a).",
+        "Ryczałt: od przychodu (art. 11 ust. 1 ustawy o ryczałcie) albo od innych dochodów ze skali. Przy odliczeniu od przychodu najpierw odliczamy 50% składki zdrowotnej (art. 11 ust. 1a — tego odliczenia nie można przenieść na skalę), a składki społeczne tylko do wysokości pozostałego przychodu; nadwyżkę składek odliczamy od dochodu ze skali (art. 26 ust. 13a). Przychód do progów składki zdrowotnej (60 000 / 300 000 zł) pomniejszamy o składki nieodliczone od dochodu na podstawie ustawy o PIT, czyli odliczone od przychodu albo nieodliczone nigdzie (art. 81 ust. 2g u.ś.o.z., wykładnia literalna). Dlatego przy przychodzie blisko progu sposób odliczenia może zmienić składkę zdrowotną.",
+        "IP BOX: składki społeczne mogą być kosztem — wtedy, jak inne koszty, proporcjonalnie pomniejszają także dochód kwalifikowany — albo mogą być odliczane od dochodu opodatkowanego skalą lub liniowo; od dochodu opodatkowanego stawką 5% nic się nie odlicza (art. 30ca). FP i FS jako koszt dzielimy proporcjonalnie wg udziału dochodu kwalifikowanego; udział stosujemy do dochodu po tych kosztach. Składkę zdrowotną przy liniowym z IP BOX odliczamy (do limitu) wyłącznie od dochodu opodatkowanego liniowo, nie od dochodu kwalifikowanego — to przyjęte założenie.",
+        "„Udział dochodu kwalifikowanego IP BOX” to część dochodu z działalności opodatkowana stawką 5% (po zastosowaniu wskaźnika nexus) — kalkulator nie liczy samego wskaźnika nexus.",
+        "FP i FS nie są składkami na ubezpieczenia społeczne: na skali i liniowym są kosztem, na ryczałcie nie odlicza się ich wcale. Składek nie dzielimy między sposoby odliczenia (wyjątek: nadwyżka ponad przychód ryczałtowy); nieodliczona nadwyżka przepada.",
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Składka zdrowotna – zasady", [
+        "Składka zdrowotna jest należna od miesiąca rozpoczęcia działalności, także w uldze na start, w pełnej kwocie za niepełny miesiąc (art. 79 ust. 2 u.ś.o.z.: składka miesięczna i niepodzielna). Data rozpoczęcia wpływa na liczbę miesięcy również przy wyłączonych składkach społecznych.",
+        "Skala i liniowy: podstawa to dochód z działalności pomniejszony o FP/FS (koszt) i składki społeczne (art. 81 ust. 2) — niezależnie od tego, gdzie składki są odliczane; minimum: liczba miesięcy × 432,54 zł (art. 81 ust. 2b, art. 79a). Kwotę 432,54 zł stosujemy także za styczeń 2026 (formalnie ostatni miesiąc roku składkowego 2025/26 z minimum 314,96 zł).",
+        "Liniowy: zapłaconą składkę odliczamy od dochodu z działalności do 14 100 zł rocznie; limit jest roczny i nie podlega proporcji przy niepełnym roku (art. 30c ust. 2 pkt 2: „nie może przekroczyć w roku podatkowym”). Zaliczenie zdrowotnej do kosztów nie obniża w kalkulatorze jej własnej podstawy (brak potwierdzenia ZUS/MF — podejście ostrożne).",
+        "Ryczałt: kwota miesięczna wg progu rocznego przychodu × liczba miesięcy; progi 60 000 / 300 000 zł są kwotowe, bez proporcji przy niepełnym roku (art. 81 ust. 2e). 50% zapłaconej składki odliczamy od przychodu, przy kilku stawkach proporcjonalnie (art. 11 ust. 1a i ust. 3 ustawy o ryczałcie). W trybie „Wiele stawek” próg i proporcje liczymy od całego przychodu z działalności.",
+        "IP BOX: podstawa obejmuje cały dochód z działalności (także kwalifikowany); stawka 9% przy skali, 4,9% przy liniowym.",
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Danina solidarnościowa", [
+        "4% nadwyżki ponad 1 000 000 zł sumy dochodów opodatkowanych wg skali (art. 27) i liniowo (art. 30c), po odliczeniu składek społecznych (art. 26 ust. 1 pkt 2) i składki zdrowotnej odliczonej przy liniowym (art. 30c ust. 2 pkt 2) — art. 30h ust. 1–2 ustawy o PIT. Przy rozliczeniu wspólnym liczona odrębnie dla każdego z małżonków.",
+        "Dochód kwalifikowany IP BOX (5%, art. 30ca) nie wchodzi do podstawy daniny: art. 30h ust. 2 zawiera zamknięty katalog dochodów (art. 27, 30b, 30c, 30f), a art. 30c ust. 6 nie łączy dochodów z art. 30ca z innymi. Tak też interpretacja indywidualna KIS 0112-KDIL2-1.4011.110.2019.1.AMN z 14.02.2020. Przychody z ryczałtu również są poza podstawą.",
+      ]),
+    );
+
+    DOM.infoModalContent.appendChild(
+      createInfoTextSection("Inne dochody opodatkowane skalą", [
+        "Wpisz roczny dochód z innych źródeł opodatkowanych skalą (np. etat, zlecenie): przychód − koszty uzyskania − składki społeczne pobrane przez płatnika, przed podatkiem (jak w PIT-11). Przy uldze dla młodych wpisz tylko część opodatkowaną.",
+        "Na skali dochody te sumują się z dochodem z działalności; przy liniowym, ryczałcie i IP BOX z liniowym są opodatkowane skalą osobno. Wchodzą też do podstawy daniny solidarnościowej (art. 30h ust. 2).",
+        "Od łącznych podatków odejmujemy PIT i daninę, które zapłaciłbyś od samych innych dochodów (indywidualnie wg skali) — różnica to obciążenie przypisane działalności, porównywalne między wariantami.",
       ]),
     );
 
@@ -2398,18 +4357,18 @@
       createInfoSection("Wartości bazowe", [
         {
           label: "Minimalne wynagrodzenie (miesięcznie)",
-          code: "MIN_WAGE",
+          source: "rozporządzenie RM, Dz.U. 2025 poz. 1242",
           value: formatPLN(TAX_CONSTANTS.MIN_WAGE),
         },
         {
           label:
             "Przeciętne wynagrodzenie w IV kw. roku poprzedniego (miesięcznie)",
-          code: "AVG_SALARY_Q4_PREV",
+          source: "komunikat Prezesa GUS, M.P. 2026 poz. 117",
           value: formatPLN(TAX_CONSTANTS.AVG_SALARY_Q4_PREV),
         },
         {
           label: "Limit odliczenia składki zdrowotnej (liniowy, rocznie)",
-          code: "LINEAR_HEALTH_DEDUCTION_LIMIT",
+          source: "art. 30c ust. 2 pkt 2 ustawy o PIT; M.P. 2025 poz. 1274",
           value: formatPLN(TAX_CONSTANTS.LINEAR_HEALTH_DEDUCTION_LIMIT),
         },
       ]),
@@ -2419,37 +4378,37 @@
       createInfoSection("Skala podatkowa", [
         {
           label: "Kwota wolna od podatku",
-          code: "TAX_FREE_AMOUNT",
+          source: "art. 27 ust. 1 ustawy o PIT (Dz.U. 2026 poz. 592)",
           value: formatPLN(TAX_CONSTANTS.TAX_FREE_AMOUNT),
         },
         {
           label: "Próg I progu podatkowego",
-          code: "TAX_THRESHOLD_12",
+          source: "art. 27 ust. 1 ustawy o PIT",
           value: formatPLN(TAX_CONSTANTS.TAX_THRESHOLD_12),
         },
         {
           label: "Próg daniny solidarnościowej",
-          code: "SOLIDARITY_THRESHOLD",
+          source: "art. 30h ust. 2 ustawy o PIT",
           value: formatPLN(TAX_CONSTANTS.SOLIDARITY_THRESHOLD),
         },
         {
           label: "Stawka PIT I progu",
-          code: "PIT_RATE_12",
+          source: "art. 27 ust. 1 ustawy o PIT",
           value: formatPercentPL(TAX_CONSTANTS.PIT_RATE_12),
         },
         {
           label: "Stawka PIT II progu",
-          code: "PIT_RATE_32",
+          source: "art. 27 ust. 1 ustawy o PIT",
           value: formatPercentPL(TAX_CONSTANTS.PIT_RATE_32),
         },
         {
           label: "Danina solidarnościowa",
-          code: "SOLIDARITY_RATE",
+          source: "art. 30h ust. 1 ustawy o PIT",
           value: formatPercentPL(TAX_CONSTANTS.SOLIDARITY_RATE),
         },
         {
           label: "Kwota zmniejszająca podatek",
-          code: "TAX_DECREASING_AMOUNT",
+          source: "art. 27 ust. 1 ustawy o PIT",
           value: formatPLN(TAX_CONSTANTS.TAX_DECREASING_AMOUNT),
         },
       ]),
@@ -2459,12 +4418,12 @@
       createInfoSection("Podatek liniowy i IP BOX", [
         {
           label: "Stawka podatku liniowego",
-          code: "LINEAR_PIT_RATE",
+          source: "art. 30c ust. 1 ustawy o PIT",
           value: formatPercentPL(TAX_CONSTANTS.LINEAR_PIT_RATE),
         },
         {
           label: "Stawka IP BOX",
-          code: "IP_BOX_RATE",
+          source: "art. 30ca ust. 1 ustawy o PIT",
           value: formatPercentPL(TAX_CONSTANTS.IP_BOX_RATE),
         },
       ]),
@@ -2474,17 +4433,17 @@
       createInfoSection("Składka zdrowotna – stawki", [
         {
           label: "Skala podatkowa",
-          code: "HEALTH_RATE_SCALE",
+          source: "art. 79 ust. 1 u.ś.o.z. (Dz.U. 2025 poz. 1461)",
           value: formatPercentPL(TAX_CONSTANTS.HEALTH_RATE_SCALE),
         },
         {
           label: "Podatek liniowy",
-          code: "HEALTH_RATE_LINEAR",
+          source: "art. 79a u.ś.o.z.",
           value: formatPercentPL(TAX_CONSTANTS.HEALTH_RATE_LINEAR),
         },
         {
           label: "Ryczałt",
-          code: "HEALTH_RATE_RYCZALT",
+          source: "art. 79 ust. 1 i art. 81 ust. 2e u.ś.o.z.",
           value: formatPercentPL(TAX_CONSTANTS.HEALTH_RATE_RYCZALT),
         },
       ]),
@@ -2494,37 +4453,37 @@
       createInfoSection("Ryczałt – progi i mnożniki", [
         {
           label: "Próg niski przychodu",
-          code: "RYCZALT_REVENUE_THRESHOLD_LOW",
+          source: "art. 81 ust. 2e pkt 1 u.ś.o.z.",
           value: formatPLN(TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_LOW),
         },
         {
           label: "Próg wysoki przychodu",
-          code: "RYCZALT_REVENUE_THRESHOLD_HIGH",
+          source: "art. 81 ust. 2e pkt 2–3 u.ś.o.z.",
           value: formatPLN(TAX_CONSTANTS.RYCZALT_REVENUE_THRESHOLD_HIGH),
         },
         {
           label: "Mnożnik podstawy (przychód ≤ próg niski)",
-          code: "RYCZALT_BASE_MULT_LOW",
+          source: "art. 81 ust. 2e pkt 1 u.ś.o.z.",
           value: formatMultiplierPL(TAX_CONSTANTS.RYCZALT_BASE_MULT_LOW),
         },
         {
           label: "Mnożnik podstawy (próg niski < przychód ≤ próg wysoki)",
-          code: "RYCZALT_BASE_MULT_MID",
+          source: "art. 81 ust. 2e pkt 2 u.ś.o.z.",
           value: formatMultiplierPL(TAX_CONSTANTS.RYCZALT_BASE_MULT_MID),
         },
         {
           label: "Mnożnik podstawy (przychód > próg wysoki)",
-          code: "RYCZALT_BASE_MULT_HIGH",
+          source: "art. 81 ust. 2e pkt 3 u.ś.o.z.",
           value: formatMultiplierPL(TAX_CONSTANTS.RYCZALT_BASE_MULT_HIGH),
         },
         {
           label: "Odliczenie składki zdrowotnej od przychodu",
-          code: "RYCZALT_HEALTH_DEDUCTION_FACTOR",
+          source: "art. 11 ust. 1a ustawy o ryczałcie (Dz.U. 2025 poz. 843)",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_HEALTH_DEDUCTION_FACTOR),
         },
         {
           label: "Próg stawki 8,5% / 12,5%",
-          code: "RYCZALT_8_5_THRESHOLD",
+          source: "art. 12 ust. 1 pkt 4 lit. a ustawy o ryczałcie",
           value: formatPLN(TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD),
         },
       ]),
@@ -2534,115 +4493,75 @@
       createInfoSection("Stawki ryczałtu", [
         {
           label: "Ryczałt 2%",
-          code: "RYCZALT_RATE_2",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_2),
         },
         {
           label: "Ryczałt 3%",
-          code: "RYCZALT_RATE_3",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_3),
         },
         {
           label: "Ryczałt 5,5%",
-          code: "RYCZALT_RATE_5_5",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_5_5),
         },
         {
           label: "Ryczałt 8,5%",
-          code: "RYCZALT_RATE_8_5",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_8_5),
         },
         {
           label: "Ryczałt 10%",
-          code: "RYCZALT_RATE_10",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_10),
         },
         {
           label: "Ryczałt 12%",
-          code: "RYCZALT_RATE_12",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_12),
         },
         {
           label: "Ryczałt 12,5%",
-          code: "RYCZALT_RATE_12_5",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_12_5),
         },
         {
           label: "Ryczałt 14%",
-          code: "RYCZALT_RATE_14",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_14),
         },
         {
           label: "Ryczałt 15%",
-          code: "RYCZALT_RATE_15",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_15),
         },
         {
           label: "Ryczałt 17%",
-          code: "RYCZALT_RATE_17",
+          source: "art. 12 ust. 1 ustawy o ryczałcie",
           value: formatPercentPL(TAX_CONSTANTS.RYCZALT_RATE_17),
         },
       ]),
     );
 
     DOM.infoModalContent.appendChild(
-      createInfoSection("Wartości pochodne", [
-        {
-          label: "Szerokość I progu (kwota wolna → próg 120 000)",
-          code: "TAX_BAND_12",
-          value: formatPLN(TAX_BAND_12),
-        },
-        {
-          label: "Szerokość II progu (próg 120 000 → danina)",
-          code: "TAX_BAND_32",
-          value: formatPLN(TAX_BAND_32),
-        },
-        {
-          label: "Stawka PIT + danina solidarnościowa",
-          code: "PIT_RATE_SOLIDARITY",
-          value: formatPercentPL(PIT_RATE_SOLIDARITY),
-        },
-        {
-          label: "Efektywna stawka liniowa (PIT + zdrowotna)",
-          code: "EFFECTIVE_LINEAR_RATE",
-          value: formatPercentPL(EFFECTIVE_LINEAR_RATE),
-        },
-        {
-          label: "Efektywna stawka liniowa + danina",
-          code: "EFFECTIVE_LINEAR_RATE_SOLIDARITY",
-          value: formatPercentPL(EFFECTIVE_LINEAR_RATE_SOLIDARITY),
-        },
-        {
-          label: "Efektywna stawka IP BOX + zdrowotna",
-          code: "EFFECTIVE_IPBOX_PLUS_HEALTH",
-          value: formatPercentPL(EFFECTIVE_IPBOX_PLUS_HEALTH),
-        },
+      createInfoSection("Minimalna składka zdrowotna", [
         {
           label: "Minimalna składka zdrowotna (miesięcznie)",
-          code: "taxMath.getMinHealthMonthly()",
+          source: "9% × minimalne wynagrodzenie (art. 81 ust. 2b, art. 79a u.ś.o.z.)",
           value: formatPLN(taxMath.getMinHealthMonthly()),
         },
         {
-          label: "Minimalna składka zdrowotna (rocznie)",
-          code: "taxMath.getMinHealthAnnual()",
+          label: "Minimalna składka zdrowotna (rocznie, 12 mies.)",
+          source: "liczba miesięcy × kwota miesięczna (art. 81 ust. 2b u.ś.o.z.)",
           value: formatPLN(taxMath.getMinHealthAnnual()),
-        },
-        {
-          label: "Próg dochodu dla minimalnej składki liniowej (miesięcznie)",
-          code: "taxMath.getMinHealthThresholdLinearMonthly()",
-          value: formatPLN(taxMath.getMinHealthThresholdLinearMonthly()),
-        },
-        {
-          label: "Próg dochodu dla minimalnej składki liniowej (rocznie)",
-          code: "taxMath.getMinHealthThresholdLinearAnnual()",
-          value: formatPLN(taxMath.getMinHealthThresholdLinearAnnual()),
         },
       ]),
     );
 
     const footnote = document.createElement("p");
     footnote.className = "info-modal-footnote";
-    footnote.textContent = `Wszystkie wartości zdefiniowane są w pliku taxConstants.js. Stan prawny obowiązujący od ${TAX_CONSTANTS.EFFECTIVE_FROM}.`;
+    footnote.textContent = `Stan prawny na ${LEGAL_STATUS_DATE}. Akty: ustawa o PIT (Dz.U. 2026 poz. 592), ustawa o ryczałcie (Dz.U. 2025 poz. 843), u.ś.o.z. (Dz.U. 2025 poz. 1461), u.s.u.s. (Dz.U. 2026 poz. 199), Prawo przedsiębiorców (Dz.U. 2025 poz. 1480), ustawa o rynku pracy (Dz.U. 2025 poz. 620).`;
     DOM.infoModalContent.appendChild(footnote);
 
     infoModalBuilt = true;
@@ -2657,10 +4576,11 @@
       clearTimeout(infoModalCloseTimeout);
       infoModalCloseTimeout = null;
     }
+    lastFocusedBeforeInfoModal = document.activeElement;
     DOM.infoModal.hidden = false;
     DOM.infoModal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    lastFocusedBeforeInfoModal = document.activeElement;
+    setBackgroundInert(true);
     const closeBtn = DOM.infoModal.querySelector(".copy-modal-close");
     requestAnimationFrame(() => {
       DOM.infoModal.classList.add("open");
@@ -2674,6 +4594,7 @@
     DOM.infoModal.setAttribute("aria-hidden", "true");
     if (!DOM.copyModal || DOM.copyModal.hidden) {
       document.body.style.overflow = "";
+      setBackgroundInert(false);
     }
     if (infoModalCloseTimeout) clearTimeout(infoModalCloseTimeout);
     infoModalCloseTimeout = setTimeout(() => {
@@ -2705,6 +4626,8 @@
   /* ==================================================
      Initial paint — set up empty state correctly
   ================================================== */
+  const brandSub = document.querySelector(".brand-sub");
+  if (brandSub) brandSub.textContent = `Stan prawny na ${LEGAL_STATUS_DATE}`;
   syncIpBoxRange();
   updateConditionalRowsVisibility();
   // hide all ryczałt result rows by default
@@ -2715,6 +4638,22 @@
       if (group) group.style.display = "none";
     }
   });
+  setRevealed(DOM.ipBoxReveal, isIpBoxEnabled());
+  setRevealed(DOM.spouseIncomeCard, isJointTaxationEnabled());
+  setRevealed(DOM.zusReveal, DOM.zusEnabled.checked);
+  document.querySelectorAll(".results-row").forEach(ensureRowDetail);
+
+  /* Pasek „Przejdź do wyników” chowamy, gdy wyniki są na ekranie. */
+  const mobileJump = document.getElementById("mobileJump");
+  if (mobileJump && DOM.resultsSection && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        mobileJump.classList.toggle("is-hidden", entry.isIntersecting);
+      });
+    });
+    observer.observe(DOM.resultsSection);
+  }
+
   // run an initial calculation so the income field shows 0,00 and rank state is stable
   calculate();
 })();

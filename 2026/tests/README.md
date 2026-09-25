@@ -42,12 +42,26 @@ Covered scenarios include:
 - joint taxation with spouse
 - single-rate ryczalt
 - multi-rate ryczalt
+- social ZUS contributions 2026 (paths: full / ulga na start / mały ZUS, start dates
+  on the 1st, mid-month and before 2026, chorobowe on/off, FP/FS age exemption,
+  employment contract, wakacje składkowe)
+- other income taxed at the scale (0 / 80k / 200k), joint taxation, IP BOX
+- ryczałt health tiers near 60k / 300k (art. 81 ust. 2g)
+- explicit (non-snapshot) amounts for the audit cases B1–B3, loss cases and
+  hand-computed ZUS scenarios (`toBe` on raw numbers from `data-*` attributes)
 
-### 3. `v2Parity.test.js`
+- explicit assertions for the fix round: ryczałt „50% zdrowotnej przed
+  składkami” (15 000 / inne 100 000 → 27 967,37), tie-safe rounding
+  (1 177 622,32 / 713 137,82 → zdrowotna 41 803,61), the shared amount parser
+  (`taxMath.parseAmount`), blocking validation (invalid inputs → no results,
+  best card „Popraw dane”), employment + ulga export text and the holiday
+  month in the ZUS table
 
-The `/v2` front-end (`v2/index.html` + `v2/script.js`) reuses `2026/taxConstants.js`.
-This test runs the same scenarios against `2026` and `v2` and checks that every
-visible output and the chosen best variant are identical. It uses no snapshots.
+`taxConstants.test.js` also contains explicit unit assertions for
+`taxMath.buildSocialSchedule()` (month-by-month social contributions).
+
+Note: social contributions are ON by default, so every older snapshot changed
+when this feature landed. Review the diff and run `npm run test:update`.
 
 ## How It Works
 
@@ -55,7 +69,7 @@ The helper file `helpers/loadCalculator.js` creates a fresh JSDOM environment fo
 
 It:
 
-1. reads the real HTML and JS files (`loadCalculator()` for `2026`, `loadCalculator("v2")` for `/v2`)
+1. reads the real HTML and JS files
 2. injects `taxConstants.js` and `script.js` into the test DOM
 3. exposes helper methods like:
    - `setRevenue(...)`
@@ -65,8 +79,15 @@ It:
    - `toggleRyczaltRate(...)`
    - `enableMultipleRates(...)`
    - `setRateRevenue(...)`
+   - `setOtherIncome(...)`, `setZusEnabled(...)`, `setStartDate("RRRR-MM-DD")`,
+     `setZusPath("full" | "ulga" | "pref")`, `setSickness(...)`,
+     `setEmployment(...)`, `setHoliday(...)`, `setBirthDate(...)`,
+     `setSex("K" | "M" | "")`
    - `calculate()`
    - `readOutputs()`
+   - `readVariantData(id)` – raw numbers of a variant (`total`, `taxes`,
+     `baseline`, `health`, `social`, `method`, `holidayMonth`)
+   - `readBreakdown()` – the full export text
 
 Important details:
 

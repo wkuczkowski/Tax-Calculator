@@ -59,7 +59,7 @@
           </span>
           <div class="brand-text">
             <h1 class="brand-title">Kalkulator&nbsp;podatkowy</h1>
-            <span class="brand-sub">Stan prawny - 1.02.2026</span>
+            <span class="brand-sub">Stan prawny na 24.09.2026</span>
           </div>
           <span class="brand-year" aria-label="Rok podatkowy 2026">2026</span>
         </div>
@@ -169,13 +169,428 @@
               id="costs-error"
               role="alert"
               aria-live="polite"></p>
+            <p class="field-foot">
+              Bez składek ZUS — kalkulator dolicza je sam (sekcja „Składki
+              ZUS”).
+            </p>
           </div>
 
           <div class="field field-derived">
             <label class="field-label" for="income">Dochód</label>
             <div class="input-derived">
-              <input type="text" id="income" readonly value="0,00 zł" />
+              <input
+                type="text"
+                id="income"
+                readonly
+                tabindex="-1"
+                aria-readonly="true"
+                value="0,00 zł" />
               <span class="input-derived-tag">automatycznie</span>
+            </div>
+          </div>
+
+          <div class="field field-separated">
+            <div class="field-head">
+              <span class="field-label-with-tip">
+                <label class="field-label" for="otherIncome">
+                  Inne dochody opodatkowane skalą
+                </label>
+                <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Inne dochody opodatkowane skalą — więcej informacji"
+                  aria-describedby="otherIncomeTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="otherIncomeTooltip"
+                    role="tooltip">
+                    Roczny dochód z innych źródeł opodatkowanych skalą (np.
+                    etat, zlecenie): przychód − koszty uzyskania − składki
+                    społeczne pobrane przez płatnika, przed podatkiem (jak w
+                    PIT-11). Przy uldze dla młodych wpisz tylko część
+                    opodatkowaną. Wynik wariantów to obciążenie przypisane
+                    działalności: od łącznego PIT odejmujemy PIT, który
+                    zapłaciłbyś od samych tych dochodów.
+                  </span>
+                </button>
+              </span>
+            </div>
+            <div class="input-money">
+              <input
+                type="text"
+                id="otherIncome"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="0,00"
+                aria-describedby="otherIncome-error" />
+              <span class="input-suffix" aria-hidden="true">zł</span>
+            </div>
+            <p
+              class="error-message"
+              id="otherIncome-error"
+              role="alert"
+              aria-live="polite"></p>
+          </div>
+        </fieldset>
+
+        <fieldset class="card" id="zusCard">
+          <legend class="card-legend">Składki ZUS</legend>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label-with-tip">
+                <label class="field-label" for="zusStartDate">
+                  Data rozpoczęcia działalności
+                </label>
+                <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Data rozpoczęcia działalności — więcej informacji"
+                  aria-describedby="zusStartDateTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusStartDateTooltip"
+                    role="tooltip">
+                    Puste pole: działalność prowadzona przed 2026 r. i przez
+                    cały rok (pełny ZUS od stycznia, 12 miesięcy składki
+                    zdrowotnej). Data sprzed 2026 r. służy do ustalenia, ile
+                    ulgi na start lub małego ZUS przypada na 2026 r. Składka
+                    zdrowotna jest należna od miesiąca rozpoczęcia (w pełnej
+                    kwocie także za niepełny miesiąc).
+                  </span>
+                </button>
+              </span>
+            </div>
+            <div class="input-money input-date">
+              <input
+                type="date"
+                id="zusStartDate"
+                min="1900-01-01"
+                max="2026-12-31"
+                aria-describedby="zusStartDate-error zusStartHint" />
+            </div>
+            <p
+              class="error-message"
+              id="zusStartDate-error"
+              role="alert"
+              aria-live="polite"></p>
+            <p class="field-foot" id="zusStartHint" aria-live="polite"></p>
+          </div>
+
+          <div class="field">
+            <div class="field-head field-head-toggle">
+              <span class="field-label-with-tip">
+                <label class="field-label" for="zusEnabled">
+                  Uwzględnij składki społeczne
+                </label>
+                <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Uwzględnij składki społeczne — więcej informacji"
+                  aria-describedby="zusEnabledTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusEnabledTooltip"
+                    role="tooltip">
+                    Emerytalna, rentowe, wypadkowa, dobrowolna chorobowa oraz
+                    FP i FS przedsiębiorcy — liczone miesiąc po miesiącu dla
+                    2026 r. i doliczane do każdego wariantu. Wyłączenie
+                    pomija składki społeczne; składka zdrowotna jest liczona
+                    zawsze.
+                  </span>
+                </button>
+              </span>
+              <span class="toggle-switch">
+                <input type="checkbox" id="zusEnabled" checked />
+                <span class="slider"></span>
+              </span>
+            </div>
+          </div>
+
+          <div class="zus-reveal is-revealed" id="zusReveal">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label" id="zusPathLabel">Ścieżka składek</span>
+              </div>
+              <div
+                class="seg seg-3"
+                role="radiogroup"
+                aria-labelledby="zusPathLabel"
+                aria-describedby="zusPathHint">
+                <label class="seg-opt">
+                  <input type="radio" name="zusPath" value="full" checked />
+                  <span>Pełny ZUS</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="zusPath" value="ulga" />
+                  <span>Ulga na start</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="zusPath" value="pref" />
+                  <span>Mały ZUS</span>
+                </label>
+              </div>
+              <p class="field-foot" id="zusPathHint" aria-live="polite"></p>
+            </div>
+
+            <div class="field">
+              <div class="field-head field-head-toggle">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="zusSickness">
+                    Składka chorobowa (dobrowolna)
+                  </label>
+                  <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Składka chorobowa — więcej informacji"
+                  aria-describedby="zusSicknessTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusSicknessTooltip"
+                    role="tooltip">
+                    2,45% podstawy (art. 11 ust. 2 i art. 22 u.s.u.s.).
+                      Zasiłek chorobowy przysługuje po 90 dniach
+                      nieprzerwanego ubezpieczenia. W uldze na start nie ma
+                      ubezpieczeń społecznych, więc i chorobowej.
+                  </span>
+                </button>
+                </span>
+                <span class="toggle-switch">
+                  <input type="checkbox" id="zusSickness" checked />
+                  <span class="slider"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head field-head-toggle">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="zusEmployment">
+                    Umowa o pracę ≥ minimalnego (4&nbsp;806&nbsp;zł)
+                  </label>
+                  <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Umowa o pracę — więcej informacji"
+                  aria-describedby="zusEmploymentTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusEmploymentTooltip"
+                    role="tooltip">
+                    Art. 9 ust. 1 i 1a u.s.u.s.: przy umowie o pracę z
+                      wynagrodzeniem co najmniej minimalnym przez cały rok
+                      składki społeczne z działalności są dobrowolne —
+                      kalkulator ich nie dolicza. Składka zdrowotna z
+                      działalności jest nadal należna. Dochód z etatu wpisz w
+                      polu „Inne dochody opodatkowane skalą”.
+                  </span>
+                </button>
+                </span>
+                <span class="toggle-switch">
+                  <input type="checkbox" id="zusEmployment" />
+                  <span class="slider"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head field-head-toggle">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="zusHoliday">
+                    Wakacje składkowe
+                  </label>
+                  <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Wakacje składkowe — więcej informacji"
+                  aria-describedby="zusHolidayTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusHolidayTooltip"
+                    role="tooltip">
+                    Art. 17a–17b u.s.u.s.: raz w roku jeden miesiąc bez
+                      składek społecznych i FP/FS (zdrowotna płatna). Wniosek
+                      RWS składa się w miesiącu poprzedzającym; w miesiącu
+                      przed wnioskiem trzeba podlegać ubezpieczeniom — nie w
+                      uldze na start. Kalkulator sprawdza termin i dobiera
+                      najkorzystniejszy miesiąc dla każdego wariantu.
+                  </span>
+                </button>
+                </span>
+                <span class="toggle-switch">
+                  <input type="checkbox" id="zusHoliday" />
+                  <span class="slider"></span>
+                </span>
+              </div>
+              <p
+                class="field-foot field-status"
+                id="zusHolidayStatus"
+                aria-live="polite"></p>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="zusBirthDate">
+                    Data urodzenia i płeć
+                  </label>
+                  <button
+                  type="button"
+                  class="field-tooltip"
+                  aria-label="Data urodzenia i płeć — więcej informacji"
+                  aria-describedby="zusBirthTooltip">
+                  <svg
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span
+                    class="field-tooltip-bubble"
+                    id="zusBirthTooltip"
+                    role="tooltip">
+                    Tylko do zwolnienia z Funduszu Pracy i Funduszu
+                      Solidarnościowego (art. 261 ustawy o rynku pracy):
+                      kobiety od 55 lat, mężczyźni od 60 lat — od miesiąca
+                      po miesiącu urodzin (przy urodzinach 1. dnia miesiąca
+                      od tego miesiąca). Bez danych FP i FS są należne.
+                  </span>
+                </button>
+                </span>
+              </div>
+              <div class="zus-birth-row">
+                <div class="input-money input-date">
+                  <input
+                    type="date"
+                    id="zusBirthDate"
+                    min="1900-01-01"
+                    max="2026-12-31"
+                    aria-label="Data urodzenia"
+                    aria-describedby="zusBirthDate-error zusBirthHint" />
+                </div>
+                <div
+                  class="seg seg-3 seg-compact"
+                  role="radiogroup"
+                  aria-label="Płeć">
+                  <label class="seg-opt">
+                    <input type="radio" name="zusSex" value="" checked />
+                    <span>—</span>
+                  </label>
+                  <label class="seg-opt">
+                    <input type="radio" name="zusSex" value="K" />
+                    <span>K</span>
+                  </label>
+                  <label class="seg-opt">
+                    <input type="radio" name="zusSex" value="M" />
+                    <span>M</span>
+                  </label>
+                </div>
+              </div>
+              <p
+                class="error-message"
+                id="zusBirthDate-error"
+                role="alert"
+                aria-live="polite"></p>
+              <p class="field-foot" id="zusBirthHint" aria-live="polite"></p>
             </div>
           </div>
         </fieldset>
@@ -186,7 +601,7 @@
           <div class="field" id="ipBoxContainer">
             <div class="field-head field-head-toggle">
               <span class="field-label" id="ipBoxEnabledLabel">
-                Współczynnik IP BOX
+                Udział dochodu kwalifikowanego IP BOX
               </span>
               <div
                 class="seg"
@@ -202,7 +617,7 @@
                 </label>
               </div>
             </div>
-            <div class="ipbox-reveal" id="ipBoxReveal">
+            <div class="ipbox-reveal" id="ipBoxReveal" inert aria-hidden="true">
               <div class="ipbox-control">
                 <input
                   type="range"
@@ -211,9 +626,9 @@
                   max="100"
                   step="1"
                   value="25"
-                  aria-label="Suwak współczynnika IP BOX" />
+                  aria-label="Suwak: udział dochodu kwalifikowanego IP BOX" />
                 <div class="ipbox-number-stack">
-                  <p class="ipbox-reveal-hint">część dochodu opodatkowana 5%</p>
+                  <p class="ipbox-reveal-hint">część dochodu opodatkowana 5% (po wskaźniku nexus)</p>
                   <div class="ipbox-number">
                     <input
                       type="number"
@@ -222,7 +637,7 @@
                       min="0"
                       max="100"
                       step="1"
-                      aria-label="Współczynnik IP BOX w procentach"
+                      aria-label="Udział dochodu kwalifikowanego IP BOX w procentach"
                       aria-describedby="ipBoxCoeff-error" />
                     <span class="input-suffix" aria-hidden="true">%</span>
                   </div>
@@ -265,7 +680,11 @@
             </div>
           </div>
 
-          <div class="field field-spouse" id="spouseIncomeCard">
+          <div
+            class="field field-spouse"
+            id="spouseIncomeCard"
+            inert
+            aria-hidden="true">
             <div class="field-head">
               <span class="field-label-with-tip">
                 <label class="field-label" for="spouseIncome">
@@ -295,9 +714,12 @@
                     class="field-tooltip-bubble"
                     id="spouseIncomeTooltip"
                     role="tooltip">
-                    Wpływa wyłącznie na wspólne rozliczenie wg skali. Nie
-                    obejmuje składki zdrowotnej małżonka ani innych jego
-                    obciążeń.
+                    Wpływa wyłącznie na wspólne rozliczenie wg skali. Wynik
+                    wariantu „wspólnie z małżonkiem” to PIT wspólny pary minus
+                    PIT, który małżonek zapłaciłby sam wg skali — czyli część
+                    PIT przypisana Tobie, porównywalna z pozostałymi
+                    wariantami. Może być ujemna. Nie obejmuje daniny, składki
+                    zdrowotnej ani ZUS małżonka.
                   </span>
                 </button>
               </span>
@@ -309,9 +731,15 @@
                 value="0"
                 readonly
                 inputmode="decimal"
-                placeholder="0,00" />
+                placeholder="0,00"
+                aria-describedby="spouseIncome-error" />
               <span class="input-suffix" aria-hidden="true">zł</span>
             </div>
+            <p
+              class="error-message"
+              id="spouseIncome-error"
+              role="alert"
+              aria-live="polite"></p>
             <p class="field-foot">
               Wpływa tylko na warianty „wspólnie z małżonkiem".
             </p>
@@ -435,6 +863,11 @@
                 inputmode="decimal" />
             </label>
           </div>
+          <p
+            class="error-message"
+            id="rateInputs-error"
+            role="alert"
+            aria-live="polite"></p>
 
           <div class="multiple-rates-wrapper">
             <div class="multiple-rates-revenue-info">
@@ -451,9 +884,14 @@
         </fieldset>
 
         <p class="footnote">
-          Kwoty obejmują PIT (skala / liniowy / ryczałt) oraz składkę zdrowotną
-          podatnika. Nie uwzględniają składek społecznych (ZUS) ani obciążeń po
-          stronie małżonka.
+          Kwoty obejmują PIT (skala / liniowy / ryczałt, z daniną), składkę
+          zdrowotną i — gdy są włączone — składki społeczne ZUS podatnika za
+          2026 r. Przy innych dochodach ze skali pokazujemy obciążenie
+          przypisane działalności: łączny PIT pomniejszony o PIT od samych
+          innych dochodów. Przy rozliczeniu wspólnym odejmujemy też PIT, który
+          małżonek zapłaciłby sam wg skali; danina, składka zdrowotna i ZUS
+          małżonka nie są wliczane. Szczegóły i założenia: „Założenia” oraz
+          „Pokaż szczegółowe obliczenia”.
         </p>
       </section>
 
@@ -461,8 +899,8 @@
       <section
         class="panel panel-results"
         id="resultsSection"
-        aria-labelledby="resultsTitle"
-        aria-live="polite">
+        aria-labelledby="resultsTitle">
+        <p id="resultsLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="panel-head">
           <h2 id="resultsTitle" class="panel-title">
             <span class="panel-title-num">02</span> Wyniki
@@ -496,14 +934,19 @@
         <section class="results-block" aria-labelledby="comparePitTitle">
           <header class="results-block-head">
             <h3 id="comparePitTitle" class="results-block-title">
-              Porównanie PIT
+              Porównanie form opodatkowania
             </h3>
-            <span class="results-block-meta">PIT + składka zdrowotna</span>
+            <span class="results-block-meta" id="comparePitMeta">
+              PIT + zdrowotna + ZUS
+            </span>
           </header>
 
           <div class="comparison" id="comparePit">
             <div class="results-row input-group" data-variant="taxScale">
-              <span class="results-row-label">Skala podatkowa</span>
+              <span class="results-row-label">
+                Skala podatkowa
+                <span class="variant-badge variant-badge--solo" data-joint-only hidden>indywidualnie</span>
+              </span>
               <span class="results-row-tag">12% / 32%</span>
               <span class="results-row-bar"><span data-bar></span></span>
               <input id="taxScale" type="text" readonly tabindex="-1" />
@@ -514,6 +957,7 @@
               <span class="results-row-label">
                 Skala podatkowa
                 <span class="variant-badge variant-badge--ipbox">IP BOX</span>
+                <span class="variant-badge variant-badge--solo" data-joint-only hidden>indywidualnie</span>
               </span>
               <span class="results-row-tag">5% / 12% / 32%</span>
               <span class="results-row-bar"><span data-bar></span></span>
@@ -524,11 +968,7 @@
               data-variant="taxScaleJoint">
               <span class="results-row-label">
                 Skala podatkowa
-                <span
-                  class="variant-mark variant-mark--joint"
-                  role="img"
-                  aria-label="Wspólnie z małżonkiem"
-                  title="Wspólnie z małżonkiem">
+                <span class="variant-badge variant-badge--joint">
                   <svg
                     viewBox="0 0 20 20"
                     width="16"
@@ -545,6 +985,7 @@
                     <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                     <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                   </svg>
+                  wspólnie z małżonkiem
                 </span>
               </span>
               <span class="results-row-tag">12% / 32%</span>
@@ -557,11 +998,7 @@
               <span class="results-row-label">
                 Skala podatkowa
                 <span class="variant-badge variant-badge--ipbox">IP BOX</span>
-                <span
-                  class="variant-mark variant-mark--joint"
-                  role="img"
-                  aria-label="Wspólnie z małżonkiem"
-                  title="Wspólnie z małżonkiem">
+                <span class="variant-badge variant-badge--joint">
                   <svg
                     viewBox="0 0 20 20"
                     width="16"
@@ -578,6 +1015,7 @@
                     <path d="M3.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                     <path d="M9.2 16.4a3.8 3.8 0 0 1 7.6 0" />
                   </svg>
+                  wspólnie z małżonkiem
                 </span>
               </span>
               <span class="results-row-tag">5% / 12% / 32%</span>
@@ -674,10 +1112,53 @@
                 <span>Składka zdrowotna (rocznie)</span>
                 <span id="ratesHealthRyczaltValue"></span>
               </div>
+              <div class="rates-total-row" id="ratesSocialRow">
+                <span>Składki społeczne ZUS (rocznie)</span>
+                <span id="ratesSocialValue"></span>
+              </div>
+              <div class="rates-total-row hidden" id="ratesOtherPitRow">
+                <span>Zmiana PIT od innych dochodów</span>
+                <span id="ratesOtherPitValue"></span>
+              </div>
               <div class="rates-total-row rates-total-sum">
-                <span>Łącznie PIT + składka zdrowotna</span>
+                <span>Łącznie: ryczałt (wiele stawek) + zdrowotna + ZUS</span>
                 <span id="ratesTotalValue"></span>
               </div>
+              <p class="results-row-detail" id="ratesTotalDetail"></p>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="results-block zus-summary"
+          id="zusSummary"
+          aria-labelledby="zusSummaryTitle">
+          <header class="results-block-head">
+            <h3 id="zusSummaryTitle" class="results-block-title">
+              Składki społeczne ZUS 2026
+            </h3>
+            <span class="results-block-meta" id="zusSummaryMeta">
+              wliczone w każdy wariant
+            </span>
+          </header>
+          <div class="zus-summary-body">
+            <ol
+              class="zus-months"
+              id="zusMonths"
+              aria-label="Składki społeczne w miesiącach 2026"></ol>
+            <ul class="zus-legend" id="zusLegend" aria-label="Legenda"></ul>
+            <p class="zus-summary-note" id="zusScheduleSummary"></p>
+            <div class="rates-total-row">
+              <span>Składki społeczne + FP/FS (rocznie)</span>
+              <span id="zusSocialTotal"></span>
+            </div>
+            <div class="rates-total-row">
+              <span>w tym Fundusz Pracy + FS (koszt)</span>
+              <span id="zusFpTotal"></span>
+            </div>
+            <div class="rates-total-row">
+              <span>Miesiące składki zdrowotnej w 2026</span>
+              <span id="zusHealthMonths"></span>
             </div>
           </div>
         </section>
@@ -706,6 +1187,12 @@
         </details>
       </section>
     </main>
+
+    <!-- Szybki skok do wyników (wąskie ekrany) -->
+    <a class="mobile-jump" id="mobileJump" href="#resultsSection">
+      <span class="mobile-jump-label">Przejdź do wyników</span>
+      <span class="mobile-jump-summary" id="mobileJumpSummary">Wprowadź dane</span>
+    </a>
 
     <!-- Hidden compatibility button (tests trigger calculation by clicking it) -->
     <button id="calculateButton" class="sr-only" type="button" tabindex="-1">

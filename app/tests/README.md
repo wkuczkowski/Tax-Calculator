@@ -72,6 +72,11 @@ taxation, ryczałt 17% over 1 312 500 zł, ryczałt limit 1 093 750 zł and the
 new-business exception, 5% levy including IP BOX), the year switch
 (`?rok=`, `&projekt=1`) and the default-year rule.
 
+### 4. `toggles.test.js` (no snapshots)
+
+Every toggle switch flips its checkbox (and recalculates) when the switch
+graphic (`.slider`) itself is clicked, not only its text label.
+
 ### Year of the tested page
 
 `loadCalculator()` opens the page with `?rok=2026` by default, so the older

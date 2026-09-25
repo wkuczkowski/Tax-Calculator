@@ -5,13 +5,14 @@
 //  (4) generic arithmetic lines inside the text are self-consistent:
 //      "A × p% = B", "A + B (+ C…) = D", "A − B = C", "A : 2 = B", "A × 2 = B".
 //
-// Usage: node tools/refmodel/checkBreakdown.mjs      (npm run verify:breakdown; APP_DIR as in compare.mjs)
-// Writes out/breakdown_check.json. Exit code 1 when any problem is found.
+// Usage: node tools/refmodel/checkBreakdown.mjs [--year=2027]
+//        (npm run verify:breakdown / verify:breakdown2027; APP_DIR as in compare.mjs)
+// Writes out/breakdown_check[_2027].json. Exit code 1 when any problem is found.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { APP_DIR, OUT_DIR, runApp } from './compare.mjs';
+import { APP_DIR, OUT_DIR, YEAR, runApp } from './compare.mjs';
 
-const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8')).cases;
+const cases = JSON.parse(readFileSync(new URL(YEAR === 2026 ? './cases.json' : `./cases${YEAR}.json`, import.meta.url), 'utf8')).cases;
 const HEAD = {
   'SKALA PODATKOWA': 'taxScale',
   'SKALA PODATKOWA Z IP BOX': 'taxScaleIpBox',
@@ -36,7 +37,10 @@ function sectionId(h) {
 }
 
 // pick ~50 cases spread over all groups
-const sample = cases.filter((_, i) => i % 8 === 0).concat(cases.filter((c) => /^(J|K|L|N|H)-/.test(c.id) && Number(c.id.slice(2)) % 5 === 1)).slice(0, 60);
+// 2027: every 7th case plus the joint / IP BOX / ryczałt-EUR / multi / hand-check groups (both scenarios).
+const sample = YEAR === 2026
+  ? cases.filter((_, i) => i % 8 === 0).concat(cases.filter((c) => /^(J|K|L|N|H)-/.test(c.id) && Number(c.id.slice(2)) % 5 === 1)).slice(0, 60)
+  : cases.filter((_, i) => i % 7 === 0).concat(cases.filter((c) => /^27(J|K|R|L|N)-/.test(c.id) && Number(c.id.split('-')[1]) % 3 === 0)).slice(0, 90);
 const problems = [];
 let checkedSections = 0, checkedArith = 0;
 for (const cs of sample) {
@@ -107,9 +111,10 @@ for (const cs of sample) {
   }
 }
 mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(resolve(OUT_DIR, 'breakdown_check.json'), JSON.stringify({ sampled: sample.length, checkedSections, checkedArith, problems }, null, 1));
-console.log('APP_DIR:', APP_DIR);
+const OUT_NAME = YEAR === 2026 ? 'breakdown_check.json' : `breakdown_check_${YEAR}.json`;
+writeFileSync(resolve(OUT_DIR, OUT_NAME), JSON.stringify({ sampled: sample.length, checkedSections, checkedArith, problems }, null, 1));
+console.log('APP_DIR:', APP_DIR, 'year:', YEAR);
 console.log({ sampled: sample.length, checkedSections, checkedArith, problems: problems.length });
 for (const p of problems.slice(0, 40)) console.log(JSON.stringify(p));
-console.log(problems.length ? `FAIL: ${problems.length} problem(s) (details: tools/refmodel/out/breakdown_check.json)` : 'OK: breakdown text consistent');
+console.log(problems.length ? `FAIL: ${problems.length} problem(s) (details: tools/refmodel/out/${OUT_NAME})` : 'OK: breakdown text consistent');
 process.exitCode = problems.length ? 1 : 0;

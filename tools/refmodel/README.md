@@ -2,7 +2,7 @@
 
 ## Po co to jest
 
-`refModel.mjs` to **niezależny model obliczeń** (PIT w czterech formach, składka zdrowotna, składki społeczne ZUS miesiąc po miesiącu, FP/FS, wakacje składkowe, danina, IP BOX, rozliczenie z małżonkiem, ryczałt z wieloma stawkami) na rok 2026. Model został napisany **z przepisów i udokumentowanych decyzji**:
+`refModel.mjs` to **niezależny model obliczeń** (PIT w czterech formach, składka zdrowotna, składki społeczne ZUS miesiąc po miesiącu, FP/FS, wakacje składkowe, danina, IP BOX, rozliczenie z małżonkiem, ryczałt z wieloma stawkami) na lata 2026 i 2027 (2027: obowiązujące prawo oraz scenariusz projektu UD458 + UD116). Model został napisany **z przepisów i udokumentowanych decyzji**:
 - [`docs/prawo/`](../../docs/prawo/),
 - [`docs/decyzje/specyfikacja-zus.md`](../../docs/decyzje/specyfikacja-zus.md), w tym ADDENDUM A1–A10,
 - [`docs/decyzje/decyzje-implementacyjne.md`](../../docs/decyzje/decyzje-implementacyjne.md).
@@ -17,7 +17,7 @@ Skrypty w tym katalogu uruchamiają prawdziwą aplikację w jsdom, wyłącznie p
 - Model zmieniaj tylko z dwóch powodów:
   - zmienia się prawo (np. nowe kwoty na kolejny rok);
   - zapada nowa decyzja interpretacyjna. Najpierw zapisz ją w [`docs/decyzje/decyzje-implementacyjne.md`](../../docs/decyzje/decyzje-implementacyjne.md), potem zmień model.
-- Stałe (`C` w `refModel.mjs`) mają przy sobie podstawę prawną. Przy aktualizacji przepisz je ze źródła, a nie z `taxConstants.js`.
+- Stałe (`CONSTANTS_2026`, `CONSTANTS_2027`, nakładka `REFORM_2027` w `refModel.mjs`; aktywny zestaw to `C`) mają przy sobie podstawę prawną i status (final / prognoza / projekt). Przy aktualizacji przepisz je ze źródła, a nie z `taxConstants.js`.
 - Interpretacje sporne są przełącznikami w `DEFAULT_OPTIONS`. Domyślne wartości odpowiadają decyzjom przyjętym w aplikacji. `genCases.mjs` zapisuje w `expected.json` (pole `alt`), jak zmieniłyby się wyniki przy każdej alternatywnej interpretacji.
 
 ## Pliki
@@ -25,13 +25,13 @@ Skrypty w tym katalogu uruchamiają prawdziwą aplikację w jsdom, wyłącznie p
 | Plik | Rola |
 |---|---|
 | `refModel.mjs` | Model. Eksportuje `computeAll(input, options)`. Format wejścia jest opisany w nagłówku pliku. |
-| `genCases.mjs` | Generator siatki przypadków brzegowych (grupy A–N, 396 przypadków). Zapisuje `cases.json` (wejścia) i `expected.json` (wyniki modelu + `alt`). |
-| `cases.json` | Wejścia, jeden przypadek na linię. Wszystkie kwoty w pełnych groszach (generator to sprawdza). |
-| `expected.json` | Migawka wyników modelu, jeden przypadek na linię. Służy do wykrywania dryfu modelu (`--check`) i do przeglądania wyników. Nie wpływa na `compare.mjs`, który liczy model na bieżąco. |
-| `compare.mjs` | Główne porównanie: aplikacja vs model dla każdego przypadku z `cases.json`. Eksportuje też `runApp()` dla pozostałych skryptów. |
-| `checkBreakdown.mjs` | Spójność tekstu „Pokaż szczegółowe obliczenia” na próbce 60 przypadków (szczegóły niżej). |
-| `fuzz.mjs` | Losowy test różnicowy aplikacja vs model (ziarno ⇒ powtarzalny). |
-| `checkHand.mjs` + `HAND_CHECKS.md` | 6 przykładów policzonych ręcznie (58 liczb) porównanych z modelem. Sprawdza sam model, bez aplikacji. |
+| `genCases.mjs` | Generator siatek przypadków brzegowych: 2026 (grupy A–N, 396 przypadków) → `cases.json` / `expected.json`; 2027 (grupy 27A–27N i 27R, 321 przypadków, obowiązujące prawo i projekt) → `cases2027.json` / `expected2027.json`. Wyniki modelu + `alt`. |
+| `cases.json`, `cases2027.json` | Wejścia, jeden przypadek na linię. Wszystkie kwoty w pełnych groszach (generator to sprawdza). |
+| `expected.json`, `expected2027.json` | Migawka wyników modelu, jeden przypadek na linię. Służy do wykrywania dryfu modelu (`--check`) i do przeglądania wyników. Nie wpływa na `compare.mjs`, który liczy model na bieżąco. |
+| `compare.mjs` | Główne porównanie: aplikacja vs model dla każdego przypadku z `cases.json` (`--year=2027`: `cases2027.json`). Eksportuje też `runApp()` dla pozostałych skryptów. |
+| `checkBreakdown.mjs` | Spójność tekstu „Pokaż szczegółowe obliczenia” na próbce 60 przypadków 2026 albo 78 przypadków 2027 (`--year=2027`; szczegóły niżej). |
+| `fuzz.mjs` | Losowy test różnicowy aplikacja vs model (ziarno ⇒ powtarzalny; `--year=2027` losuje też scenariusz projektu i przychód 2026). |
+| `checkHand.mjs` + `HAND_CHECKS.md` | 6 przykładów 2026 i 4 przykłady 2027 (Y1–Y4, w tym projekt) policzone ręcznie (148 liczb) porównane z modelem. Sprawdza sam model, bez aplikacji. |
 | `out/` | Wyniki szczegółowe ostatniego uruchomienia (JSON). Katalog jest w `.gitignore`. |
 
 ## Jak uruchomić
@@ -42,7 +42,10 @@ Z katalogu głównego repo (wymaga `npm install`):
 npm run verify:refmodel     # compare.mjs: 396 przypadków (ok. 6 min)
 npm run verify:breakdown    # checkBreakdown.mjs: 60 przypadków (ok. 1 min)
 npm run verify:fuzz         # fuzz.mjs: 200 losowych wejść × ziarna 7, 99, 2024 (kilka minut)
-npm run verify:hand         # checkHand.mjs: sam model, natychmiast
+npm run verify:hand         # checkHand.mjs: sam model, natychmiast (2026 i 2027)
+npm run verify:refmodel2027  # compare.mjs --year=2027: 321 przypadków 2027 (ok. 5 min)
+npm run verify:breakdown2027 # checkBreakdown.mjs --year=2027: 78 przypadków (ok. 1 min)
+npm run verify:fuzz2027      # fuzz.mjs --year=2027: 200 wejść × ziarna 7, 99, 2024 (ok. 7 min)
 ```
 
 - Wszystkie skrypty kończą się kodem 1, gdy znajdą nieoczekiwaną różnicę, więc nadają się do CI.
@@ -53,14 +56,23 @@ Warianty:
 
 ```sh
 node tools/refmodel/compare.mjs L-      # tylko przypadki, których id zaczyna się od "L-"
+node tools/refmodel/compare.mjs --year=2027 27R-   # tylko reguły EUR ryczałtu 2027
 node tools/refmodel/fuzz.mjs 500 42     # 500 wejść, ziarno 42
 node tools/refmodel/genCases.mjs --check  # czy cases.json/expected.json odpowiadają obecnemu modelowi
 node tools/refmodel/genCases.mjs          # przegeneruj (potem przejrzyj `git diff`)
 ```
 
-### Rok podatkowy
+### Rok podatkowy (2026 / 2027)
 
-Aplikacja obsługuje lata 2026 i 2027 (przełącznik roku, `?rok=`). Loader testów otwiera stronę domyślnie z `?rok=2026`, więc skrypty w tym katalogu porównują rok 2026 niezależnie od bieżącej daty. Model obejmuje dziś tylko 2026; rozszerzenie o 2027 (stałe z [`docs/prawo/research-2027.md`](../../docs/prawo/research-2027.md), scenariusz z [`research-2027-reformy.md`](../../docs/prawo/research-2027-reformy.md)) ma przygotować niezależny weryfikator. Loader przyjmuje `loadCalculator({ year: 2027 })` i `{ year: 2027, reform: true }` (scenariusz „Projekt zmian 2027”); pole przychodu z 2026 r. ustawia `setPrevYearRevenue()`.
+Aplikacja obsługuje lata 2026 i 2027 (przełącznik roku, `?rok=`). Loader testów otwiera stronę domyślnie z `?rok=2026`, więc skrypty bez `--year` porównują rok 2026 niezależnie od bieżącej daty.
+
+Rok 2027 (stałe z [`docs/prawo/research-2027.md`](../../docs/prawo/research-2027.md), scenariusz z [`research-2027-reformy.md`](../../docs/prawo/research-2027-reformy.md); rozszerzenie przygotował niezależny weryfikator, bez czytania kodu aplikacji):
+- **Wejście modelu:** `year: 2027`, `reform2027: true|false`, `revenuePrevYear` (przychód 2026 do limitu 250 000 EUR; `null` = przychód z formularza; przy starcie działalności w 2027 warunek spełniony zawsze). Opcja `eurRate` (domyślnie `EUR_RATE_2027_FORECAST` = 4,3750, NBP 25.09.2026; ustawowo kurs z 1.10.2026) jest poza `DEFAULT_OPTIONS`, żeby migawka 2026 została bajt w bajt ta sama.
+- **Wyjście modelu 2027:** dodatkowo `year`, `scenario` i (w projekcie) `ryczaltEligibility`; warianty ryczałtu bez prawa do ryczałtu mają `unavailable: true` i nie wchodzą do `best`.
+- **Stałe 2027:** płaca minimalna 4 950 (final), podstawa pełna 6 019,80 i FP/FS 2,45% (prognoza), preferencyjna 1 485,00, minimalna zdrowotna 445,50 × 12 mies., ryczałt z IV kw. 2026 = 9 720 (prognoza: 524,88 / 874,80 / 1 574,64), limit zdrowotnej liniowej 15 100 (prognoza). Projekt: skala 12/24/32% (130 000 / 150 000, kwota zmniejszająca 3 600), danina 5% z IP BOX, ryczałt: limit 250 000 EUR przychodu 2026, 17% ponad 300 000 EUR (proporcjonalny podział nadwyżki i odliczeń, próg roczny bez proporcji – założenia).
+- **Uruchamianie aplikacji:** `runApp()` otwiera stronę z `loadCalculator({ year, reform })` wg `input.year` / `input.reform2027` i wpisuje „Przychód 2026” (`setPrevYearRevenue()`). Porównywana jest też dostępność ryczałtu (`data-unavailable`), a przypadek z błędem modelu (start po roku podatkowym) wymaga stanu `data-state="invalid"` bez wyników.
+- `KNOWN_DIFFS_2027` w `compare.mjs` – dziś pusta lista.
+- Stan porównania z aplikacją (commit 979be6c): 3 783 warianty w 321 przypadkach 2027 bez różnic, 78 przypadków w `verify:breakdown2027` bez problemów, fuzz 2027 (3 × 200 wejść) bez różnic. Różnice poniżej tolerancji (1 gr) występują przy 8,5%/12,5%, rozliczeniu wspólnym i ryczałcie 17% z nadwyżką (zaokrąglanie części).
 
 ### Inna wersja aplikacji: `APP_DIR`
 

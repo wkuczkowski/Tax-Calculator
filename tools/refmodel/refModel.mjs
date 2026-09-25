@@ -1,4 +1,5 @@
-// Independent reference model: Polish JDG tax + ZUS burden, tax year 2026.
+// Independent reference model: Polish JDG tax + ZUS burden, tax years 2026 and 2027
+// (2027: current law, or the draft reform UD458 + UD116 with input.reform2027 = true).
 //
 // Built from the statutes, docs/decyzje/specyfikacja-zus.md (SPEC_ZUS), docs/prawo/research-zus-2026.md
 // and docs/prawo/audyt-logiki-2026.md WITHOUT looking at the calculator implementation
@@ -26,14 +27,26 @@
 //   multiRate: { enabled, allocations: { '12': 100000, '8.5-12.5': 50000, ... } },
 //   zus: { enabled, startDate: 'YYYY-MM-DD'|null, path: 'full'|'ulga'|'pref',
 //          chorobowe, birthDate: 'YYYY-MM-DD'|null, sex: 'K'|'M'|null,
-//          employmentContract, wakacje }
+//          employmentContract, wakacje },
+//   year: 2026 | 2027,                    // tax year (default 2026)
+//   reform2027: false,                    // 2027 only: draft reform UD458 + UD116 scenario
+//   revenuePrevYear: null,                // reform only: 2026 revenue for the 250 000 EUR ryczałt limit;
+//                                         // null = same as `revenue`; ignored when the business starts in 2027
 // }
+// Extra option (not in DEFAULT_OPTIONS so 2026 output stays byte-identical): `eurRate` – EUR/PLN rate
+// for the reform's EUR limits (default EUR_RATE_2027_FORECAST).
 // OUTPUT: see computeAll().
 
 // ---------------------------------------------------------------------------
-// Constants 2026
+// Constants per tax year. computeAll() activates one set (module-level `C`, see useYear()).
+// Every value is re-derived from the source named next to it, never from the app's taxConstants.js.
+// Status of 2027 values: F = final (published act), P = forecast, D = draft bill (reform2027 only).
 // ---------------------------------------------------------------------------
-export const C = {
+// Ryczałt health amount: 9% × (60% | 100% | 180%) × average Q4 wage, base rounded to grosze first
+// (ZUS/GUS publish e.g. 5 537,18 × 9% = 498,35 for 2026) – art. 81 ust. 2e–2f uŚOZ.
+const ryczaltHealthFromWage = (w) => [0.6, 1, 1.8].map((m) => r2(r2(m * w) * 0.09));
+
+const CONSTANTS_2026 = {
   YEAR: 2026,
   MIN_WAGE: 4806.0, // Dz.U. 2025 poz. 1242
   FULL_BASE: 5652.0, // 60% × 9 420 (prognozowane przeciętne) – art. 18 ust. 8 uSUS
@@ -56,16 +69,72 @@ export const C = {
   RYCZALT_HEALTH_DEDUCTION_SHARE: 0.5, // art. 11 ust. 1a uRycz
   // PIT
   SCALE_FREE: 30000, // art. 27 ust. 1 uPIT
-  SCALE_THRESHOLD: 120000,
-  SCALE_RATE1: 0.12,
-  SCALE_RATE2: 0.32,
-  SCALE_REDUCTION: 3600,
+  // art. 27 ust. 1 table, one row per bracket: tax = fixed + rate × (base − over) − minus.
+  SCALE_BRACKETS: [
+    { upTo: 120000, over: 0, fixed: 0, rate: 0.12, minus: 3600 }, // 12% minus kwota zmniejszająca 3 600
+    { upTo: Infinity, over: 120000, fixed: 10800, rate: 0.32, minus: 0 }, // 10 800 + 32% nadwyżki ponad 120 000
+  ],
   LINEAR_RATE: 0.19, // art. 30c ust. 1 uPIT
   IPBOX_RATE: 0.05, // art. 30ca ust. 1 uPIT
   DANINA_THRESHOLD: 1000000, // art. 30h uPIT
   DANINA_RATE: 0.04,
+  DANINA_INCLUDES_IPBOX: false, // art. 30h ust. 2 – closed list without art. 30ca
   R85_THRESHOLD: 100000, // art. 12 ust. 1 pkt 4 uRycz (8,5% do 100 000 zł, 12,5% nadwyżki)
+  RYCZALT_EUR_RULES: null, // no 250k/300k EUR rules (2 mln EUR prior-year limit not modelled, as in 2026)
 };
+
+// 2027, CURRENT LAW (no UD458/UD116). Sources: research_2027.md §1, SPEC_MULTIYEAR.md.
+const CONSTANTS_2027 = {
+  ...CONSTANTS_2026,
+  YEAR: 2027,
+  MIN_WAGE: 4950.0, // F: rozp. RM z 14.09.2026, Dz.U. 2026 poz. 1213 § 1 (verified in the PDF)
+  FULL_BASE: 6019.8, // P: 60% × 10 033 (projekt ustawy budżetowej 2027 art. 24) – art. 18 ust. 8 uSUS; final with the MRPiPS obwieszczenie (~XI 2026)
+  PREF_BASE: 1485.0, // F: 30% × 4 950 – art. 18a ust. 1 uSUS
+  // RATE_EMER/RENT/CHOR unchanged (F); RATE_WYP 1,67% (F to 03.2027, P from 04.2027);
+  // FP 1% + FS 1,45% (P: projekt UB 2027 art. 25–26).
+  HEALTH_MIN_MONTHLY: 445.5, // F: 9% × 4 950 – art. 81 ust. 2/2b uŚOZ; SPEC_MULTIYEAR: all 12 months × 445,50 (Jan 2027 simplification as in 2026)
+  LINEAR_HEALTH_DEDUCTION_LIMIT: 15100, // P: art. 30c ust. 2b uPIT: 14 100 × 300 990/282 600 = 15 017,55 → up to full 100 zł; MF obwieszczenie by 31.12.2026
+  AVG_WAGE_Q4: 9720, // P: SPEC_MULTIYEAR "≈ 9 720" (research: 9 228,64 × 1,0534 ≈ 9 721,52); GUS ~22.01.2027
+  RYCZALT_HEALTH_MONTHLY: ryczaltHealthFromWage(9720), // P: 524,88 / 874,80 / 1 574,64
+};
+
+// Forecast EUR/PLN for the UD458 ryczałt limits: art. 4 ust. 2 uRycz – NBP average rate of the first
+// working day of October of the preceding year (1.10.2026), NOT rounded. Unknown on 25.09.2026, so the
+// latest known NBP rate is used: table 187/A/NBP/2026 of 25.09.2026, EUR mid = 4,3750
+// (https://api.nbp.pl/api/exchangerates/rates/a/eur/last/10/). Override with option `eurRate`.
+export const EUR_RATE_2027_FORECAST = 4.375;
+
+// 2027 with the draft reform (UD458 as published on RCL 21.08.2026 + UD116 adopted by RM 22.09.2026).
+// Status D (draft, not enacted) for every value below. Source: research_2027_reforms.md §2, §3, §5.
+const REFORM_2027 = {
+  SCALE_BRACKETS: [
+    { upTo: 130000, over: 0, fixed: 0, rate: 0.12, minus: 3600 }, // UD458 art. 27 ust. 1: 12% minus 3 600 (constant)
+    { upTo: 150000, over: 130000, fixed: 12000, rate: 0.24, minus: 0 }, // 12 000 zł + 24% nadwyżki ponad 130 000
+    { upTo: Infinity, over: 150000, fixed: 16800, rate: 0.32, minus: 0 }, // 16 800 zł + 32% nadwyżki ponad 150 000
+  ],
+  DANINA_RATE: 0.05, // UD458 art. 30h ust. 1 (4% → 5%), first for 2027 income
+  DANINA_INCLUDES_IPBOX: true, // UD116: base extended by qualified IP BOX income (art. 30ca ust. 3)
+  RYCZALT_EUR_RULES: {
+    eligibilityLimitEur: 250000, // UD458: 2026 revenue ≤ 250 000 EUR (art. 6 ust. 4 pkt 1 uRycz as amended)
+    surchargeThresholdEur: 300000, // UD458: 17% on revenue above 300 000 EUR in the year (art. 12 ust. 1 pkt 1, ust. 15)
+    surchargeRate: 0.17,
+  },
+};
+
+export const CONSTANTS_BY_YEAR = { 2026: CONSTANTS_2026, 2027: CONSTANTS_2027 };
+
+export function constantsFor(year = 2026, reform2027 = false, eurRate = EUR_RATE_2027_FORECAST) {
+  const base = CONSTANTS_BY_YEAR[year];
+  if (!base) throw new Error('no constants for year ' + year);
+  if (!reform2027) return base;
+  if (year !== 2027) throw new Error('reform2027 applies only to year 2027');
+  return { ...base, ...REFORM_2027, SCENARIO: 'reform2027', EUR_RATE: eurRate };
+}
+
+// Active constant set. computeAll() switches it for the duration of one (synchronous) call.
+// Exported as a live binding; outside computeAll it is the 2026 set (backward compatible).
+export let C = CONSTANTS_2026;
+function useYear(k) { const prev = C; C = k; return prev; }
 
 export const RYCZALT_RATES = ['2', '3', '5.5', '8.5', '8.5-12.5', '10', '12', '14', '15', '17'];
 export const RYCZALT_VARIANT_KEY = {
@@ -135,11 +204,13 @@ function parseDate(s) {
 const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 const monthIndex = (y, m) => y * 12 + (m - 1); // absolute month number
 
-// Scale tax (art. 27 ust. 1 uPIT, 2026): 12% − 3 600 up to 120 000; 10 800 + 32% above.
+// Scale tax (art. 27 ust. 1 uPIT) evaluated from the bracket table of the active year:
+//   2026 / 2027 current law: 12% − 3 600 up to 120 000; 10 800 + 32% above.
+//   2027 reform (UD458): 12% − 3 600 up to 130 000; 12 000 + 24% to 150 000; 16 800 + 32% above.
 export function scaleTaxRaw(base) {
   if (base <= C.SCALE_FREE) return 0;
-  if (base <= C.SCALE_THRESHOLD) return C.SCALE_RATE1 * base - C.SCALE_REDUCTION;
-  return 10800 + C.SCALE_RATE2 * (base - C.SCALE_THRESHOLD);
+  const b = C.SCALE_BRACKETS.find((x) => base <= x.upTo);
+  return b.fixed + b.rate * (base - b.over) - b.minus;
 }
 function taxRound(x, opts) {
   return opts.roundPitToZloty ? r0(x) : r2(x);
@@ -155,15 +226,16 @@ export function jointScaleTax(ownBase, spouseBase, opts = DEFAULT_OPTIONS) {
   const half = baseRound((pos(ownBase) + pos(spouseBase)) / 2, opts);
   return taxRound(2 * scaleTaxRaw(half), opts);
 }
-// Danina (art. 30h uPIT): 4% of the excess over 1 000 000 of incomes from art. 27, 30b, 30c, 30f
-// after deducted social (art. 26 ust. 1 pkt 2, 30c ust. 2 pkt 1) and linear health (30c ust. 2 pkt 2).
-// IP BOX (30ca) and ryczałt income are NOT part of the base.
+// Danina (art. 30h uPIT): 4% (reform 2027: 5%) of the excess over 1 000 000 of incomes from art. 27,
+// 30b, 30c, 30f after deducted social (art. 26 ust. 1 pkt 2, 30c ust. 2 pkt 1) and linear health
+// (30c ust. 2 pkt 2). Ryczałt income is never part of the base. IP BOX (30ca) income is outside the
+// base under current law and inside it under UD116 (callers add it when C.DANINA_INCLUDES_IPBOX).
 export function danina(base) {
   return r2(C.DANINA_RATE * pos(base - C.DANINA_THRESHOLD));
 }
 
 // ---------------------------------------------------------------------------
-// Social contributions month by month (2026)
+// Social contributions month by month (active year C.YEAR; starts in earlier years carry over)
 // ---------------------------------------------------------------------------
 
 // Regime of a calendar month (y, m) for a business started at `start` with `path`.
@@ -300,7 +372,7 @@ export function wakacjeCandidates(zus) {
     const reg = monthRegime(C.YEAR, m, start, start ? zus.path : 'full').regime;
     if (idx >= F + 2 && (reg === 'full' || reg === 'pref')) months.push(m);
   }
-  if (!months.length) return { eligible: false, reason: 'no month in 2026 satisfies E ≥ F+2 (F = first month subject to social insurance)', months };
+  if (!months.length) return { eligible: false, reason: 'no month in ' + C.YEAR + ' satisfies E ≥ F+2 (F = first month subject to social insurance)', months };
   return { eligible: true, reason: null, months };
 }
 
@@ -330,7 +402,7 @@ function sumSchedule(months) {
   return { S, FP, total: r2(S + FP) };
 }
 
-// Months of health insurance in 2026 (art. 81 ust. 2b/2e uŚOZ: months of being subject;
+// Months of health insurance in C.YEAR (art. 81 ust. 2b/2e uŚOZ: months of being subject;
 // contribution is monthly and indivisible – art. 79 ust. 2 – so the start month counts fully,
 // also during ulga na start – art. 79a/81 ust. 2 list art. 18 ust. 1 PP persons).
 export function healthMonths(zus, opts = DEFAULT_OPTIONS) {
@@ -384,7 +456,8 @@ function evalScale(ctx, opts, { ip, joint }) {
     const pitIp = ip ? taxRound(C.IPBOX_RATE * baseRound(q, opts), opts) : 0;
     const healthBase = ctx.D - ctx.FP - ctx.S;
     const health = r2(Math.max(C.HEALTH_SCALE_RATE * healthBase, C.HEALTH_MIN_MONTHLY * ctx.n));
-    const dan = danina(taxable);
+    // UD116 (reform 2027): qualified IP BOX income (art. 30ca ust. 3) joins the danina base.
+    const dan = danina(taxable + (ip && C.DANINA_INCLUDES_IPBOX ? q : 0));
     const baseline = baselineFor(ctx, opts, joint);
     const pit = r2(pitScale + pitIp);
     const total = r2(pit + dan + health + ctx.S + ctx.FP - baseline.total);
@@ -441,7 +514,7 @@ function evalLinear(ctx, opts, { ip }) {
     const socialFromScale = Math.min(socialToScale, ctx.other);
     const otherTaxable = ctx.other - socialFromScale;
     const pitOther = scaleTax(otherTaxable, opts);
-    const dan = danina(linBase + otherTaxable);
+    const dan = danina(linBase + otherTaxable + (ip && C.DANINA_INCLUDES_IPBOX ? q : 0));
     const baseline = baselineFor(ctx, opts, false);
     const pit = r2(pitLin + pitIp + pitOther);
     const total = r2(pit + dan + H + ctx.S + ctx.FP - baseline.total);
@@ -463,16 +536,26 @@ function ryczaltTier(rev) {
 
 // Ryczałt tax on a set of buckets {rateKey: revenue} given the total deduction Dtot, split in
 // proportion to revenues (art. 11 ust. 3 uRycz; audit B1/B2 – 8,5% and 12,5% are different rates).
-function ryczaltTaxOnBuckets(buckets, Dtot, opts) {
+//
+// Reform 2027 (UD458, `surcharge` = { threshold: 300 000 × EUR rate, rate: 0.17 }): revenue above the
+// threshold is taxed at 17%. ASSUMPTIONS (no bill text): with several rates the excess is split across
+// the buckets in proportion to their revenue (chronology unknown); the 8,5%/12,5% split applies to the
+// bucket's non-excess part; all excess portions are pooled into one 17% part; the total deduction is
+// split in proportion to revenue over all parts, the 17% part included.
+function ryczaltTaxOnBuckets(buckets, Dtot, opts, surcharge = null) {
   const parts = [];
-  for (const [key, rev] of Object.entries(buckets)) {
-    if (!(rev > 0)) continue;
+  const Ptot = Object.values(buckets).reduce((a, v) => a + (v > 0 ? v : 0), 0);
+  const excess = surcharge && Ptot > surcharge.threshold ? Ptot - surcharge.threshold : 0;
+  for (const [key, rev0] of Object.entries(buckets)) {
+    if (!(rev0 > 0)) continue;
+    const rev = excess > 0 ? rev0 - (excess * rev0) / Ptot : rev0;
     if (key === '8.5-12.5') {
       const p85 = Math.min(rev, C.R85_THRESHOLD);
       parts.push({ rate: 0.085, rev: p85, key: '8.5(≤100k)' });
       if (rev > C.R85_THRESHOLD) parts.push({ rate: 0.125, rev: rev - C.R85_THRESHOLD, key: '12.5(>100k)' });
     } else parts.push({ rate: Number(key) / 100, rev, key });
   }
+  if (excess > 0) parts.push({ rate: surcharge.rate, rev: excess, key: '17(>300kEUR)' });
   const P = parts.reduce((a, p) => a + p.rev, 0);
   let tax = 0;
   const detail = [];
@@ -517,7 +600,7 @@ function evalRyczalt(ctx, opts, buckets) {
     }
     if (!chosen) throw new Error('no consistent ryczałt tier');
     const { H, Hd, Sr, Sscale, tierRevenue, tier } = chosen;
-    const rt = ryczaltTaxOnBuckets(buckets, Sr + Hd, opts);
+    const rt = ryczaltTaxOnBuckets(buckets, Sr + Hd, opts, ctx.ryczaltSurcharge);
     const otherTaxable = ctx.other - Sscale;
     const pitOther = scaleTax(otherTaxable, opts);
     const dan = danina(otherTaxable);
@@ -553,7 +636,25 @@ export function normalizeInput(inp) {
     joint: Object.assign({ enabled: false, spouseIncome: 0 }, inp.joint || {}),
     multiRate: Object.assign({ enabled: false, allocations: {} }, inp.multiRate || {}),
     zus,
+    year: inp.year === undefined || inp.year === null ? 2026 : Number(inp.year),
+    reform2027: !!inp.reform2027,
+    revenuePrevYear: inp.revenuePrevYear === undefined || inp.revenuePrevYear === null || inp.revenuePrevYear === '' ? null : Number(inp.revenuePrevYear),
   };
+}
+
+// Reform 2027 ryczałt eligibility (UD458; art. 6 ust. 4 uRycz as amended): revenue of the previous
+// year (2026) ≤ 250 000 EUR × rate (art. 4 ust. 2: NBP rate of 1.10.2026, no rounding). A business
+// started in 2027 qualifies regardless of revenue (art. 6 ust. 4 pkt 2 – "bez względu na wysokość
+// przychodów"), even if a 2026 revenue was typed. Empty 2026 revenue = the form's revenue (SPEC).
+export function ryczaltEligibility(inp) {
+  const R = C.RYCZALT_EUR_RULES;
+  if (!R) return null;
+  const limit = r2(R.eligibilityLimitEur * C.EUR_RATE);
+  const s = parseDate(inp.zus.startDate);
+  if (s && s.y === C.YEAR) return { eligible: true, limit, prevRevenue: null, reason: 'business started in ' + C.YEAR };
+  const prev = inp.revenuePrevYear === null ? inp.revenue : inp.revenuePrevYear;
+  const eligible = prev <= limit;
+  return { eligible, limit, prevRevenue: prev, reason: eligible ? null : `2026 revenue ${prev} > 250 000 EUR × ${C.EUR_RATE} = ${limit}` };
 }
 
 function evaluateVariants(inp, sched, n, opts) {
@@ -565,6 +666,7 @@ function evaluateVariants(inp, sched, n, opts) {
     other: inp.otherScaleIncome,
     spouse: inp.joint.spouseIncome || 0,
     coeff: (inp.ipBox.coeff || 0) / 100,
+    ryczaltSurcharge: C.RYCZALT_EUR_RULES ? { threshold: r2(C.RYCZALT_EUR_RULES.surchargeThresholdEur * C.EUR_RATE), rate: C.RYCZALT_EUR_RULES.surchargeRate } : null,
   };
   const v = {};
   v.taxScale = evalScale(ctx, opts, { ip: false, joint: false });
@@ -587,8 +689,20 @@ function evaluateVariants(inp, sched, n, opts) {
 export function computeAll(rawInput, userOpts = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...userOpts };
   const inp = normalizeInput(rawInput);
+  const eurRate = opts.eurRate !== undefined ? opts.eurRate : EUR_RATE_2027_FORECAST;
+  const prev = useYear(constantsFor(inp.year, inp.reform2027, eurRate));
+  try {
+    return computeAllActive(inp, opts);
+  } finally {
+    useYear(prev);
+  }
+}
+
+const RYCZALT_KEYS = new Set([...Object.values(RYCZALT_VARIANT_KEY), 'ryczaltMulti']);
+
+function computeAllActive(inp, opts) {
   const s = parseDate(inp.zus.startDate);
-  if (s && (s.y > C.YEAR)) return { error: 'startDate after 2026-12-31' };
+  if (s && (s.y > C.YEAR)) return { error: `startDate after ${C.YEAR}-12-31` };
   const n = healthMonths(inp.zus, opts);
   const sched = computeSchedule(inp.zus, opts);
   let variants = evaluateVariants(inp, sched, n, opts);
@@ -620,8 +734,18 @@ export function computeAll(rawInput, userOpts = {}) {
       holidayMonth: r.holidayMonth !== undefined ? r.holidayMonth : (sched.wakacje.month ?? null),
     };
   }
-  const ranked = Object.entries(out.variants).sort((a, b) => a[1].total - b[1].total);
+  // Reform 2027: ryczałt not available (2026 revenue > 250 000 EUR) → variants stay computed for
+  // information but are flagged and excluded from the ranking (SPEC_MULTIYEAR: "niedostępny").
+  const elig = ryczaltEligibility(inp);
+  if (elig && !elig.eligible) for (const [k, v] of Object.entries(out.variants)) if (RYCZALT_KEYS.has(k)) v.unavailable = true;
+  const ranked = Object.entries(out.variants).filter(([, v]) => !v.unavailable).sort((a, b) => a[1].total - b[1].total);
   out.best = ranked.length ? { variant: ranked[0][0], total: ranked[0][1].total } : null;
   out.options = opts;
+  if (C.YEAR !== 2026) {
+    // Extra fields only for years other than 2026, so the 2026 snapshot (expected.json) is unchanged.
+    out.year = C.YEAR;
+    out.scenario = C.SCENARIO || 'currentLaw';
+    if (elig) out.ryczaltEligibility = { ...elig, eurRate: C.EUR_RATE, surchargeThreshold: r2(C.RYCZALT_EUR_RULES.surchargeThresholdEur * C.EUR_RATE) };
+  }
   return out;
 }

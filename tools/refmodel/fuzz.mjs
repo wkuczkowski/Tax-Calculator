@@ -1,13 +1,19 @@
 // Random differential test app vs model (seeded, reproducible).
-// Usage: node tools/refmodel/fuzz.mjs [N=200] [seed=7 ...]   (npm run verify:fuzz; APP_DIR as in compare.mjs)
-// Writes out/fuzz_out_<seed>.json per seed. Exit code 1 when any input differs (total > 0,02 zł) or throws.
+// Usage: node tools/refmodel/fuzz.mjs [--year=2027] [N=200] [seed=7 ...]
+//        (npm run verify:fuzz / verify:fuzz2027; APP_DIR as in compare.mjs)
+// --year=2027: tax year 2027, reform scenario on in half of the inputs (with a random „Przychód 2026”
+// around the 250 000 EUR limit), start dates 2024–2027; ryczałt availability is compared too.
+// Writes out/fuzz_out[_2027]_<seed>.json per seed. Exit code 1 when any input differs (total > 0,02 zł) or throws.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { APP_DIR, OUT_DIR, runApp } from './compare.mjs';
-import { computeAll } from './refModel.mjs';
+import { APP_DIR, OUT_DIR, YEAR, runApp } from './compare.mjs';
+import { computeAll, EUR_RATE_2027_FORECAST } from './refModel.mjs';
 
-const N = Number(process.argv[2] || 200);
-const SEEDS = process.argv.length > 3 ? process.argv.slice(3).map(Number) : [7];
+const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const N = Number(POS[0] || 200);
+const SEEDS = POS.length > 1 ? POS.slice(1).map(Number) : [7];
+const LIM250 = Math.round(250000 * EUR_RATE_2027_FORECAST * 100) / 100;
+const LIM300 = Math.round(300000 * EUR_RATE_2027_FORECAST * 100) / 100;
 const RATES = ['2', '3', '5.5', '8.5', '8.5-12.5', '10', '12', '14', '15', '17'];
 const round2 = (x) => Math.round(x * 100) / 100;
 mkdirSync(OUT_DIR, { recursive: true });
@@ -21,15 +27,19 @@ function runSeed(startSeed) {
   const out = [];
   let bad = 0, nv = 0;
   for (let i = 0; i < N; i++) {
-    const revenue = pick([money(80000), money(400000), money(1500000), pick([60000, 81459.48, 100000, 300000])]);
+    const revenue = YEAR === 2026
+      ? pick([money(80000), money(400000), money(1500000), pick([60000, 81459.48, 100000, 300000])])
+      : pick([money(80000), money(400000), money(2500000), pick([60000, 84170.9, 100000, 150000, 300000, LIM250, LIM300, 1500000])]);
     const costs = pick([0, money(revenue * 0.6), money(revenue * 1.2)]);
-    const y = pick([2023, 2024, 2025, 2026, 2026, 2026]);
+    const y = YEAR === 2026 ? pick([2023, 2024, 2025, 2026, 2026, 2026]) : pick([2024, 2025, 2026, 2026, 2027, 2027]);
     const startDate = pick([null, `${y}-${String(1 + Math.floor(rnd() * 12)).padStart(2, '0')}-${String(1 + Math.floor(rnd() * 28)).padStart(2, '0')}`]);
     const multi = rnd() < 0.2;
     const allocations = {};
     // Allocations are kept in whole grosze so that they always add up exactly to the revenue.
     if (multi) { const ks = [pick(RATES), pick(RATES)]; let left = revenue; ks.forEach((k, j) => { const v = j === ks.length - 1 ? left : round2(left * rnd()); allocations[k] = round2((allocations[k] || 0) + v); left = round2(left - v); }); }
+    const reform = YEAR === 2027 && rnd() < 0.5;
     const inp = {
+      ...(YEAR === 2026 ? {} : { year: YEAR, reform2027: reform, revenuePrevYear: reform ? pick([null, null, money(LIM250), LIM250, round2(LIM250 + 0.01), money(3000000)]) : null }),
       revenue, costs,
       otherScaleIncome: pick([0, 0, money(60000), money(200000), 1200000]),
       ipBox: rnd() < 0.3 ? { enabled: true, coeff: Math.floor(rnd() * 101) } : { enabled: false, coeff: 0 },
@@ -48,14 +58,15 @@ function runSeed(startSeed) {
     for (const [k, v] of Object.entries(a.variants)) {
       const mv = m.variants[k]; if (!mv) continue; nv++;
       if (!(Math.abs(v.total - mv.total) <= 0.02)) diffs.push({ k, app: v.total, model: mv.total, appMethod: v.method, modelMethod: mv.method, appHol: v.holidayMonth, modelHol: mv.holidayMonth });
+      if ((v.unavailable === 'true') !== !!mv.unavailable) diffs.push({ k, unavailable: { app: v.unavailable === 'true', model: !!mv.unavailable } });
     }
     if (a.errors.length) diffs.push({ errors: a.errors });
     if (diffs.length) { bad++; out.push({ inp, diffs }); }
   }
-  writeFileSync(resolve(OUT_DIR, `fuzz_out_${startSeed}.json`), JSON.stringify(out, null, 1));
-  console.log({ seed: startSeed, N, variants: nv, casesWithDiffs: bad });
+  writeFileSync(resolve(OUT_DIR, `fuzz_out${YEAR === 2026 ? '' : '_' + YEAR}_${startSeed}.json`), JSON.stringify(out, null, 1));
+  console.log({ year: YEAR, seed: startSeed, N, variants: nv, casesWithDiffs: bad });
   return bad;
 }
 for (const startSeed of SEEDS) totalBad += runSeed(startSeed);
-console.log(totalBad ? `FAIL: ${totalBad} input(s) with differences (details: tools/refmodel/out/fuzz_out_<seed>.json)` : 'OK: no differences');
+console.log(totalBad ? `FAIL: ${totalBad} input(s) with differences (details: tools/refmodel/out/fuzz_out[_<year>]_<seed>.json)` : 'OK: no differences');
 process.exitCode = totalBad ? 1 : 0;

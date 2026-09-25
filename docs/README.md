@@ -16,6 +16,7 @@ Każdy dokument zaczyna się krótkim nagłówkiem. Podaje w nim datę, status (
 |---|---|---|
 | [`decyzje-implementacyjne.md`](decyzje/decyzje-implementacyjne.md) | **dokument żywy: rejestr decyzji** | Każda decyzja interpretacyjna i implementacyjna z uzasadnieniem, w grupach: kalendarz składek (D), wakacje składkowe (W), składka zdrowotna (H), optymalizacja odliczeń, inne dochody (O), poprawki z recenzji (R), runda końcowa (F), świadome uproszczenia. **Uzupełniaj przy każdej zmianie logiki**, w tym samym commicie. |
 | [`specyfikacja-zus.md`](decyzje/specyfikacja-zus.md) | specyfikacja (zamknięta) | Wymagania dla składek ZUS i innych dochodów: pola wejściowe, reguły liczenia, optymalizacja odliczeń, wyświetlanie. ADDENDUM A1–A10 zawiera decyzje podjęte po porównaniu z modelem referencyjnym. |
+| [`specyfikacja-wielu-lat.md`](decyzje/specyfikacja-wielu-lat.md) | specyfikacja (wiążąca) | Tryb wielu lat (2026 + 2027): stałe per rok z metadanymi (status, źródło, termin), przełącznik roku i rok domyślny, wartości 2027, scenariusz „Projekt zmian 2027 (UD458 + UD116)”, oznaczenia prognoz, testy. |
 
 ## `prawo/`: analizy prawne
 
@@ -24,6 +25,8 @@ Każdy dokument zaczyna się krótkim nagłówkiem. Podaje w nim datę, status (
 | [`research-zus-2026.md`](prawo/research-zus-2026.md) | raport historyczny (stan prawny 24.09.2026) | Składki ZUS przedsiębiorcy w 2026 r.: podstawy i stawki, ulga na start, preferencyjny ZUS, FP/FS i zwolnienie wiekowe, wakacje składkowe, składka zdrowotna, odliczanie składek. Zawiera wykaz źródeł (ISAP/ELI, zus.pl) i listę kwestii niepewnych. |
 | [`audyt-logiki-2026.md`](prawo/audyt-logiki-2026.md) | raport historyczny | Audyt prawny logiki sprzed dodania składek ZUS: stałe, PIT (skala, liniowy, ryczałt, IP BOX, małżonek, danina), składka zdrowotna. Ustalenia B1–B10 zostały później poprawione. Wzmianki o `v2/` są historyczne, bo katalog usunięto. |
 | [`weryfikacja-danina-ulga-na-start.md`](prawo/weryfikacja-danina-ulga-na-start.md) | raport historyczny | Dochód z IP BOX nie wchodzi do podstawy daniny solidarnościowej (art. 30h PIT). Omawia też zasady ulgi na start (art. 18 Prawa przedsiębiorców). |
+| [`research-2027.md`](prawo/research-2027.md) | raport historyczny (stan na 25.09.2026) | Stałe na rok podatkowy 2027 ze statusem (final / draft / forecast), źródłem i terminem ostateczności: minimalne wynagrodzenie, podstawy i stopy ZUS, składka zdrowotna, limit odliczenia dla liniowego; przegląd projektów ustaw na 2027 r.; terminy. |
+| [`research-2027-reformy.md`](prawo/research-2027-reformy.md) | raport historyczny (stan na 25.09.2026) | Treść projektów UD458 (skala 12/24/32%, danina 5%, ryczałt: limit 250 tys. EUR i 17% ponad 300 tys. EUR) i UD116 (danina od IP BOX): elementy potwierdzone (P1–P13) i niepotwierdzone (N1–N8), wzory do scenariusza „Projekt zmian 2027”. Koryguje część ustaleń `research-2027.md`. |
 
 ## `weryfikacja/`: recenzje i raporty z weryfikacji
 
@@ -49,6 +52,9 @@ Dokumenty powstały pod roboczymi nazwami, które nadal występują w ich treśc
 | `audit_logic.md` | [`prawo/audyt-logiki-2026.md`](prawo/audyt-logiki-2026.md) |
 | `legal_check_danina_ulga.md` | [`prawo/weryfikacja-danina-ulga-na-start.md`](prawo/weryfikacja-danina-ulga-na-start.md) |
 | `SPEC_ZUS.md` („SPEC”, „ADDENDUM”) | [`decyzje/specyfikacja-zus.md`](decyzje/specyfikacja-zus.md) |
+| `SPEC_MULTIYEAR.md` | [`decyzje/specyfikacja-wielu-lat.md`](decyzje/specyfikacja-wielu-lat.md) |
+| `research_2027.md` | [`prawo/research-2027.md`](prawo/research-2027.md) |
+| `research_2027_reforms.md` | [`prawo/research-2027-reformy.md`](prawo/research-2027-reformy.md) |
 | `IMPL_DECISIONS.md` | [`decyzje/decyzje-implementacyjne.md`](decyzje/decyzje-implementacyjne.md) |
 | `review_04de063.md` | [`weryfikacja/recenzja-04de063.md`](weryfikacja/recenzja-04de063.md) |
 | `codereview/REVIEW.md` | [`weryfikacja/code-review-9121c02.md`](weryfikacja/code-review-9121c02.md) |

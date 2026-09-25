@@ -33,6 +33,8 @@ describe("Przełączniki: kliknięcie w samą grafikę (.slider) przełącza pol
         zusSickness: [true, 1],
         zusEmployment: [true, 1],
         zusHoliday: [true, 1],
+        spouseLinRycz: [true, 1],
+        fourPlus: [true, 1],
         multipleRatesToggle: [true, 1],
       });
     });

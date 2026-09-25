@@ -14,6 +14,8 @@ const RESULT_IDS = [
   "income",
   "taxScale",
   "taxScaleIpBox",
+  "taxScaleSingle",
+  "taxScaleIpBoxSingle",
   "taxScaleJoint",
   "taxScaleIpBoxJoint",
   "taxLinear",
@@ -285,6 +287,73 @@ export function loadCalculator(options = {}) {
     el.value = String(value);
   }
 
+  /* ---------- Karta „Rodzina” ---------- */
+
+  /** Status: "married" | "single" | "other". */
+  function setFamilyStatus(status) {
+    checkRadio("familyStatus", status);
+  }
+
+  /** Dodaje dziecko: { months = 12, disabled = false, adult = false }. */
+  function addChild({ months = 12, disabled = false, adult = false } = {}) {
+    $("#addChildBtn").click();
+    const rows = document.querySelectorAll("#childrenList .child-row");
+    const row = rows[rows.length - 1];
+    const select = row.querySelector("select");
+    if (select.value !== String(months)) {
+      select.value = String(months);
+      fire(select, "change");
+    }
+    const setBox = (field, on) => {
+      const box = row.querySelector(`input[data-field="${field}"]`);
+      if (box.checked !== on) {
+        box.checked = on;
+        fire(box, "change");
+      }
+    };
+    setBox("disabled", !!disabled);
+    setBox("adult", !!adult);
+    return row;
+  }
+
+  /** Udział podatnika w uldze na dzieci w % (status „inna”). */
+  function setFamilyShare(percent) {
+    const el = $("#familyShare");
+    el.value = String(percent);
+    fire(el, "input");
+  }
+
+  /** Dochód małżonka (pole w karcie „Opcje”; także bez rozliczenia wspólnego). */
+  function setSpouseIncome(value) {
+    const el = $("#spouseIncome");
+    el.removeAttribute("readonly");
+    el.value = String(value);
+    fire(el, "input");
+  }
+
+  function setSpouseLinRycz(on = true) {
+    setChecked("#spouseLinRycz", on);
+  }
+
+  function setSpouseLinearIncome(value) {
+    $("#spouseLinearIncome").value = String(value);
+  }
+
+  function setSpouseContrib(value) {
+    $("#spouseContrib").value = String(value);
+  }
+
+  /** Składki od innych dochodów (limit zwrotu ulgi); "" = szacunek. */
+  function setOtherContrib(value) {
+    $("#otherContrib").value = String(value);
+  }
+
+  /** Ulga dla rodzin 4+ i limit wykorzystany na innych przychodach. */
+  function setFourPlus(on = true, used = "") {
+    setChecked("#fourPlus", on);
+    $("#fourPlusUsed").value = String(used);
+  }
+
   function calculate() {
     $("#calculateButton").click();
   }
@@ -409,6 +478,15 @@ export function loadCalculator(options = {}) {
     setYear,
     setReform,
     setPrevYearRevenue,
+    setFamilyStatus,
+    addChild,
+    setFamilyShare,
+    setSpouseIncome,
+    setSpouseLinRycz,
+    setSpouseLinearIncome,
+    setSpouseContrib,
+    setOtherContrib,
+    setFourPlus,
     calculate,
     readOutputs,
     readBreakdown,

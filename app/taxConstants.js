@@ -149,6 +149,29 @@ const TAX_CONSTANTS_2026 = {
   // Wakacje składkowe (art. 17a–17b u.s.u.s.): wniosek w miesiącu poprzedzającym zwolnienie, a w miesiącu
   // przed złożeniem wniosku trzeba podlegać ubezpieczeniom → najwcześniej 2. miesiąc po pierwszym miesiącu podlegania
   ZUS_HOLIDAY_MIN_OFFSET: 2,
+
+  // Ulga na dzieci (art. 27f ustawy o PIT, t.j. Dz.U. 2026 poz. 592) – kwoty
+  // za każdy miesiąc kalendarzowy; stawka zależy od liczby dzieci uprawnionych
+  // w danym miesiącu (docs/prawo/research-ulgi-rodzinne.md §1.2)
+  CHILD_RELIEF_MONTHLY_1_2: 92.67, // 1. i 2. dziecko (ust. 2 pkt 1–2 i pkt 3 lit. a)
+  CHILD_RELIEF_MONTHLY_3: 166.67, // 3. dziecko (ust. 2 pkt 3 lit. b)
+  CHILD_RELIEF_MONTHLY_4PLUS: 225, // 4. i każde kolejne dziecko (ust. 2 pkt 3 lit. c)
+  // Limit dochodów przy jednym dziecku (bez orzeczenia – ust. 2e); zero-jedynkowy
+  CHILD_RELIEF_LIMIT_MARRIED: 112000, // małżonkowie przez cały rok – dochody obojga łącznie (ust. 2 pkt 1 lit. a)
+  CHILD_RELIEF_LIMIT_SINGLE_PARENT: 112000, // samotnie wychowujący z art. 6 ust. 4c (ust. 2 pkt 1 lit. b in fine)
+  CHILD_RELIEF_LIMIT_OTHER: 56000, // pozostali (ust. 2 pkt 1 lit. b)
+
+  // Ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153 i ust. 44): roczny limit
+  // zwolnionych przychodów (kwota ustawowa, bez waloryzacji; wspólny z ulgą
+  // dla młodych, na powrót i dla pracujących seniorów)
+  FOUR_PLUS_EXEMPTION_LIMIT: 85528,
+
+  // Szacunek składek od „innych dochodów” (etat) do limitu zwrotu ulgi na
+  // dzieci (art. 27f ust. 9), gdy użytkownik ich nie poda:
+  // brutto G = (D + koszty) / (1 − stopa), społeczne = stopa × G,
+  // zdrowotna = 9% × (G − społeczne)
+  OTHER_INCOME_EST_COSTS: 3000, // koszty uzyskania ze stosunku pracy 12 × 250 zł (art. 22 ust. 2 pkt 1)
+  OTHER_INCOME_EST_SOCIAL_RATE: 0.1371, // część pracownika: emerytalna 9,76% + rentowa 1,5% + chorobowa 2,45%
 };
 
 /* ==================================================
@@ -279,6 +302,39 @@ const TAX_CONSTANT_LABELS = {
     label: "Wakacje składkowe — najwcześniej miesiąc po pierwszym miesiącu podlegania",
     format: "int",
   },
+  CHILD_RELIEF_MONTHLY_1_2: { group: "family", label: "Ulga na dzieci: 1. i 2. dziecko (za miesiąc)", format: "pln" },
+  CHILD_RELIEF_MONTHLY_3: { group: "family", label: "Ulga na dzieci: 3. dziecko (za miesiąc)", format: "pln" },
+  CHILD_RELIEF_MONTHLY_4PLUS: { group: "family", label: "Ulga na dzieci: 4. i każde kolejne dziecko (za miesiąc)", format: "pln" },
+  CHILD_RELIEF_LIMIT_MARRIED: {
+    group: "family",
+    label: "Ulga na jedno dziecko: limit dochodów małżonków (łącznie)",
+    format: "pln",
+  },
+  CHILD_RELIEF_LIMIT_SINGLE_PARENT: {
+    group: "family",
+    label: "Ulga na jedno dziecko: limit dochodu osoby samotnie wychowującej",
+    format: "pln",
+  },
+  CHILD_RELIEF_LIMIT_OTHER: {
+    group: "family",
+    label: "Ulga na jedno dziecko: limit dochodu pozostałych podatników",
+    format: "pln",
+  },
+  FOUR_PLUS_EXEMPTION_LIMIT: {
+    group: "family",
+    label: "Ulga dla rodzin 4+: roczny limit zwolnionych przychodów",
+    format: "pln",
+  },
+  OTHER_INCOME_EST_COSTS: {
+    group: "family",
+    label: "Szacunek składek od innych dochodów (limit zwrotu ulgi): koszty uzyskania z etatu (rocznie)",
+    format: "pln",
+  },
+  OTHER_INCOME_EST_SOCIAL_RATE: {
+    group: "family",
+    label: "Szacunek składek od innych dochodów: składki społeczne pracownika",
+    format: "percent",
+  },
 };
 
 const TAX_CONSTANT_GROUPS = {
@@ -289,6 +345,7 @@ const TAX_CONSTANT_GROUPS = {
   health: "Składka zdrowotna",
   ryczalt: "Ryczałt",
   zus: "Składki społeczne ZUS",
+  family: "Ulgi rodzinne",
 };
 
 const TAX_STATUS_LABELS = {
@@ -312,6 +369,7 @@ const META_PIT = "art. 27 ust. 1 ustawy o PIT (t.j. Dz.U. 2026 poz. 592)";
 const META_RYCZALT = "art. 12 ust. 1 ustawy o ryczałcie (t.j. Dz.U. 2025 poz. 843)";
 const META_USUS = "u.s.u.s. (t.j. Dz.U. 2026 poz. 199)";
 const META_UZDR = "u.ś.o.z. (t.j. Dz.U. 2025 poz. 1461)";
+const META_PIT_ACT = "ustawy o PIT (t.j. Dz.U. 2026 poz. 592)";
 
 // Metadane wspólne dla obu lat (przepisy bez zmian na 2027 r.)
 const TAX_CONSTANTS_META_COMMON = {
@@ -358,6 +416,18 @@ const TAX_CONSTANTS_META_COMMON = {
   ZUS_FP_EXEMPT_AGE_WOMEN: finalMeta("art. 261 ustawy o rynku pracy (Dz.U. 2025 poz. 620)"),
   ZUS_FP_EXEMPT_AGE_MEN: finalMeta("art. 261 ustawy o rynku pracy (Dz.U. 2025 poz. 620)"),
   ZUS_HOLIDAY_MIN_OFFSET: finalMeta("art. 17a–17b u.s.u.s. (wniosek RWS w miesiącu poprzedzającym zwolnienie)"),
+  // Ulgi rodzinne: kwoty ustawowe bez mechanizmu waloryzacji – te same w 2026
+  // i 2027 r. (docs/prawo/research-ulgi-rodzinne.md §5, §8.2; projekty z druków
+  // 824 i 1898 nieuchwalone)
+  CHILD_RELIEF_MONTHLY_1_2: finalMeta(`art. 27f ust. 2 pkt 1–2 i pkt 3 lit. a ${META_PIT_ACT}`),
+  CHILD_RELIEF_MONTHLY_3: finalMeta(`art. 27f ust. 2 pkt 3 lit. b ${META_PIT_ACT}`),
+  CHILD_RELIEF_MONTHLY_4PLUS: finalMeta(`art. 27f ust. 2 pkt 3 lit. c ${META_PIT_ACT}`),
+  CHILD_RELIEF_LIMIT_MARRIED: finalMeta(`art. 27f ust. 2 pkt 1 lit. a i ust. 2a ${META_PIT_ACT}`),
+  CHILD_RELIEF_LIMIT_SINGLE_PARENT: finalMeta(`art. 27f ust. 2 pkt 1 lit. b (osoba z art. 6 ust. 4c i 4g) ${META_PIT_ACT}`),
+  CHILD_RELIEF_LIMIT_OTHER: finalMeta(`art. 27f ust. 2 pkt 1 lit. b ${META_PIT_ACT}`),
+  FOUR_PLUS_EXEMPTION_LIMIT: finalMeta(`art. 21 ust. 1 pkt 153 i ust. 44 ${META_PIT_ACT} (kwota bez waloryzacji)`),
+  OTHER_INCOME_EST_COSTS: finalMeta("założenie kalkulatora: koszty z art. 22 ust. 2 pkt 1 ustawy o PIT (250 zł × 12)"),
+  OTHER_INCOME_EST_SOCIAL_RATE: finalMeta("założenie kalkulatora: stopy pracownika z art. 22 ust. 1 u.s.u.s. (9,76% + 1,5% + 2,45%)"),
 };
 
 const TAX_CONSTANTS_META_BY_YEAR = {
@@ -1291,5 +1361,85 @@ const taxMath = {
     );
 
     console.log("=== KONIEC SANITY CHECK ===");
+  },
+
+  /* ==================================================
+     Ulgi rodzinne (art. 27f, art. 21 ust. 1 pkt 153 ustawy o PIT)
+  ================================================== */
+
+  /**
+   * Kwota ulgi za miesiąc na k-te dziecko uprawnione w tym miesiącu
+   * (art. 27f ust. 2): 1. i 2. – 92,67 zł, 3. – 166,67 zł, 4. i kolejne – 225 zł.
+   * @param {number} k – numer dziecka w miesiącu (1, 2, 3, …)
+   * @returns {number}
+   */
+  getChildReliefRate(k) {
+    const C = TAX_CONSTANTS;
+    if (k <= 2) return C.CHILD_RELIEF_MONTHLY_1_2;
+    if (k === 3) return C.CHILD_RELIEF_MONTHLY_3;
+    return C.CHILD_RELIEF_MONTHLY_4PLUS;
+  },
+
+  /**
+   * Ulga na dzieci dla rodziny (przed limitem dochodu i podziałem między
+   * rodziców), liczona miesiąc po miesiącu: w miesiącu z n uprawnionymi
+   * dziećmi przysługuje suma stawek 1., 2., …, n-tego dziecka.
+   * Założenie (liczba miesięcy zamiast dat): okresy dzieci nakładają się
+   * maksymalnie – dziecko z m miesiącami jest uprawnione w ostatnich m
+   * miesiącach roku (jak dziecko urodzone w trakcie roku), więc w miesiącu
+   * nr i uprawnione są dzieci z m ≥ 13 − i.
+   * @param {Array<{months:number}>} children
+   * @returns {{total:number, maxCount:number, groups:Array<{count:number, months:number, monthly:number, rates:number[], amount:number}>}}
+   */
+  getChildRelief(children) {
+    const list = (children || []).filter((child) => child && child.months > 0);
+    const groups = [];
+    let maxCount = 0;
+    for (let month = 1; month <= 12; month++) {
+      const count = list.filter((child) => Math.min(child.months, 12) >= 13 - month).length;
+      maxCount = Math.max(maxCount, count);
+      if (!count) continue;
+      const last = groups[groups.length - 1];
+      if (last && last.count === count) {
+        last.months += 1;
+      } else {
+        const rates = [];
+        for (let k = 1; k <= count; k++) rates.push(this.getChildReliefRate(k));
+        groups.push({
+          count,
+          months: 1,
+          rates,
+          monthly: this.round2(rates.reduce((sum, rate) => sum + rate, 0)),
+        });
+      }
+    }
+    groups.forEach((group) => {
+      group.amount = this.round2(group.monthly * group.months);
+    });
+    return {
+      total: this.round2(groups.reduce((sum, group) => sum + group.amount, 0)),
+      maxCount,
+      groups,
+    };
+  },
+
+  /**
+   * Szacunek składek od „innych dochodów” (jak od umowy o pracę) do limitu
+   * zwrotu ulgi na dzieci (art. 27f ust. 9), gdy użytkownik ich nie poda.
+   * D – dochód po kosztach i składkach społecznych pobranych przez płatnika:
+   * brutto G = (D + koszty) / (1 − stopa), społeczne = stopa × G,
+   * zdrowotna = 9% × (G − społeczne); każda kwota zaokrąglona do grosza.
+   * @param {number} income – D
+   * @returns {{gross:number, social:number, health:number, total:number}}
+   */
+  estimateEmploymentContributions(income) {
+    const C = TAX_CONSTANTS;
+    if (!(income > 0)) return { gross: 0, social: 0, health: 0, total: 0 };
+    const gross = this.round2(
+      (income + C.OTHER_INCOME_EST_COSTS) / (1 - C.OTHER_INCOME_EST_SOCIAL_RATE),
+    );
+    const social = this.round2(gross * C.OTHER_INCOME_EST_SOCIAL_RATE);
+    const health = this.round2((gross - social) * C.HEALTH_RATE_SCALE);
+    return { gross, social, health, total: this.round2(social + health) };
   },
 };

@@ -72,7 +72,29 @@ taxation, ryczałt 17% over 1 312 500 zł, ryczałt limit 1 093 750 zł and the
 new-business exception, 5% levy including IP BOX), the year switch
 (`?rok=`, `&projekt=1`) and the default-year rule.
 
-### 4. `toggles.test.js` (no snapshots)
+### 4. `family.test.js` (no snapshots)
+
+Explicit, hand-computed assertions for the „Rodzina” card: child relief
+amounts month by month (1112,04 / 2224,08 / 4224,12 / 6924,12 / 9624,12;
+a third child for 6 months → 3224,10), the contribution estimate for other
+income, results without children identical to the page without the card,
+the single parent example from the research (skala – samotny rodzic
+22 112,04 vs liniowy 27 916,33), the cautious 56 000 zł limit for a single
+parent on liniowy, the one-child limit edge 112 000,00 / 112 000,01, the
+refund cap and the deduction-method optimizer that takes it into account,
+joint taxation with children, the spouse on liniowy/ryczałt (joint variants
+unavailable) and the 4+ exemption (85 528 zł, amount already used,
+8,5% / 12,5%).
+Helpers: `setFamilyStatus("married" | "single" | "other")`,
+`addChild({ months, disabled, adult })`, `setFamilyShare(percent)`,
+`setSpouseIncome(value)`, `setSpouseLinRycz(on)`, `setSpouseLinearIncome(value)`,
+`setSpouseContrib(value)`, `setOtherContrib(value)`, `setFourPlus(on, used)`.
+
+Snapshot note (family change): only `TAX_CONSTANTS > matches the recorded
+baseline` changes (new „Ulgi rodzinne” constants). Review and run
+`npm run test:update`.
+
+### 5. `toggles.test.js` (no snapshots)
 
 Every toggle switch flips its checkbox (and recalculates) when the switch
 graphic (`.slider`) itself is clicked, not only its text label.

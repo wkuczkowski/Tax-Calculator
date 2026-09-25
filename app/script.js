@@ -83,6 +83,32 @@
     yearBannerTag: document.getElementById("yearBannerTag"),
     yearBannerText: document.getElementById("yearBannerText"),
     yearBannerLink: document.getElementById("yearBannerLink"),
+    // karta „Rodzina”
+    familyCard: document.getElementById("familyCard"),
+    familyToggle: document.getElementById("familyToggle"),
+    familyBody: document.getElementById("familyBody"),
+    familySummary: document.getElementById("familySummary"),
+    familyStatusRadios: document.querySelectorAll('input[name="familyStatus"]'),
+    familyStatusHint: document.getElementById("familyStatusHint"),
+    childrenList: document.getElementById("childrenList"),
+    addChildBtn: document.getElementById("addChildBtn"),
+    childrenHint: document.getElementById("childrenHint"),
+    familyShareField: document.getElementById("familyShareField"),
+    familyShare: document.getElementById("familyShare"),
+    familySpouse: document.getElementById("familySpouse"),
+    familySpouseJump: document.getElementById("familySpouseJump"),
+    spouseLinRycz: document.getElementById("spouseLinRycz"),
+    spouseLinearIncomeField: document.getElementById("spouseLinearIncomeField"),
+    spouseLinearIncome: document.getElementById("spouseLinearIncome"),
+    spouseContrib: document.getElementById("spouseContrib"),
+    spouseContribHint: document.getElementById("spouseContribHint"),
+    otherContribField: document.getElementById("otherContribField"),
+    otherContrib: document.getElementById("otherContrib"),
+    otherContribHint: document.getElementById("otherContribHint"),
+    fourPlus: document.getElementById("fourPlus"),
+    fourPlusHint: document.getElementById("fourPlusHint"),
+    fourPlusUsedField: document.getElementById("fourPlusUsedField"),
+    fourPlusUsed: document.getElementById("fourPlusUsed"),
   };
 
   /* ==================================================
@@ -143,6 +169,8 @@
   const VARIANT_LABELS = {
     taxScale: "Skala podatkowa",
     taxScaleIpBox: "Skala podatkowa + IP BOX",
+    taxScaleSingle: "Skala podatkowa — samotny rodzic",
+    taxScaleIpBoxSingle: "Skala podatkowa + IP BOX — samotny rodzic",
     taxScaleJoint: "Skala podatkowa wspólnie z małżonkiem",
     taxScaleIpBoxJoint: "Skala podatkowa + IP BOX wspólnie z małżonkiem",
     taxLinear: "Podatek liniowy",
@@ -188,6 +216,8 @@
   const PIT_VARIANT_IDS = [
     "taxScale",
     "taxScaleIpBox",
+    "taxScaleSingle",
+    "taxScaleIpBoxSingle",
     "taxScaleJoint",
     "taxScaleIpBoxJoint",
     "taxLinear",
@@ -267,6 +297,11 @@
     zusStartDate: "Data rozpoczęcia działalności",
     zusBirthDate: "Data urodzenia",
     prevYearRevenue: "Przychód z roku poprzedniego (limit ryczałtu)",
+    familyShare: "Twój udział w uldze na dzieci",
+    spouseLinearIncome: "Dochód małżonka opodatkowany liniowo / z art. 30b",
+    spouseContrib: "Składki małżonka do limitu zwrotu ulgi",
+    otherContrib: "Składki od innych dochodów (limit zwrotu ulgi)",
+    fourPlusUsed: "Ulga 4+: limit wykorzystany na innych przychodach",
   };
 
   /* Kwota z pola: { ok, value, message }. Pusta = 0. Ujemne i zbyt duże
@@ -360,6 +395,38 @@
       message = "Wartość musi być w zakresie 0–100.";
     }
     setFieldError(input, errorElement, message);
+    return !message;
+  }
+
+  /* Udział podatnika w uldze na dzieci (0–100%, status „inna sytuacja”). */
+  function validateFamilyShare() {
+    const input = DOM.familyShare;
+    if (!input) return true;
+    const raw = String(input.value).trim();
+    const badInput = !!(input.validity && input.validity.badInput);
+    const numValue = Number(raw.replace(",", "."));
+    let message = "";
+    if (badInput || raw === "" || !Number.isFinite(numValue)) {
+      message = "Wpisz liczbę 0–100.";
+    } else if (numValue < 0 || numValue > 100) {
+      message = "Wartość musi być w zakresie 0–100.";
+    }
+    setFieldError(input, document.getElementById("familyShare-error"), message);
+    return !message;
+  }
+
+  /* Ulga 4+: kwota limitu wykorzystana na innych przychodach (0 – limit). */
+  function validateFourPlusUsed() {
+    const input = DOM.fourPlusUsed;
+    if (!input) return true;
+    const checked = checkAmount(input.value);
+    let message = checked.message;
+    if (checked.ok && checked.value > TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT) {
+      message = `Kwota nie może przekraczać limitu ${formatPLN(
+        TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT,
+      )} (art. 21 ust. 44).`;
+    }
+    setFieldError(input, document.getElementById("fourPlusUsed-error"), message);
     return !message;
   }
 
@@ -464,7 +531,7 @@
       const start = getValidDateValue(DOM.zusStartDate);
       return !!(start && element.value && element.value >= start);
     }
-    if (element === DOM.ipBoxCoeffInput) {
+    if (element === DOM.ipBoxCoeffInput || element === DOM.familyShare) {
       const raw = String(element.value).trim();
       return (
         !!(element.validity && element.validity.badInput) ||
@@ -510,9 +577,19 @@
         validateInput(document.getElementById(fieldName).value, fieldName),
       );
     });
-    check("spouseIncome", isJointTaxationEnabled(), () =>
+    check("spouseIncome", isSpouseIncomeNeeded(), () =>
       validateInput(DOM.spouseIncomeInput.value, "spouseIncome"),
     );
+    // karta „Rodzina” (pola widoczne tylko, gdy mają znaczenie – F1)
+    check("familyShare", true, validateFamilyShare);
+    ["spouseLinearIncome", "spouseContrib", "otherContrib"].forEach(
+      (fieldName) => {
+        check(fieldName, true, () =>
+          validateInput(document.getElementById(fieldName).value, fieldName),
+        );
+      },
+    );
+    check("fourPlusUsed", DOM.fourPlus && DOM.fourPlus.checked, validateFourPlusUsed);
     // przychód z roku poprzedniego – tylko w scenariuszu z limitem ryczałtu
     check("prevYearRevenue", isPrevYearRevenueActive(), () =>
       validateInput(DOM.prevYearRevenueInput.value, "prevYearRevenue"),
@@ -701,6 +778,20 @@
     );
   }
 
+  /* Samotny rodzic (art. 6 ust. 4c–4d ustawy o PIT): podatek = 2 × podatek
+     wg skali od połowy dochodów opodatkowanych skalą (bez dochodu
+     kwalifikowanego IP BOX). Połowa liczona do grosza (jak przy rozliczeniu
+     wspólnym; R2 – bez zaokrąglania do złotych). */
+  function getSingleParentHalf(income) {
+    return taxMath.round2(Math.max(income, 0) / 2);
+  }
+
+  function calculateSingleParentPit(income) {
+    return taxMath.round2(
+      calculateScalePitOnly(getSingleParentHalf(income)) * 2,
+    );
+  }
+
   function getLinearPitDetails(baseIncome) {
     const pitBase = Math.max(baseIncome, 0);
     const pit = taxMath.round2(pitBase * TAX_CONSTANTS.LINEAR_PIT_RATE);
@@ -785,13 +876,25 @@
 
   /* 8,5% do 100 000 zł i 12,5% od nadwyżki to dwie różne stawki, więc
      odliczenie dzielimy między nie proporcjonalnie do przychodu. */
-  function getRyczalt85125Details(rateRevenue, deduction) {
+  /* exempt – przychód zwolniony (ulga dla rodzin 4+) przypisany tej stawce:
+     zwolnienie obejmuje przychody od początku roku (KIS
+     0115-KDIT2.4011.544.2023.1.AB), więc zużywa najpierw część do progu
+     100 000 zł (8,5%), potem część 12,5% (założenie – próg liczony od
+     przychodu łącznie ze zwolnionym). */
+  function getRyczalt85125Details(rateRevenue, deduction, exempt = 0) {
     const threshold = TAX_CONSTANTS.RYCZALT_8_5_THRESHOLD;
-    const revenue85 = Math.min(Math.max(rateRevenue, 0), threshold);
-    const revenue125 = Math.max(rateRevenue - threshold, 0);
+    const gross85 = Math.min(Math.max(rateRevenue, 0), threshold);
+    const exempt85 = Math.min(exempt, gross85);
+    const exempt125 = taxMath.round2(exempt - exempt85);
+    const revenue85 = exempt > 0 ? taxMath.round2(gross85 - exempt85) : gross85;
+    const revenue125 =
+      exempt > 0
+        ? Math.max(taxMath.round2(Math.max(rateRevenue - threshold, 0) - exempt125), 0)
+        : Math.max(rateRevenue - threshold, 0);
+    const taxable = exempt > 0 ? taxMath.round2(rateRevenue - exempt) : rateRevenue;
     const deduction85 =
-      rateRevenue > threshold
-        ? getRyczaltDeductionShare(deduction, revenue85, rateRevenue)
+      revenue125 > 0
+        ? getRyczaltDeductionShare(deduction, revenue85, taxable)
         : deduction;
     const deduction125 = taxMath.round2(deduction - deduction85);
     const base85 = Math.max(revenue85 - deduction85, 0);
@@ -810,15 +913,19 @@
       tax85,
       tax125,
       tax: taxMath.round2(tax85 + tax125),
+      exempt,
+      exempt85,
+      exempt125,
     };
   }
 
-  function calculateRyczaltRateTax(rateId, rateRevenue, deduction) {
+  function calculateRyczaltRateTax(rateId, rateRevenue, deduction, exempt = 0) {
     if (rateId === "ryczalt8_5_12_5") {
-      return getRyczalt85125Details(rateRevenue, deduction).tax;
+      return getRyczalt85125Details(rateRevenue, deduction, exempt).tax;
     }
+    const taxable = exempt > 0 ? taxMath.round2(rateRevenue - exempt) : rateRevenue;
     return taxMath.round2(
-      Math.max(rateRevenue - deduction, 0) * getRyczaltRate(rateId),
+      Math.max(taxable - deduction, 0) * getRyczaltRate(rateId),
     );
   }
 
@@ -839,7 +946,7 @@
      w stawce właściwej (przy 8,5%/12,5% – najpierw ubywa część 12,5%)
      i nadwyżka 17%; odliczenie dzielone proporcjonalnie do przychodu
      części (założenie – projekt tego nie określa). */
-  function getRyczaltHighRateDetails(rateId, rateRevenue, deduction, excess) {
+  function getRyczaltHighRateDetails(rateId, rateRevenue, deduction, excess, exempt = 0) {
     const highRate = TAX_CONSTANTS.RYCZALT_HIGH_RATE;
     const parts = [];
     if (rateId === "ryczalt8_5_12_5") {
@@ -865,12 +972,24 @@
       });
     }
     parts.push({ label: formatPercentPL(highRate), rate: highRate, revenue: excess, high: true });
+    // ulga 4+: przychód zwolniony od początku roku – pomniejsza najpierw
+    // części w stawce właściwej (nadwyżka ponad próg przypada na koniec roku)
+    let exemptLeft = exempt;
+    parts.forEach((part) => {
+      if (part.high || exemptLeft <= 0) return;
+      const take = Math.min(exemptLeft, part.revenue);
+      part.exempt = take;
+      part.revenue = taxMath.round2(part.revenue - take);
+      exemptLeft = taxMath.round2(exemptLeft - take);
+    });
+    const taxableRevenue =
+      exempt > 0 ? taxMath.round2(rateRevenue - exempt) : rateRevenue;
     let assigned = 0;
     parts.forEach((part, index) => {
       part.deduction =
         index === parts.length - 1
           ? taxMath.round2(deduction - assigned)
-          : getRyczaltDeductionShare(deduction, part.revenue, rateRevenue);
+          : getRyczaltDeductionShare(deduction, part.revenue, taxableRevenue);
       assigned = taxMath.round2(assigned + part.deduction);
       part.base = Math.max(taxMath.round2(part.revenue - part.deduction), 0);
       part.tax = taxMath.round2(part.base * part.rate);
@@ -999,14 +1118,313 @@
     };
   }
 
+  /* ==================================================
+     Ulgi rodzinne: ulga na dzieci (art. 27f), samotny rodzic (art. 6
+     ust. 4c–4f), rozliczenie wspólne (art. 6 ust. 2) jako preferencja
+     gospodarstwa, ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153).
+     Źródła: docs/prawo/research-ulgi-rodzinne.md, specyfikacja:
+     docs/decyzje/specyfikacja-ulg-rodzinnych.md, decyzje: rejestr, sekcja 12.
+
+     Gdy są dzieci, wynik wariantu = obciążenie gospodarstwa z działalnością
+     − obciążenie gospodarstwa bez działalności (H0). Oba liczone z ulgą na
+     dzieci (odliczenie od podatku wg skali + zwrot niewykorzystanej części
+     do limitu składek) i z najlepszą dostępną preferencją (samotny rodzic,
+     rozliczenie wspólne – gdy włączone). PIT małżonka liczony samodzielnie
+     odejmujemy po obu stronach (jak dotąd przy rozliczeniu wspólnym).
+     Bez dzieci i bez ulgi 4+ – ścieżka obliczeń bez zmian.
+  ================================================== */
+  const FAMILY_STATUS_LABELS = {
+    married: "w związku małżeńskim przez cały rok",
+    single: "samotnie wychowuję dziecko (art. 6 ust. 4c)",
+    other: "inna sytuacja (bez małżeństwa przez cały rok, nie samotny rodzic)",
+  };
+
+  const FAMILY_MODE_LABELS = {
+    indiv: "indywidualnie",
+    single: "samotny rodzic (2 × podatek od połowy dochodu)",
+    joint: "wspólnie z małżonkiem (2 × podatek od połowy sumy dochodów)",
+  };
+
+  /* Podatek wg skali przypisany podatnikowi przed ulgą na dzieci
+     (PIT małżonka liczony samodzielnie jest odjęty – jak w wariancie
+     wspólnym): indywidualnie T(x), samotny rodzic 2 × T(x/2), wspólnie
+     2 × T((x + d. małżonka)/2) − T(d. małżonka). */
+  function getFamilyScaleTaxAttr(mode, userBase, family) {
+    if (mode === "single") return calculateSingleParentPit(userBase);
+    if (mode === "joint") {
+      return calculateJointScalePitAttributed(userBase, family.spouseScaleIncome);
+    }
+    return calculateScalePitOnly(userBase);
+  }
+
+  /* Składki od innych dochodów do limitu zwrotu: podane albo szacunek. */
+  function getOtherIncomeContributions(family, otherIncome) {
+    if (family.otherContrib !== null) {
+      return { amount: family.otherContrib, estimated: false, estimate: null };
+    }
+    const estimate = taxMath.estimateEmploymentContributions(otherIncome);
+    return { amount: estimate.total, estimated: true, estimate };
+  }
+
+  function getSpouseContributions(family) {
+    if (!family.married) return { amount: 0, estimated: false, estimate: null };
+    if (family.spouseContrib !== null) {
+      return { amount: family.spouseContrib, estimated: false, estimate: null };
+    }
+    const estimate = taxMath.estimateEmploymentContributions(
+      family.spouseScaleIncome,
+    );
+    return { amount: estimate.total, estimated: true, estimate };
+  }
+
+  /* Limit dochodu przy jednym dziecku (art. 27f ust. 2 pkt 1): małżonkowie –
+     112 000 zł łącznie; samotny rodzic – 112 000 zł, ale gdy stosuje liniowy
+     lub ryczałt (nie ma prawa do rozliczenia jako samotny rodzic – art. 6
+     ust. 8) ostrożnie 56 000 zł (stanowisko MF; literalnie 112 000 zł);
+     pozostali – 56 000 zł. */
+  function getChildReliefLimit(family, kind) {
+    const C = TAX_CONSTANTS;
+    if (family.married) return { amount: C.CHILD_RELIEF_LIMIT_MARRIED, key: "married" };
+    if (family.status === "single") {
+      return kind === "linear" || kind === "ryczalt"
+        ? { amount: C.CHILD_RELIEF_LIMIT_OTHER, key: "singleCautious" }
+        : { amount: C.CHILD_RELIEF_LIMIT_SINGLE_PARENT, key: "single" };
+    }
+    return { amount: C.CHILD_RELIEF_LIMIT_OTHER, key: "other" };
+  }
+
+  /* Ulga na dzieci w jednym wariancie (albo w sytuacji bez działalności).
+     p: { kind: "scale" | "linear" | "ryczalt" | "none", mode, userScaleBase,
+          scaleTaxAttr, limitParts: [{label, amount}], hasScaleReturnUser,
+          userCap: {social, health, notes} } */
+  function computeChildRelief(family, ctx, p) {
+    const relief = family.relief; // kwota rodziny przed limitem (getChildRelief)
+    const spouseSolo = family.married
+      ? calculateScalePitOnly(family.spouseScaleIncome)
+      : 0;
+    const limitParts = [...p.limitParts];
+    if (family.married) {
+      limitParts.push({ label: "dochód małżonka (skala)", amount: family.spouseScaleIncome });
+      if (family.spouseLinearIncome > 0) {
+        limitParts.push({
+          label: "dochód małżonka (liniowy / art. 30b)",
+          amount: family.spouseLinearIncome,
+        });
+      }
+    }
+    const limitIncome = taxMath.round2(
+      limitParts.reduce((sum, part) => sum + Math.max(part.amount, 0), 0),
+    );
+    const limit = getChildReliefLimit(family, p.kind);
+    const limitApplies = family.limitApplies;
+    const eligible = !limitApplies || limitIncome <= limit.amount;
+    const familyAmount = eligible ? relief.total : 0;
+    // małżonkowie: podział optymalny (ust. 4 – dowolna proporcja), liczony
+    // dla gospodarstwa; pozostali: udział podatnika
+    const share = family.married ? 1 : family.share;
+    const amount = family.married
+      ? familyAmount
+      : taxMath.round2(familyAmount * share);
+    const householdScaleTax = taxMath.round2(p.scaleTaxAttr + spouseSolo);
+    const absorb = family.married ? householdScaleTax : p.scaleTaxAttr;
+    const used = taxMath.round2(Math.min(amount, Math.max(absorb, 0)));
+    const unused = taxMath.round2(amount - used);
+    const other = getOtherIncomeContributions(family, ctx.otherIncome);
+    const spouse = getSpouseContributions(family);
+    const cap = taxMath.round2(
+      other.amount + p.userCap.social + p.userCap.health + spouse.amount,
+    );
+    const spouseReturn = family.married && family.spouseScaleIncome > 0;
+    const hasScaleReturn = p.hasScaleReturnUser || spouseReturn;
+    const refund = hasScaleReturn
+      ? taxMath.round2(Math.min(unused, cap))
+      : 0;
+    return {
+      kind: p.kind,
+      mode: p.mode,
+      userScaleBase: p.userScaleBase,
+      scaleTaxAttr: p.scaleTaxAttr,
+      spouseSolo,
+      householdScaleTax,
+      absorb,
+      limitApplies,
+      limit,
+      limitParts,
+      limitIncome,
+      eligible,
+      familyAmount,
+      share,
+      amount,
+      used,
+      unused,
+      cap,
+      capParts: {
+        other,
+        social: p.userCap.social,
+        health: p.userCap.health,
+        spouse,
+        notes: p.userCap.notes || [],
+      },
+      hasScaleReturn,
+      hasScaleReturnUser: p.hasScaleReturnUser,
+      refund,
+      benefit: taxMath.round2(used + refund),
+      lostUnused: taxMath.round2(unused - refund),
+    };
+  }
+
+  /* Sytuacja bez działalności (H0): tylko „inne dochody” podatnika (i dochód
+     małżonka), najlepszy dostępny tryb: samotny rodzic / wspólnie (gdy
+     włączone i małżonek nie stosuje liniowego ani ryczałtu) / indywidualnie.
+     Przy równym wyniku – preferencja (wspólnie, samotny rodzic). */
+  function getFamilyBaseline(family, otherIncome) {
+    const D = otherIncome;
+    const modes = [];
+    if (family.jointAllowed) modes.push("joint");
+    if (family.status === "single") modes.push("single");
+    modes.push("indiv");
+    let best = null;
+    const candidates = modes.map((mode) => {
+      const scaleTaxAttr = getFamilyScaleTaxAttr(mode, D, family);
+      const relief = computeChildRelief(family, { otherIncome: D }, {
+        kind: "none",
+        mode,
+        userScaleBase: D,
+        scaleTaxAttr,
+        limitParts: [{ label: "inne dochody opodatkowane skalą", amount: D }],
+        hasScaleReturnUser: D > 0,
+        userCap: { social: 0, health: 0 },
+      });
+      const net = taxMath.round2(scaleTaxAttr - relief.benefit);
+      const candidate = { mode, scaleTaxAttr, relief, net };
+      if (!best || net < best.net - 0.004) best = candidate;
+      return candidate;
+    });
+    const levy = calculateSolidarityLevy(D);
+    return {
+      income: D,
+      pit: best.scaleTaxAttr,
+      levy,
+      total: taxMath.round2(best.net + levy),
+      family: {
+        mode: best.mode,
+        relief: best.relief,
+        candidates,
+      },
+    };
+  }
+
+  /* Składki podatnika z działalności w limicie zwrotu (art. 27f ust. 9–10):
+     społeczne „podlegające odliczeniu” na podstawie art. 26 (nie w kosztach,
+     nie odliczone w PIT-36L ani od przychodu ryczałtowego – także gdy nie
+     było od czego odliczyć, np. przy stracie) i zdrowotna przy skali
+     (w całości). Zdrowotna liniowca i nieodliczone 50% zdrowotnej
+     ryczałtowca – ostrożnie pominięte (research §7 pkt 3–4). */
+  function getBusinessRefundCap(option, ctx) {
+    const notes = [];
+    let social = 0;
+    let health = 0;
+    if (option.form === "scale") {
+      social = option.method === "costs" ? 0 : ctx.social;
+      health = option.health;
+      if (option.method === "costs" && ctx.social > 0) {
+        notes.push("składki społeczne w kosztach — poza limitem");
+      }
+    } else if (option.form === "linear") {
+      social = option.method === "scale" ? ctx.social : 0;
+      if (ctx.social > 0 && option.method !== "scale") {
+        notes.push(
+          option.method === "costs"
+            ? "składki społeczne w kosztach — poza limitem"
+            : "składki społeczne odliczone w PIT-36L — poza limitem",
+        );
+      }
+      notes.push("składka zdrowotna liniowca — pominięta (ostrożnie)");
+    } else {
+      social =
+        option.method === "scale"
+          ? ctx.social
+          : Math.max(taxMath.round2(ctx.social - option.socialFromRevenue), 0);
+      if (option.socialFromRevenue > 0) {
+        notes.push("składki społeczne odliczone od przychodu (PIT-28) — poza limitem");
+      }
+      notes.push("składka zdrowotna ryczałtowca — pominięta (ostrożnie)");
+    }
+    return { social, health, notes };
+  }
+
+  /* Ulga na dzieci w wariancie: modyfikuje podatki i wynik opcji
+     (optymalizator sposobu odliczenia składek widzi więc także wpływ
+     sposobu odliczenia na limit zwrotu). */
+  function applyFamilyRelief(option, ctx) {
+    const family = ctx.family;
+    if (!family || !family.hasChildren) return option;
+    let mode = "indiv";
+    let userScaleBase;
+    let limitParts;
+    let hasScaleReturnUser;
+    if (option.form === "scale") {
+      mode = option.joint ? "joint" : option.single ? "single" : "indiv";
+      userScaleBase = option.pitBase;
+      limitParts = [
+        {
+          label: option.ipBoxCoeff > 0
+            ? "dochód opodatkowany skalą po odliczeniu składek (bez dochodu kwalifikowanego IP BOX)"
+            : "dochód opodatkowany skalą po odliczeniu składek",
+          amount: option.pitBase,
+        },
+      ];
+      hasScaleReturnUser = true;
+    } else if (option.form === "linear") {
+      userScaleBase = option.scaleBase;
+      limitParts = [
+        {
+          label: "dochód liniowy po odliczeniu składek i zdrowotnej",
+          amount: option.linearBase,
+        },
+        { label: "inne dochody (skala) po odliczeniu składek", amount: option.scaleBase },
+      ];
+      hasScaleReturnUser = ctx.otherIncome > 0;
+    } else {
+      userScaleBase = option.scaleBase;
+      limitParts = [
+        { label: "inne dochody (skala) po odliczeniu składek; ryczałt poza limitem", amount: option.scaleBase },
+      ];
+      hasScaleReturnUser = ctx.otherIncome > 0;
+    }
+    const scaleTaxAttr =
+      option.form === "scale" ? option.pit : option.scalePit;
+    const relief = computeChildRelief(family, ctx, {
+      kind: option.form,
+      mode,
+      userScaleBase,
+      scaleTaxAttr,
+      limitParts,
+      hasScaleReturnUser,
+      userCap: getBusinessRefundCap(option, ctx),
+    });
+    option.family = relief;
+    option.taxesBeforeFamily = option.taxes;
+    option.taxes = taxMath.round2(option.taxes - relief.benefit);
+    option.total = getVariantTotal(option.taxes, option.health, ctx);
+    return option;
+  }
+
   function buildCalculationContext(inputs, schedule) {
     const income = taxMath.round2(inputs.revenue - inputs.costs);
     const otherIncome = Math.max(inputs.otherIncome || 0, 0);
+    const family = inputs.family || null;
+    const fourPlusExempt =
+      family && family.fourPlus
+        ? taxMath.round2(Math.min(family.fourPlusAvailable, Math.max(inputs.revenue, 0)))
+        : 0;
     return {
       revenue: inputs.revenue,
       costs: inputs.costs,
       income,
       otherIncome,
+      family,
+      fourPlusExempt,
       schedule,
       zusEnabled: schedule.enabled,
       social: schedule.totals.social,
@@ -1018,7 +1436,10 @@
       healthBaseIncome: taxMath.round2(
         income - schedule.totals.fpfs - schedule.totals.social,
       ),
-      baseline: getOtherIncomeBaseline(otherIncome),
+      baseline:
+        family && family.hasChildren
+          ? getFamilyBaseline(family, otherIncome)
+          : getOtherIncomeBaseline(otherIncome),
     };
   }
 
@@ -1032,12 +1453,15 @@
      method: "income" – art. 26 od łącznego dochodu ze skali (JDG + inne),
              "costs"  – składki w kosztach działalności (strata JDG nie
                         pomniejsza innych dochodów w tym samym roku). */
-  function computeScaleOption(ctx, method, ipBoxCoeff, spouseIncome) {
+  function computeScaleOption(ctx, method, ipBoxCoeff, spouseIncome, mode = null) {
     // FP+FS (i składki społeczne przy "costs") to koszty całej działalności –
-    // przy IP BOX dzielone proporcjonalnie wg współczynnika (addendum A1, A9)
+    // przy IP BOX dzielone proporcjonalnie wg współczynnika (addendum A1, A9).
+    // Ulga dla rodzin 4+: zwolniony przychód (ctx.fourPlusExempt) pomniejsza
+    // dochód do opodatkowania, koszty w całości (art. 22 ust. 3a, art. 23
+    // ust. 10); przy IP BOX zwolnienie dzielone proporcjonalnie (założenie).
     const socialInCosts = method === "costs" ? ctx.social : 0;
     const businessAfterCosts = taxMath.round2(
-      ctx.income - ctx.fpfs - socialInCosts,
+      ctx.income - ctx.fourPlusExempt - ctx.fpfs - socialInCosts,
     );
     const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
       businessAfterCosts,
@@ -1055,14 +1479,16 @@
     );
     const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
     const joint = spouseIncome !== null && spouseIncome !== undefined;
-    const pit = joint
-      ? calculateJointScalePitAttributed(pitBase, spouseIncome)
-      : calculateScalePitOnly(pitBase);
+    const single = !joint && mode === "single";
+    let pit;
+    if (joint) pit = calculateJointScalePitAttributed(pitBase, spouseIncome);
+    else if (single) pit = calculateSingleParentPit(pitBase);
+    else pit = calculateScalePitOnly(pitBase);
     const levyBase = getLevyBase(pitBase, ipBoxIncome);
     const levy = calculateSolidarityLevy(levyBase);
     const taxes = taxMath.round2(ipBoxTax + pit + levy);
 
-    return {
+    const option = {
       form: "scale",
       method,
       ipBoxCoeff,
@@ -1083,6 +1509,9 @@
       taxes,
       total: getVariantTotal(taxes, health, ctx),
     };
+    if (single) option.single = true;
+    if (ctx.fourPlusExempt > 0) option.fourPlusExempt = ctx.fourPlusExempt;
+    return applyFamilyRelief(option, ctx);
   }
 
   /* Liniowy (z IP BOX lub bez). Inne dochody opodatkowane osobno skalą.
@@ -1092,8 +1521,9 @@
      Nadwyżka ponad dochód z wybranego źródła przepada (bez dzielenia). */
   function computeLinearOption(ctx, method, ipBoxCoeff) {
     const socialInCosts = method === "costs" ? ctx.social : 0;
+    // ulga 4+: zwolniony przychód pomniejsza dochód liniowy (koszty w całości)
     const businessAfterCosts = taxMath.round2(
-      ctx.income - ctx.fpfs - socialInCosts,
+      ctx.income - ctx.fourPlusExempt - ctx.fpfs - socialInCosts,
     );
     const { ipBoxIncome, regularIncome } = getIpBoxIncomeSplit(
       businessAfterCosts,
@@ -1137,7 +1567,7 @@
     const ipBoxTax = taxMath.round2(ipBoxIncome * TAX_CONSTANTS.IP_BOX_RATE);
     const taxes = taxMath.round2(ipBoxTax + linearPit + scalePit + levy);
 
-    return {
+    const option = {
       form: "linear",
       method,
       ipBoxCoeff,
@@ -1161,6 +1591,8 @@
       taxes,
       total: getVariantTotal(taxes, health, ctx),
     };
+    if (ctx.fourPlusExempt > 0) option.fourPlusExempt = ctx.fourPlusExempt;
+    return applyFamilyRelief(option, ctx);
   }
 
   /* Ryczałt dla podanych przychodów przypisanych stawkom
@@ -1187,6 +1619,27 @@
         allocatedTotal,
       ),
     );
+    /* Ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153 lit. c): zwolniony przychód
+       nie jest opodatkowany ryczałtem; próg składki zdrowotnej liczony jak
+       bez zwolnienia (art. 81 ust. 2zd pkt 2 u.ś.o.z.). Przy kilku stawkach
+       zwolnienie dzielone proporcjonalnie do przychodów stawek (założenie –
+       wg MF decyduje kolejność uzyskania przychodów). */
+    const exemptTotal = Math.min(ctx.fourPlusExempt || 0, revenueTotal);
+    const exemptShares =
+      exemptTotal > 0
+        ? rateIds.length === 1
+          ? [Math.min(exemptTotal, allocations[rateIds[0]] || 0)]
+          : splitProportionally(
+              exemptTotal,
+              rateIds.map((rateId) => allocations[rateId] || 0),
+              revenueTotal,
+            )
+        : rateIds.map(() => 0);
+    const exempt = taxMath.round2(
+      exemptShares.reduce((sum, value) => sum + value, 0),
+    );
+    const taxableTotal =
+      exempt > 0 ? taxMath.round2(revenueTotal - exempt) : revenueTotal;
     /* Podział składek społecznych dla danej (zakładanej) składki zdrowotnej.
        Metoda "ryczalt": najpierw 50% zdrowotnej (art. 11 ust. 1a – tego
        odliczenia nie można przenieść na skalę), potem składki społeczne do
@@ -1201,7 +1654,7 @@
         };
       }
       const revenueRoom = Math.max(
-        taxMath.round2(revenueTotal - healthDeductionGuess),
+        taxMath.round2(taxableTotal - healthDeductionGuess),
         0,
       );
       const fromRevenue = Math.min(ctx.social, revenueRoom);
@@ -1256,10 +1709,16 @@
     const totalDeduction = taxMath.round2(socialFromRevenue + healthDeduction);
     const rates = {};
     let ryczaltTax = 0;
+    // odliczenia dzielone proporcjonalnie do przychodu opodatkowanego stawek
+    // (art. 11 ust. 3; przy zwolnieniu 4+ – po zwolnieniu)
     const shares = splitProportionally(
       totalDeduction,
-      rateIds.map((rateId) => allocations[rateId] || 0),
-      revenueTotal,
+      rateIds.map((rateId, index) =>
+        exempt > 0
+          ? taxMath.round2((allocations[rateId] || 0) - exemptShares[index])
+          : allocations[rateId] || 0,
+      ),
+      taxableTotal,
     );
     // Projekt UD458: nadwyżka przychodu ponad próg roczny (bez proporcji
     // przy starcie w trakcie roku) – 17%; przy wielu stawkach nadwyżka
@@ -1281,16 +1740,18 @@
       const rateRevenue = allocations[rateId] || 0;
       const deduction = shares[index];
       const excess = excessShares[index];
+      const rateExempt = exemptShares[index];
       let tax;
       let high = null;
       if (excess > 0 && getRyczaltRate(rateId) !== TAX_CONSTANTS.RYCZALT_HIGH_RATE) {
-        high = getRyczaltHighRateDetails(rateId, rateRevenue, deduction, excess);
+        high = getRyczaltHighRateDetails(rateId, rateRevenue, deduction, excess, rateExempt);
         tax = high.tax;
       } else {
-        tax = calculateRyczaltRateTax(rateId, rateRevenue, deduction);
+        tax = calculateRyczaltRateTax(rateId, rateRevenue, deduction, rateExempt);
         if (excess > 0) high = { excess, parts: null, tax };
       }
       rates[rateId] = { rateRevenue, deduction, tax };
+      if (rateExempt > 0) rates[rateId].exempt = rateExempt;
       if (high) rates[rateId].high = high;
       ryczaltTax += tax;
     });
@@ -1300,7 +1761,7 @@
     const levy = calculateSolidarityLevy(scaleBase);
     const taxes = taxMath.round2(ryczaltTax + scalePit + levy);
 
-    return {
+    const option = {
       form: "ryczalt",
       method,
       revenueTotal,
@@ -1323,6 +1784,11 @@
       taxes,
       total: getVariantTotal(taxes, health, ctx),
     };
+    if (exempt > 0) {
+      option.fourPlusExempt = exempt;
+      option.taxableRevenue = taxableTotal;
+    }
+    return applyFamilyRelief(option, ctx);
   }
 
   /* Liczy wariant dla każdego legalnego sposobu odliczenia składek
@@ -1405,6 +1871,13 @@
     variants.taxScale = evaluate("scale", (c, method) =>
       computeScaleOption(c, method, 0, null),
     );
+    // samotny rodzic (art. 6 ust. 4c–4d) – obok wariantu indywidualnego
+    const singleParent = isSingleParentFamily(inputs.family);
+    if (singleParent) {
+      variants.taxScaleSingle = evaluate("scale", (c, method) =>
+        computeScaleOption(c, method, 0, null, "single"),
+      );
+    }
     if (inputs.jointTaxation) {
       variants.taxScaleJoint = evaluate("scale", (c, method) =>
         computeScaleOption(c, method, 0, spouseIncome),
@@ -1417,6 +1890,11 @@
       variants.taxScaleIpBox = evaluate("scale", (c, method) =>
         computeScaleOption(c, method, ipBoxCoeff, null),
       );
+      if (singleParent) {
+        variants.taxScaleIpBoxSingle = evaluate("scale", (c, method) =>
+          computeScaleOption(c, method, ipBoxCoeff, null, "single"),
+        );
+      }
       if (inputs.jointTaxation) {
         variants.taxScaleIpBoxJoint = evaluate("scale", (c, method) =>
           computeScaleOption(c, method, ipBoxCoeff, spouseIncome),
@@ -1455,7 +1933,13 @@
       schedule,
       variants,
       ryczaltEligibility: getRyczaltEligibility(inputs, schedule),
+      jointBlocked: !!(inputs.jointTaxation && inputs.spouseLinRycz),
     };
+  }
+
+  /* Status „samotny rodzic” z co najmniej jednym dzieckiem. */
+  function isSingleParentFamily(family) {
+    return !!(family && family.hasChildren && family.status === "single");
   }
 
   /* ==================================================
@@ -1486,7 +1970,363 @@
   function clearIpBoxResultFields() {
     document.getElementById("taxScaleIpBox").value = "";
     document.getElementById("taxScaleIpBoxJoint").value = "";
+    document.getElementById("taxScaleIpBoxSingle").value = "";
     document.getElementById("taxLinearIpBox").value = "";
+  }
+
+  /* ==================================================
+     Karta „Rodzina” – dane wejściowe
+  ================================================== */
+  const MAX_CHILDREN = 15;
+
+  /* Wybrany status (radio); przy rozliczeniu wspólnym zawsze małżeństwo. */
+  function getSelectedFamilyStatus() {
+    return getCheckedValue(DOM.familyStatusRadios, "other");
+  }
+
+  function getEffectiveFamilyStatus() {
+    return isJointTaxationEnabled() ? "married" : getSelectedFamilyStatus();
+  }
+
+  function readChildren() {
+    if (!DOM.childrenList) return [];
+    return Array.from(DOM.childrenList.querySelectorAll(".child-row")).map(
+      (row) => ({
+        months: Math.min(
+          Math.max(Number(row.querySelector("select").value) || 12, 1),
+          12,
+        ),
+        disabled: !!row.querySelector('input[data-field="disabled"]').checked,
+        adult: !!row.querySelector('input[data-field="adult"]').checked,
+      }),
+    );
+  }
+
+  /* Pole „Dochód małżonka” jest potrzebne przy rozliczeniu wspólnym albo
+     przy statusie „małżeństwo” z dziećmi (limit 112 000 zł, podział ulgi). */
+  function isSpouseIncomeNeeded() {
+    return (
+      isJointTaxationEnabled() ||
+      (getEffectiveFamilyStatus() === "married" && readChildren().length > 0)
+    );
+  }
+
+  /* Kwota z opcjonalnego pola (puste = null, np. „szacunek”). */
+  function optionalAmount(input) {
+    if (!input) return null;
+    const checked = checkAmount(input.value);
+    return checked.ok && !checked.empty ? checked.value : null;
+  }
+
+  function getFamilyShareValue() {
+    const numValue = Number(String(DOM.familyShare.value).trim().replace(",", "."));
+    return Number.isFinite(numValue) && numValue >= 0 && numValue <= 100
+      ? numValue / 100
+      : 1;
+  }
+
+  /* Dane rodziny do obliczeń albo null (bez dzieci i bez ulgi 4+ –
+     obliczenia jak bez karty „Rodzina”). */
+  function getFamilyInputs() {
+    if (!DOM.familyCard) return null;
+    const children = readChildren();
+    const fourPlus = !!(DOM.fourPlus && DOM.fourPlus.checked);
+    if (!children.length && !fourPlus) return null;
+    const status = getEffectiveFamilyStatus();
+    const married = status === "married";
+    const spouseLinRycz = married && !!DOM.spouseLinRycz.checked;
+    const relief = taxMath.getChildRelief(children);
+    const fourPlusUsed = fourPlus
+      ? Math.min(amountOf(DOM.fourPlusUsed.value), TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT)
+      : 0;
+    return {
+      children,
+      hasChildren: children.length > 0,
+      relief,
+      // limit dochodu tylko, gdy przez cały rok było jedno uprawnione dziecko
+      // (ust. 2b) i nie ma ono orzeczenia (ust. 2e)
+      limitApplies: relief.maxCount === 1 && !children[0].disabled,
+      status,
+      statusSelected: getSelectedFamilyStatus(),
+      married,
+      share: status === "other" ? getFamilyShareValue() : 1,
+      spouseScaleIncome: married ? amountOf(DOM.spouseIncomeInput.value) : 0,
+      spouseLinRycz,
+      spouseLinearIncome: spouseLinRycz ? amountOf(DOM.spouseLinearIncome.value) : 0,
+      spouseContrib: married ? optionalAmount(DOM.spouseContrib) : null,
+      otherContrib: optionalAmount(DOM.otherContrib),
+      jointAllowed: isJointTaxationEnabled() && !spouseLinRycz,
+      fourPlus,
+      fourPlusUsed,
+      fourPlusAvailable: fourPlus
+        ? taxMath.round2(Math.max(TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT - fourPlusUsed, 0))
+        : 0,
+    };
+  }
+
+  function createChildRow(index, child = {}) {
+    const row = document.createElement("li");
+    row.className = "child-row";
+    const title = document.createElement("span");
+    title.className = "child-title";
+    const months = document.createElement("label");
+    months.className = "child-months";
+    const monthsText = document.createElement("span");
+    const select = document.createElement("select");
+    for (let m = 12; m >= 1; m--) {
+      const option = document.createElement("option");
+      option.value = String(m);
+      option.textContent = String(m);
+      select.appendChild(option);
+    }
+    select.value = String(child.months || 12);
+    months.append(monthsText, select);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "link-btn child-remove";
+    remove.textContent = "Usuń";
+    const checks = document.createElement("span");
+    checks.className = "child-checks";
+    const makeCheck = (field, text, checked) => {
+      const label = document.createElement("label");
+      label.className = "child-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.dataset.field = field;
+      input.checked = !!checked;
+      const span = document.createElement("span");
+      span.textContent = text;
+      label.append(input, span);
+      return label;
+    };
+    checks.append(
+      makeCheck("disabled", "orzeczenie o niepełnosprawności (art. 26 ust. 7d)", child.disabled),
+      makeCheck("adult", "pełnoletnie uczące się do 25 lat — spełnia warunki (limit dochodu dziecka)", child.adult),
+    );
+    row.append(title, months, remove, checks);
+    remove.addEventListener("click", () => {
+      const next = row.nextElementSibling || row.previousElementSibling;
+      row.remove();
+      renumberChildren();
+      updateFamilyUi();
+      calculate();
+      const focusTarget = next
+        ? next.querySelector("select")
+        : DOM.addChildBtn;
+      if (focusTarget) focusTarget.focus();
+    });
+    select.addEventListener("change", calculate);
+    checks.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("change", calculate);
+    });
+    return row;
+  }
+
+  function renumberChildren() {
+    if (!DOM.childrenList) return;
+    const Y = getActiveYear();
+    DOM.childrenList.querySelectorAll(".child-row").forEach((row, index) => {
+      const n = index + 1;
+      setText(row.querySelector(".child-title"), `Dziecko ${n}`);
+      setText(
+        row.querySelector(".child-months > span"),
+        `miesięcy z prawem do ulgi w ${Y} r.:`,
+      );
+      row.querySelector("select").setAttribute(
+        "aria-label",
+        `Dziecko ${n}: liczba miesięcy z prawem do ulgi w ${Y} r.`,
+      );
+      row.querySelector(".child-remove").setAttribute("aria-label", `Usuń dziecko ${n}`);
+    });
+  }
+
+  function addChild(child = {}) {
+    if (!DOM.childrenList) return null;
+    const count = DOM.childrenList.querySelectorAll(".child-row").length;
+    if (count >= MAX_CHILDREN) return null;
+    const row = createChildRow(count, child);
+    DOM.childrenList.appendChild(row);
+    renumberChildren();
+    return row;
+  }
+
+  function isFamilyExpanded() {
+    return !!(DOM.familyToggle && DOM.familyToggle.getAttribute("aria-expanded") === "true");
+  }
+
+  function setFamilyExpanded(expanded) {
+    if (!DOM.familyToggle || !DOM.familyBody) return;
+    DOM.familyToggle.setAttribute("aria-expanded", String(expanded));
+    DOM.familyBody.hidden = !expanded;
+  }
+
+  /* Widoczność pól karty „Rodzina”, pola „Dochód małżonka”, podpowiedzi
+     i skrót w nagłówku karty. */
+  function updateFamilyUi() {
+    if (!DOM.familyCard) return;
+    const joint = isJointTaxationEnabled();
+    const children = readChildren();
+    const hasChildren = children.length > 0;
+    const status = getEffectiveFamilyStatus();
+    // rozliczenie wspólne = małżeństwo przez cały rok: pozostałe statusy
+    // niedostępne, zaznaczone „małżeństwo” (zostaje po wyłączeniu wspólnego)
+    DOM.familyStatusRadios.forEach((radio) => {
+      const disabled = joint && radio.value !== "married";
+      radio.disabled = disabled;
+      const option = radio.closest(".seg-opt");
+      if (option) option.classList.toggle("is-disabled", disabled);
+      if (joint && radio.value === "married") radio.checked = true;
+    });
+    let statusHint = "";
+    if (joint) {
+      statusHint = "Rozliczenie wspólne (karta „Opcje”) wymaga małżeństwa przez cały rok — przyjmujemy status „małżeństwo”.";
+    } else if (status === "married") {
+      statusHint = "Małżeństwo przez cały rok (bez separacji). Limit przy jednym dziecku: 112 000 zł dochodów obojga; ulgę dzielimy optymalnie między małżonków.";
+    } else if (status === "single") {
+      statusHint = "Samotny rodzic (art. 6 ust. 4c–4f): panna/kawaler, rozwiedziony, wdowiec, w separacji — bez wspólnej pieczy z drugim rodzicem. Preferencja przepada przy liniowym i ryczałcie (art. 6 ust. 8).";
+    } else {
+      statusHint = "Np. związek nieformalny, ślub w trakcie roku, piecza naprzemienna. Limit przy jednym dziecku: 56 000 zł Twoich dochodów.";
+    }
+    setText(DOM.familyStatusHint, typographyPL(statusHint));
+
+    if (DOM.familyShareField) DOM.familyShareField.hidden = !(hasChildren && status === "other");
+    const married = status === "married";
+    if (DOM.familySpouse) DOM.familySpouse.hidden = !married;
+    if (DOM.spouseLinearIncomeField) {
+      DOM.spouseLinearIncomeField.hidden = !(married && DOM.spouseLinRycz.checked);
+    }
+    if (DOM.otherContribField) DOM.otherContribField.hidden = !hasChildren;
+
+    // pole „Dochód małżonka” (karta „Opcje”)
+    const spouseNeeded = isSpouseIncomeNeeded();
+    const wasRevealed = DOM.spouseIncomeCard.classList.contains("is-revealed");
+    if (spouseNeeded !== wasRevealed) {
+      setRevealed(DOM.spouseIncomeCard, spouseNeeded);
+      if (spouseNeeded) {
+        DOM.spouseIncomeInput.removeAttribute("readonly");
+        if (!joint) {
+          DOM.spouseIncomeInput.value = "";
+          DOM.spouseIncomeInput.placeholder = "0,00";
+        }
+      } else {
+        DOM.spouseIncomeInput.setAttribute("readonly", "");
+        DOM.spouseIncomeInput.value = formatAmountPL(0);
+        DOM.spouseIncomeInput.placeholder = "";
+      }
+    }
+    const spouseFoot = document.getElementById("spouseIncomeFoot");
+    if (spouseFoot) {
+      setText(
+        spouseFoot,
+        joint
+          ? married && hasChildren
+            ? "Wpływa na warianty „wspólnie z małżonkiem” i na ulgę na dzieci (limit, podział, zwrot)."
+            : "Wpływa tylko na warianty „wspólnie z małżonkiem”."
+          : "Wpływa na ulgę na dzieci (limit 112 000 zł, podział ulgi, zwrot) — karta „Rodzina”.",
+      );
+    }
+
+    // podpowiedź pod listą dzieci
+    let childrenHint = "";
+    if (!hasChildren) {
+      childrenHint = "Bez dzieci ulga na dzieci i preferencja samotnego rodzica nie są liczone.";
+    } else {
+      const relief = taxMath.getChildRelief(children);
+      const limitApplies = relief.maxCount === 1 && !children[0].disabled;
+      childrenHint = `Ulga rodziny w ${getActiveYear()} r.: ${formatPLN(relief.total)} (przed limitem i podziałem)${
+        limitApplies
+          ? ` — jedno dziecko: limit dochodu ${formatPLN(
+              status === "other" ? TAX_CONSTANTS.CHILD_RELIEF_LIMIT_OTHER : TAX_CONSTANTS.CHILD_RELIEF_LIMIT_MARRIED,
+            )}${status === "single" ? " (przy liniowym i ryczałcie ostrożnie 56 000 zł)" : ""}`
+          : children.length === 1
+            ? " — orzeczenie: bez limitu dochodu"
+            : " — co najmniej dwoje dzieci: bez limitu dochodu"
+      }. Wynik każdego wariantu zawiera zmianę ulgi względem sytuacji bez działalności.`;
+    }
+    setText(DOM.childrenHint, typographyPL(childrenHint));
+    if (DOM.addChildBtn) {
+      DOM.addChildBtn.disabled = children.length >= MAX_CHILDREN;
+    }
+
+    // szacunek składek (limit zwrotu)
+    const otherIncome = amountOf(DOM.otherIncomeInput.value);
+    if (DOM.otherContribHint) {
+      const est = taxMath.estimateEmploymentContributions(otherIncome);
+      setText(
+        DOM.otherContribHint,
+        typographyPL(
+          otherIncome > 0
+            ? `Puste = szacunek jak dla etatu od ${formatPLN(otherIncome)}: brutto ${formatPLN(
+                est.gross,
+              )}, społeczne ${formatPLN(est.social)} + zdrowotna ${formatPLN(est.health)} = ${formatPLN(est.total)}.`
+            : "Brak innych dochodów — szacunek 0 zł. Składki z działalności liczymy osobno w każdym wariancie.",
+        ),
+      );
+    }
+    if (DOM.spouseContribHint) {
+      const spouseIncome = married ? amountOf(DOM.spouseIncomeInput.value) : 0;
+      const est = taxMath.estimateEmploymentContributions(spouseIncome);
+      setText(
+        DOM.spouseContribHint,
+        typographyPL(
+          `Łączny limit zwrotu małżonków (art. 27f ust. 10). Puste = szacunek jak dla etatu od dochodu małżonka: ${formatPLN(
+            est.total,
+          )}. Nie wliczaj składek odliczonych w PIT-36L / PIT-28.`,
+        ),
+      );
+    }
+
+    // ulga 4+
+    const fourPlus = !!(DOM.fourPlus && DOM.fourPlus.checked);
+    if (DOM.fourPlusUsedField) DOM.fourPlusUsedField.hidden = !fourPlus;
+    if (DOM.fourPlusHint) {
+      let text;
+      if (!fourPlus) {
+        text = `Limit ${formatPLN(TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT)} przychodu rocznie; składka zdrowotna bez zmian.`;
+      } else {
+        const used = Math.min(amountOf(DOM.fourPlusUsed.value), TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT);
+        const available = taxMath.round2(Math.max(TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT - used, 0));
+        const revenue = amountOf(DOM.revenueInput.value);
+        text = `Zwolnienie przychodu z działalności: min(${formatPLN(available)}; przychód ${formatPLN(
+          revenue,
+        )}) = ${formatPLN(Math.min(available, revenue))}. Koszty w całości, składka zdrowotna i próg ryczałtu bez zmian.${
+          children.length && children.length < 4
+            ? " Lista dzieci ma mniej niż 4 pozycje — sprawdź warunki ulgi (dzieci liczone według art. 6 ust. 4c)."
+            : ""
+        }`;
+      }
+      setText(DOM.fourPlusHint, typographyPL(text));
+    }
+
+    updateFamilySummary(children, status, fourPlus);
+  }
+
+  function updateFamilySummary(children, status, fourPlus) {
+    if (!DOM.familySummary) return;
+    const parts = [];
+    if (children.length) {
+      parts.push(
+        children.length === 1
+          ? "1 dziecko"
+          : `${children.length} ${children.length < 5 ? "dzieci" : "dzieci"}`,
+      );
+      parts.push(
+        status === "married"
+          ? "małżeństwo"
+          : status === "single"
+            ? "samotny rodzic"
+            : "inna sytuacja",
+      );
+    }
+    if (fourPlus) parts.push("ulga 4+");
+    if (status === "married" && DOM.spouseLinRycz && DOM.spouseLinRycz.checked) {
+      parts.push("małżonek: liniowy/ryczałt");
+    }
+    const text = parts.length
+      ? parts.join(" · ")
+      : "bez dzieci — ulgi rodzinne nieuwzględniane";
+    setText(DOM.familySummary, text);
+    DOM.familySummary.dataset.custom = parts.length ? "true" : "";
   }
 
   /* Compute visibility of conditional result rows.
@@ -1496,18 +2336,24 @@
   function updateConditionalRowsVisibility() {
     const ipBoxOn = isIpBoxEnabled();
     const jointOn = isJointTaxationEnabled();
+    const singleOn =
+      getEffectiveFamilyStatus() === "single" && readChildren().length > 0;
     document
-      .querySelectorAll(".joint-taxation-card, .ipbox-card")
+      .querySelectorAll(".joint-taxation-card, .ipbox-card, .single-parent-card")
       .forEach((row) => {
         const requiresJoint = row.classList.contains("joint-taxation-card");
         const requiresIpBox = row.classList.contains("ipbox-card");
+        const requiresSingle = row.classList.contains("single-parent-card");
         const visible =
-          (!requiresJoint || jointOn) && (!requiresIpBox || ipBoxOn);
+          (!requiresJoint || jointOn) &&
+          (!requiresIpBox || ipBoxOn) &&
+          (!requiresSingle || singleOn);
         row.classList.toggle("show", visible);
       });
-    // przy rozliczeniu wspólnym wiersze indywidualne dostają etykietę tekstową
+    // przy rozliczeniu wspólnym i wariancie „samotny rodzic” wiersze
+    // indywidualne dostają etykietę tekstową
     document.querySelectorAll("[data-joint-only]").forEach((badge) => {
-      badge.hidden = !jointOn;
+      badge.hidden = !(jointOn || singleOn);
     });
   }
 
@@ -1645,6 +2491,14 @@
       isMultipleRates,
       allocatedRevenues: isMultipleRates ? getAllocatedRevenues().revenues : {},
       zus: getZusOptions(),
+      family: getFamilyInputs(),
+      // małżonek stosuje liniowy / ryczałt → rozliczenie wspólne niedostępne
+      // (art. 6 ust. 8); dotyczy także obliczeń bez dzieci
+      spouseLinRycz: !!(
+        getEffectiveFamilyStatus() === "married" &&
+        DOM.spouseLinRycz &&
+        DOM.spouseLinRycz.checked
+      ),
     };
   }
 
@@ -1726,6 +2580,9 @@
       field && field.nodeType === 1 && document.activeElement === field
         ? field
         : null;
+    // karta „Rodzina”: widoczność pól (wpływa na walidację) i wiersze wyników
+    updateFamilyUi();
+    updateConditionalRowsVisibility();
     const validation = validateAllInputs(typingField);
     updateZusPathAvailability();
     updateZusMoreSummary();
@@ -1783,7 +2640,25 @@
     return !!(result && result.ryczaltEligibility && !result.ryczaltEligibility.eligible);
   }
 
+  /* Małżonek stosuje liniowy lub ryczałt: rozliczenie wspólne niedostępne
+     (art. 6 ust. 8 ustawy o PIT) – kwoty orientacyjne, poza rankingiem. */
+  function isJointUnavailable(result) {
+    return !!(result && result.jointBlocked);
+  }
+
+  const JOINT_UNAVAILABLE_REASON =
+    "Rozliczenie wspólne pominięte — małżonek stosuje podatek liniowy lub ryczałt, więc wspólne rozliczenie jest niedostępne (art. 6 ust. 8 ustawy o PIT).";
+
   function markRyczaltAvailability(result) {
+    const jointUnavailable = isJointUnavailable(result);
+    JOINT_VARIANT_IDS.forEach((id) => {
+      const row = getResultRow(id);
+      if (row) row.classList.toggle("is-unavailable", jointUnavailable);
+      const element = document.getElementById(id);
+      if (!element) return;
+      if (jointUnavailable) element.dataset.unavailable = "true";
+      else delete element.dataset.unavailable;
+    });
     const unavailable = isRyczaltUnavailable(result);
     RYCZALT_VARIANT_IDS.forEach((id) => {
       const row = getResultRow(id);
@@ -2340,8 +3215,150 @@
     return best.health > calculated + 0.004;
   }
 
+  /* Rozbicie wpływu rodziny na wynik wariantu (względem sytuacji bez
+     działalności H0):
+       S_v  – podatek wg skali przypisany podatnikowi w wariancie (tryb
+              wariantu), S_0 – to samo w H0;
+       hyp  – podatek wg skali w wariancie, gdyby zastosować tryb z H0;
+       loss = S_v − hyp (utrata / brak preferencji: samotny rodzic,
+              rozliczenie wspólne), rest = hyp − S_0;
+       reliefDelta = (ulga + zwrot w H0) − (ulga + zwrot w wariancie).
+     Wynik = podatek formy (liniowy, ryczałt, IP BOX) + rest + loss
+             + zmiana daniny + reliefDelta + zdrowotna + ZUS. */
+  function getFamilyDecomposition(evaluation) {
+    const { best, ctx } = evaluation;
+    const f = best.family;
+    const base = ctx.baseline.family;
+    const modeV = f.mode;
+    const mode0 = base.mode;
+    let hypothetical = f.scaleTaxAttr;
+    if (modeV !== mode0) {
+      hypothetical = getFamilyScaleTaxAttr(mode0, f.userScaleBase, ctx.family);
+    }
+    return {
+      f,
+      base,
+      modeV,
+      mode0,
+      forced: best.form !== "scale",
+      hypothetical,
+      loss: taxMath.round2(f.scaleTaxAttr - hypothetical),
+      rest: taxMath.round2(hypothetical - ctx.baseline.pit),
+      reliefDelta: taxMath.round2(base.relief.benefit - f.benefit),
+    };
+  }
+
+  function getPreferenceLossLabel(d) {
+    if (d.mode0 === "single") {
+      return d.forced
+        ? "utrata preferencji samotnego rodzica"
+        : "bez preferencji samotnego rodzica (wariant indywidualny)";
+    }
+    if (d.mode0 === "joint") {
+      return d.forced
+        ? "utrata wspólnego rozliczenia"
+        : "bez wspólnego rozliczenia (wariant indywidualny)";
+    }
+    return d.modeV === "joint"
+      ? "wspólne rozliczenie"
+      : "preferencja samotnego rodzica";
+  }
+
+  function getReliefDeltaPart(d) {
+    if (d.reliefDelta > 0) {
+      return `utrata ulgi na dzieci: ${formatSignedAmountPL(d.reliefDelta)}`;
+    }
+    if (d.reliefDelta < 0) {
+      return `ulga na dzieci: ${formatSignedAmountPL(d.reliefDelta)} (więcej niż bez działalności)`;
+    }
+    return "ulga na dzieci: +0,00 (bez zmian)";
+  }
+
+  /* Linia składników w trybie „Rodzina” (dzieci) – składniki sumują się do
+     wyniku jak w getVariantDetailText. */
+  function getFamilyVariantDetailText(evaluation) {
+    const { best, ctx } = evaluation;
+    const baseline = ctx.baseline;
+    const d = getFamilyDecomposition(evaluation);
+    const parts = [];
+    if (best.form === "ryczalt") {
+      parts.push(`ryczałt ${formatAmountPL(best.ryczaltTax)}`);
+    } else if (best.form === "linear") {
+      parts.push(`PIT liniowy ${formatAmountPL(best.linearPit)}`);
+    } else {
+      parts.push(`PIT przypisany działalności ${formatAmountPL(d.rest)}`);
+    }
+    if (best.ipBoxCoeff > 0) {
+      parts.push(`IP BOX 5% ${formatAmountPL(best.ipBoxTax)}`);
+    }
+    if (best.form !== "scale" && (ctx.otherIncome > 0 || d.rest !== 0)) {
+      let reason = "bez zmian";
+      if (d.rest !== 0) {
+        reason =
+          best.socialFromScale > 0 ? "składki odliczone od skali" : "zmiana podstawy";
+      }
+      parts.push(
+        `PIT od innych dochodów: ${formatSignedAmountPL(d.rest)} (${reason})`,
+      );
+    }
+    if (d.loss !== 0) {
+      parts.push(`${getPreferenceLossLabel(d)}: ${formatSignedAmountPL(d.loss)}`);
+    }
+    parts.push(getReliefDeltaPart(d));
+    const levyChange = taxMath.round2(best.levy - baseline.levy);
+    if (levyChange !== 0) {
+      parts.push(
+        `danina ${
+          levyChange < 0
+            ? formatSignedAmountPL(levyChange)
+            : formatAmountPL(levyChange)
+        }`,
+      );
+    }
+    parts.push(...getHealthAndZusParts(evaluation));
+    return parts.join(" · ");
+  }
+
+  function getHealthAndZusParts(evaluation) {
+    const { best, ctx } = evaluation;
+    const parts = [];
+    if (best.form === "ryczalt") {
+      parts.push(
+        `zdrowotna ${formatAmountPL(best.health)} (${getRyczaltTierLabel(
+          best.thresholdRevenue,
+        )}; ${formatAmountPL(best.healthMonthly)}/mies.)`,
+      );
+    } else {
+      const rate =
+        best.form === "linear"
+          ? TAX_CONSTANTS.HEALTH_RATE_LINEAR
+          : TAX_CONSTANTS.HEALTH_RATE_SCALE;
+      parts.push(
+        `zdrowotna ${formatAmountPL(best.health)} (${
+          isMinimumHealth(evaluation, rate) ? "minimalna" : formatPercentPL(rate)
+        })`,
+      );
+    }
+    if (ctx.zusEnabled) {
+      parts.push(`ZUS ${formatAmountPL(ctx.socialTotal)}`);
+      if (ctx.social > 0) {
+        parts.push(`składki społeczne: ${getSocialMethodLabel(evaluation)}`);
+      }
+      if (evaluation.holidayMonth) {
+        parts.push(
+          `wakacje składkowe: ${formatMonthYear({
+            y: evaluation.schedule.year,
+            m: evaluation.holidayMonth,
+          })}`,
+        );
+      }
+    }
+    return parts;
+  }
+
   function getVariantDetailText(evaluation) {
     const { best, ctx } = evaluation;
+    if (best.family) return getFamilyVariantDetailText(evaluation);
     const baseline = ctx.baseline;
     const hasOther = ctx.otherIncome > 0;
     const parts = [];
@@ -2444,6 +3461,9 @@
         text = getVariantDetailText(variants[id]);
         if (variants[id].best.form === "ryczalt" && isRyczaltUnavailable(result)) {
           text = `niedostępny wg projektu (poza rankingiem; kwota orientacyjna) · ${text}`;
+        }
+        if (JOINT_VARIANT_IDS.includes(id) && isJointUnavailable(result)) {
+          text = `niedostępny — małżonek na liniowym / ryczałcie (poza rankingiem; kwota orientacyjna) · ${text}`;
         }
       }
       setText(detail, text);
@@ -2605,7 +3625,14 @@
         );
       }
       const unusedHealth = taxMath.round2(
-        Math.max(best.healthDeduction - Math.max(best.revenueTotal, 0), 0),
+        Math.max(
+          best.healthDeduction -
+            Math.max(
+              best.taxableRevenue !== undefined ? best.taxableRevenue : best.revenueTotal,
+              0,
+            ),
+          0,
+        ),
       );
       if (unusedHealth > 0) {
         add(
@@ -2640,7 +3667,211 @@
         "info-levy",
       );
     }
+    getFamilyNotes(evaluation).forEach((note) => notes.push(note));
     return notes;
+  }
+
+  /* Założenia i interpretacje karty „Rodzina”, od których zależy wynik. */
+  function getFamilyNotes(evaluation) {
+    const notes = [];
+    const { best, ctx } = evaluation;
+    const family = ctx.family;
+    if (!family) return notes;
+    const add = (text, topic) => notes.push({ text, topic });
+    const f = best.family;
+    if (f) {
+      const children = family.children;
+      if (children.length > 1 && children.some((child) => child.months < 12)) {
+        add(
+          "Okresy dzieci w roku nakładają się maksymalnie (podajesz liczbę miesięcy, nie daty) — przy rozłącznych okresach ulga może być niższa.",
+          "info-child-months",
+        );
+      }
+      if (children.some((child) => child.adult)) {
+        add(
+          "Dziecko pełnoletnie: przyjęto, że spełnia warunki (nauka do 25 lat, limit dochodu dziecka); miesiąc 25. urodzin wliczony (praktyka).",
+          "info-child-adult",
+        );
+      }
+      if (f.limitApplies && f.limit.key === "singleCautious") {
+        add(
+          `Limit dochodu ${formatPLN(f.limit.amount)} (a nie 112 000 zł): samotny rodzic na liniowym lub ryczałcie nie ma prawa do rozliczenia jako samotny rodzic — ostrożnie wg MF; literalnie art. 27f ust. 2 pkt 1 lit. b wskazuje 112 000 zł.`,
+          "info-child-limit",
+        );
+      }
+      if (f.limitApplies && best.ipBoxIncome > 0) {
+        add(
+          "Dochód kwalifikowany IP BOX poza limitem dochodu przy jednym dziecku (wykładnia literalna art. 27f ust. 2a — brak interpretacji KIS).",
+          "info-child-limit",
+        );
+      }
+      if (f.refund > 0 && f.refund < f.unused) {
+        add(
+          `Zwrot niewykorzystanej ulgi ograniczony limitem składek (${formatPLN(f.cap)}); zdrowotną liniowca i nieodliczone 50% zdrowotnej ryczałtowca pomijamy ostrożnie.`,
+          "info-child-refund",
+        );
+      }
+      if (f.unused > 0 && !f.hasScaleReturn) {
+        add(
+          `Niewykorzystana ulga ${formatPLN(f.unused)} przepada — brak dochodów ze skali (zwrot tylko w PIT-36 / PIT-37).`,
+          "info-child-refund",
+        );
+      }
+      if (f.refund > 0 && (f.capParts.other.estimated || f.capParts.spouse.estimated)) {
+        add(
+          "Składki od innych dochodów (i małżonka) w limicie zwrotu oszacowane jak dla etatu — możesz je wpisać w karcie „Rodzina”.",
+          "info-other-contrib",
+        );
+      }
+      if (family.married && f.used > Math.max(f.scaleTaxAttr, 0) + 0.004 && f.mode !== "joint") {
+        add(
+          "Ulga podzielona optymalnie: część odlicza małżonek od swojego podatku (art. 27f ust. 4 — dowolna proporcja).",
+          "info-child-share",
+        );
+      }
+      if (getActiveScenario() && TAX_CONSTANTS.PIT_SCALE_BANDS.length > 2) {
+        add(
+          "Projekt UD458: zmieniona skala (24% od 130 000 zł) zmienia podatek, od którego odlicza się ulgę na dzieci — a więc też jej odliczoną część i zwrot.",
+          "info-family-reform",
+        );
+      }
+    }
+    if (best.fourPlusExempt > 0) {
+      const multiRate = best.form === "ryczalt" && Object.keys(best.rates).length > 1;
+      if (multiRate || best.ipBoxCoeff > 0) {
+        add(
+          `Ulga 4+: zwolnienie ${formatPLN(best.fourPlusExempt)} podzielone proporcjonalnie ${
+            multiRate ? "między stawki ryczałtu" : "między dochód kwalifikowany IP BOX i pozostały"
+          } (założenie — wg MF decyduje kolejność uzyskania przychodów).`,
+          "info-four-plus-split",
+        );
+      }
+      if (best.form !== "ryczalt" && best.businessAfterCosts < 0) {
+        add(
+          "Ulga 4+: strata po zwolnieniu przychodu — kalkulator nie przenosi jej na kolejne lata (art. 9 ust. 3a pkt 4 lit. b na to pozwala).",
+          "info-four-plus",
+        );
+      }
+    }
+    return notes;
+  }
+
+  /* Oznaczenie „rodzina” przy wyniku: ulga na dzieci w wariancie, zmiana
+     względem sytuacji bez działalności, preferencje, ulga 4+. */
+  function getFamilyBadgeItems(evaluation) {
+    const items = [];
+    if (!evaluation) return items;
+    const { best, ctx } = evaluation;
+    const f = best.family;
+    if (f) {
+      const d = getFamilyDecomposition(evaluation);
+      const limitText = f.limitApplies
+        ? ` Limit (jedno dziecko): dochody ${formatPLN(f.limitIncome)} ${
+            f.eligible ? "≤" : ">"
+          } ${formatPLN(f.limit.amount)} → ${f.eligible ? "przysługuje" : "nie przysługuje"}.`
+        : "";
+      items.push({
+        text: `Ulga na dzieci: ${formatPLN(f.amount)}${
+          f.share < 1 ? ` (Twój udział ${formatPercentPL(f.share)})` : ""
+        }; odliczona od podatku wg skali ${formatPLN(f.used)}, zwrot ${formatPLN(
+          f.refund,
+        )}.${limitText}`,
+        topic: f.limitApplies ? "info-child-limit" : "info-child-relief",
+      });
+      items.push({
+        text: `Bez działalności: ulga i zwrot ${formatPLN(d.base.relief.benefit)} — ${
+          d.reliefDelta > 0
+            ? `działalność zabiera ${formatPLN(d.reliefDelta)}`
+            : d.reliefDelta < 0
+              ? `z działalnością o ${formatPLN(-d.reliefDelta)} więcej`
+              : "bez zmian"
+        }.`,
+        topic: "info-family-baseline",
+      });
+      if (d.loss !== 0) {
+        items.push({
+          text: `${getPreferenceLossLabel(d)}: ${formatSignedAmountPL(d.loss)}${NBSP}zł.`,
+          topic: d.mode0 === "joint" || d.modeV === "joint" ? "info-joint" : "info-single-parent",
+        });
+      }
+      if (d.modeV === "single") {
+        items.push({
+          text: `Samotny rodzic: podatek = 2 × podatek od połowy dochodu (${formatPLN(
+            f.userScaleBase,
+          )} : 2).`,
+          topic: "info-single-parent",
+        });
+      }
+    }
+    if (best.fourPlusExempt > 0) {
+      items.push({
+        text: `Ulga 4+: zwolniony przychód ${formatPLN(best.fourPlusExempt)} (koszty w całości; składka zdrowotna${
+          best.form === "ryczalt" ? " i jej próg" : ""
+        } bez zmian).`,
+        topic: "info-four-plus",
+      });
+    }
+    return ctx && items.length ? items : [];
+  }
+
+  function ensureRowFamily(container, id) {
+    let tip = container.querySelector(".row-family");
+    if (tip) return tip;
+    tip = document.createElement("span");
+    tip.className = "tip row-status row-family";
+    tip.dataset.tip = "";
+    tip.hidden = true;
+    const popId = `rowFamily-${id}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "row-note-btn row-status-btn row-family-btn";
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", popId);
+    button.setAttribute("aria-describedby", popId);
+    button.textContent = "rodzina";
+    button.setAttribute("aria-label", `Ulgi rodzinne: ${VARIANT_LABELS[id] || id} — szczegóły`);
+    const pop = document.createElement("span");
+    pop.className = "row-note-pop";
+    pop.id = popId;
+    pop.setAttribute("role", "tooltip");
+    tip.append(button, pop);
+    const note = container.querySelector(".row-note");
+    container.insertBefore(tip, note || null);
+    return tip;
+  }
+
+  function renderRowFamily(container, id, items) {
+    if (!container) return;
+    // bez danych rodziny nie tworzymy elementu (DOM jak przed kartą „Rodzina”)
+    let tip = container.querySelector(".row-family");
+    if (!items.length && !tip) return;
+    tip = ensureRowFamily(container, id);
+    const pop = tip.querySelector(".row-note-pop");
+    const signature = JSON.stringify(items);
+    if (tip.dataset.signature === signature) return;
+    tip.dataset.signature = signature;
+    if (!items.length && tipState.open === tip) closeTip(tip);
+    tip.hidden = !items.length;
+    pop.textContent = "";
+    if (!items.length) return;
+    const title = document.createElement("span");
+    title.className = "row-note-title";
+    title.textContent = "Ulgi rodzinne w tym wyniku:";
+    const list = document.createElement("span");
+    list.className = "row-note-list";
+    items.forEach((item) => {
+      const entry = document.createElement("span");
+      entry.className = "row-note-item";
+      entry.append(document.createTextNode(`${item.text} `));
+      const link = document.createElement("a");
+      link.className = "tip-more";
+      link.href = `#${item.topic}`;
+      link.dataset.infoTopic = item.topic;
+      link.textContent = `Więcej${NBSP}→`;
+      entry.appendChild(link);
+      list.appendChild(entry);
+    });
+    pop.append(title, list);
   }
 
   /* Wspólny przycisk „i” z dymkiem (uwagi) dla wiersza wyniku. */
@@ -2780,11 +4011,19 @@
     if (!evaluation) return null;
     const forecast = getForecastDependencies(evaluation, result);
     const change = getDraftChange(id, result);
+    const jointUnavailable =
+      JOINT_VARIANT_IDS.includes(id) && isJointUnavailable(result);
     const unavailable =
-      evaluation.best.form === "ryczalt" && isRyczaltUnavailable(result);
+      (evaluation.best.form === "ryczalt" && isRyczaltUnavailable(result)) ||
+      jointUnavailable;
     const draft = change && Math.abs(change.delta) > 0.004 ? change : null;
     if (!forecast.length && !draft && !unavailable) return null;
-    return { forecast, draft, unavailable };
+    return {
+      forecast,
+      draft,
+      unavailable,
+      ...(jointUnavailable ? { unavailableKind: "joint" } : {}),
+    };
   }
 
   function getRowStatusLabel(status) {
@@ -2799,7 +4038,13 @@
   function getRowStatusText(status) {
     if (!status) return "";
     const parts = [];
-    if (status.unavailable) parts.push("niedostępny wg projektu");
+    if (status.unavailable) {
+      parts.push(
+        status.unavailableKind === "joint"
+          ? "niedostępny (art. 6 ust. 8)"
+          : "niedostępny wg projektu",
+      );
+    }
     if (status.forecast.length) {
       parts.push(
         `prognoza: ${status.forecast
@@ -2819,7 +4064,7 @@
   }
 
   function ensureRowStatus(container, id) {
-    let tip = container.querySelector(".row-status");
+    let tip = container.querySelector(".row-status:not(.row-family)");
     if (tip) return tip;
     tip = document.createElement("span");
     tip.className = "tip row-status";
@@ -2885,11 +4130,15 @@
     const list = document.createElement("span");
     list.className = "row-note-list";
     if (status.unavailable) {
-      addItem(
-        list,
-        `${getRyczaltUnavailableReason(result)} Kwota orientacyjna.`,
-        "info-reform-ryczalt",
-      );
+      if (status.unavailableKind === "joint") {
+        addItem(list, `${JOINT_UNAVAILABLE_REASON} Kwota orientacyjna.`, "info-family-spouse");
+      } else {
+        addItem(
+          list,
+          `${getRyczaltUnavailableReason(result)} Kwota orientacyjna.`,
+          "info-reform-ryczalt",
+        );
+      }
     }
     if (status.draft) {
       addItem(
@@ -2912,7 +4161,9 @@
     title.className = "row-note-title";
     title.textContent = status.forecast.length
       ? "Wynik zależy od wartości nieostatecznych:"
-      : "Scenariusz projektu:";
+      : status.unavailableKind === "joint"
+        ? "Wariant niedostępny:"
+        : "Scenariusz projektu:";
     pop.append(title, list);
   }
 
@@ -2923,6 +4174,8 @@
   const VARIANT_BREAKDOWN_TITLES = {
     taxScale: "SKALA PODATKOWA",
     taxScaleIpBox: "SKALA PODATKOWA Z IP BOX",
+    taxScaleSingle: "SKALA PODATKOWA — SAMOTNY RODZIC",
+    taxScaleIpBoxSingle: "SKALA PODATKOWA Z IP BOX — SAMOTNY RODZIC",
     taxScaleJoint: "SKALA PODATKOWA WSPÓLNIE Z MAŁŻONKIEM",
     taxScaleIpBoxJoint: "SKALA PODATKOWA Z IP BOX WSPÓLNIE Z MAŁŻONKIEM",
     taxLinear: "PODATEK LINIOWY",
@@ -2942,7 +4195,7 @@
     } else {
       text = getRyczaltSingleVariantText(id, evaluation);
     }
-    text += getOtherIncomeSectionText(result.ctx);
+    text += getBaselineSectionText(result.ctx);
     return text.replace(/^\n+/, "");
   }
 
@@ -3017,6 +4270,11 @@
         meaningful ? getRowStatus(id, evaluation, result) : null,
         result,
       );
+      renderRowFamily(
+        labelHost,
+        id,
+        meaningful ? getFamilyBadgeItems(evaluation) : [],
+      );
       renderRowNote(
         labelHost,
         id,
@@ -3085,12 +4343,22 @@
       if (!evaluation) return;
       const total = evaluation.total;
       // tylko warianty wspólne mogą być ujemne (zob.
-      // calculateJointScalePitAttributed); inne ≤ 0 nie są realną opcją
-      if (total === 0) return;
-      if (total < 0 && !JOINT_VARIANT_IDS.includes(id)) return;
+      // calculateJointScalePitAttributed); inne ≤ 0 nie są realną opcją –
+      // z wyjątkiem trybu „Rodzina”: zwrot ulgi na dzieci możliwy dzięki
+      // działalności może przewyższyć jej koszty (wynik ≤ 0 jest realny)
+      const familyMode = !!(evaluation.best && evaluation.best.family);
+      if (total === 0 && !familyMode) return;
+      if (total < 0 && !familyMode && !JOINT_VARIANT_IDS.includes(id)) return;
       entries.push({ id, index, total, label: VARIANT_LABELS[id] || id });
     };
-    PIT_VARIANT_IDS.forEach((id, index) => add(id, index));
+    const jointUnavailable = isJointUnavailable(result);
+    PIT_VARIANT_IDS.forEach((id, index) => {
+      if (jointUnavailable && JOINT_VARIANT_IDS.includes(id)) return;
+      add(id, index);
+    });
+    if (jointUnavailable) {
+      excluded.push({ id: "joint", reason: JOINT_UNAVAILABLE_REASON });
+    }
     const rateIds = getCheckedRateIds();
     let allocation = null;
     if (rateIds.length && isRyczaltUnavailable(result)) {
@@ -3139,10 +4407,18 @@
     if (!container) return;
     const { inputs, variants } = result;
     const units = [];
+    const jointUnavailable = isJointUnavailable(result);
     PIT_VARIANT_IDS.forEach((id, index) => {
       if (!variants[id]) return;
       const row = getResultRow(id);
-      if (row) units.push({ rows: [row], value: variants[id].total, index });
+      const blocked = jointUnavailable && JOINT_VARIANT_IDS.includes(id);
+      if (row) {
+        units.push({
+          rows: [row],
+          value: blocked ? Infinity : variants[id].total,
+          index,
+        });
+      }
     });
     const rateIds = getCheckedRateIds();
     if (inputs.isMultipleRates) {
@@ -3260,8 +4536,11 @@
     if (best.total < 0) {
       const note = document.createElement("span");
       note.className = "best-card-note";
+      const bestEvaluation = result.variants[best.id];
       note.textContent =
-        "Kwota ujemna: wspólne rozliczenie obniża PIT małżonka bardziej, niż wynosi Twoje obciążenie (oszczędność gospodarstwa domowego).";
+        bestEvaluation && bestEvaluation.best.family
+          ? "Kwota ujemna: z działalnością obciążenie gospodarstwa (po uldze na dzieci i zwrocie) jest niższe niż bez niej — zob. „Pokaż wyliczenie”."
+          : "Kwota ujemna: wspólne rozliczenie obniża PIT małżonka bardziej, niż wynosi Twoje obciążenie (oszczędność gospodarstwa domowego).";
       DOM.bestCardSavings.appendChild(note);
     }
     if (/^ryczalt|^ratesTotal$/.test(best.id)) {
@@ -3473,7 +4752,7 @@
 
   function handleCalculate() {
     syncRyczaltRowVisibility();
-    if (!isJointTaxationEnabled()) {
+    if (!isSpouseIncomeNeeded()) {
       setRevealed(DOM.spouseIncomeCard, false);
       DOM.spouseIncomeInput.setAttribute("readonly", "");
       DOM.spouseIncomeInput.value = formatAmountPL(0);
@@ -3529,6 +4808,22 @@
     DOM.spouseIncomeInput.setAttribute("readonly", "");
     DOM.spouseIncomeInput.value = formatAmountPL(0);
     updateConditionalRowsVisibility();
+
+    // karta „Rodzina”: bez dzieci, bez ulgi 4+, status „inna”, zwinięta
+    if (DOM.childrenList) DOM.childrenList.textContent = "";
+    DOM.familyStatusRadios.forEach((radio) => {
+      radio.checked = radio.value === "other";
+    });
+    [DOM.spouseLinearIncome, DOM.spouseContrib, DOM.otherContrib, DOM.fourPlusUsed]
+      .filter(Boolean)
+      .forEach((input) => {
+        input.value = "";
+      });
+    if (DOM.familyShare) DOM.familyShare.value = "100";
+    if (DOM.spouseLinRycz) DOM.spouseLinRycz.checked = false;
+    if (DOM.fourPlus) DOM.fourPlus.checked = false;
+    setFamilyExpanded(false);
+    updateFamilyUi();
 
     DOM.multipleRatesToggle.checked = false;
     document.querySelector(".multiple-rates-revenue-info").style.display =
@@ -3660,17 +4955,22 @@
   DOM.jointTaxationRadios.forEach((radio) => {
     radio.addEventListener("change", (e) => {
       DOM.spouseIncomeCard.classList.remove("shake");
+      // pole już widoczne (status „małżeństwo” z dziećmi) – bez czyszczenia
+      const alreadyRevealed =
+        DOM.spouseIncomeCard.classList.contains("is-revealed");
       if (e.target.value === "yes") {
         setRevealed(DOM.spouseIncomeCard, true);
         DOM.spouseIncomeInput.removeAttribute("readonly");
-        DOM.spouseIncomeInput.value = "";
-        DOM.spouseIncomeInput.placeholder = "0,00";
+        if (!alreadyRevealed) {
+          DOM.spouseIncomeInput.value = "";
+          DOM.spouseIncomeInput.placeholder = "0,00";
+        }
         DOM.spouseIncomeCard.classList.add("shake");
         setTimeout(() => {
           DOM.spouseIncomeCard.classList.remove("shake");
         }, 500);
         DOM.spouseIncomeInput.focus();
-      } else {
+      } else if (!isSpouseIncomeNeeded()) {
         setRevealed(DOM.spouseIncomeCard, false);
         DOM.spouseIncomeInput.setAttribute("readonly", "");
         DOM.spouseIncomeInput.value = formatAmountPL(0);
@@ -3682,10 +4982,10 @@
   });
 
   DOM.spouseIncomeInput.addEventListener("input", () => {
-    if (isJointTaxationEnabled()) calculate(DOM.spouseIncomeInput);
+    if (isSpouseIncomeNeeded()) calculate(DOM.spouseIncomeInput);
   });
   DOM.spouseIncomeInput.addEventListener("blur", () => {
-    if (isJointTaxationEnabled()) {
+    if (isSpouseIncomeNeeded()) {
       formatAmountField(DOM.spouseIncomeInput);
       calculate();
     }
@@ -3775,6 +5075,57 @@
 
   if (DOM.resetBtn) {
     DOM.resetBtn.addEventListener("click", resetAll);
+  }
+
+  /* Karta „Rodzina” */
+  if (DOM.familyToggle) {
+    DOM.familyToggle.addEventListener("click", () => {
+      setFamilyExpanded(!isFamilyExpanded());
+      // zwinięcie zmienia zbiór aktywnych pól (walidacja)
+      calculate();
+    });
+  }
+  DOM.familyStatusRadios.forEach((radio) => {
+    radio.addEventListener("change", calculate);
+  });
+  if (DOM.addChildBtn) {
+    DOM.addChildBtn.addEventListener("click", () => {
+      const row = addChild();
+      calculate();
+      if (row) row.querySelector("select").focus();
+    });
+  }
+  if (DOM.spouseLinRycz) {
+    DOM.spouseLinRycz.addEventListener("change", calculate);
+  }
+  if (DOM.fourPlus) {
+    DOM.fourPlus.addEventListener("change", calculate);
+  }
+  if (DOM.familyShare) {
+    DOM.familyShare.addEventListener("input", (e) => calculate(e.target));
+    DOM.familyShare.addEventListener("blur", () => calculate());
+  }
+  [DOM.spouseLinearIncome, DOM.spouseContrib, DOM.otherContrib, DOM.fourPlusUsed]
+    .filter(Boolean)
+    .forEach((input) => {
+      input.addEventListener("focus", selectInputValue);
+      input.addEventListener("input", () => calculate(input));
+      input.addEventListener("blur", () => {
+        formatAmountField(input);
+        calculate();
+      });
+    });
+  if (DOM.familySpouseJump) {
+    DOM.familySpouseJump.addEventListener("click", () => {
+      const target = DOM.spouseIncomeInput;
+      if (target.scrollIntoView) {
+        target.scrollIntoView({
+          block: "center",
+          behavior: prefersReducedMotion() ? "auto" : "smooth",
+        });
+      }
+      target.focus({ preventScroll: true });
+    });
   }
 
   /* breakdown details: render content the moment the user opens it */
@@ -4368,6 +5719,14 @@
     return text;
   }
 
+  /* Punkt odniesienia wyniku: sekcja „Rodzina” (gdy są dzieci) albo
+     „Inne dochody”. */
+  function getBaselineSectionText(ctx) {
+    return ctx.baseline.family
+      ? getFamilyBaselineSectionText(ctx)
+      : getOtherIncomeSectionText(ctx);
+  }
+
   /* ---------- Inne dochody: PIT „bez działalności” ---------- */
   function getOtherIncomeSectionText(ctx) {
     if (ctx.otherIncome <= 0) return "";
@@ -4539,11 +5898,15 @@
     if (ctx.social > 0 || ctx.fpfs > 0) {
       text += `  (podstawa nie zależy od sposobu odliczenia składek społecznych)\n`;
     }
+    if (ctx.fourPlusExempt > 0) {
+      text += `  (zwolnienie przychodu z ulgi dla rodzin 4+ nie obniża podstawy — art. 81 ust. 2zd pkt 2 u.ś.o.z.)\n`;
+    }
     return text;
   }
 
   function getTotalSummaryText(evaluation) {
     const { ctx, best } = evaluation;
+    if (best.family) return getFamilyTotalSummaryText(evaluation);
     let text = "";
     let taxesAttributed = best.taxes;
     if (ctx.baseline.total > 0) {
@@ -4593,6 +5956,11 @@
 
   function getBusinessAfterCostsLine(option, ctx, indent) {
     const parts = [formatNumberPL(ctx.income)];
+    let text = "";
+    if (option.fourPlusExempt > 0) {
+      text += getFourPlusExemptionLine(option, ctx, indent);
+      parts.push(`${formatNumberPL(option.fourPlusExempt)} (przychód zwolniony — ulga 4+)`);
+    }
     if (ctx.fpfs > 0) parts.push(`${formatNumberPL(ctx.fpfs)} (FP/FS w kosztach)`);
     if (option.socialInCosts > 0) {
       parts.push(`${formatNumberPL(option.socialInCosts)} (składki społeczne w kosztach)`);
@@ -4600,9 +5968,305 @@
     if (parts.length === 1) {
       return `${indent}Dochód z działalności: ${formatNumberPL(option.businessAfterCosts)}\n`;
     }
-    return `${indent}Dochód z działalności po kosztach ZUS: ${parts.join(
-      " − ",
-    )} = ${formatNumberPL(option.businessAfterCosts)}\n`;
+    return `${text}${indent}Dochód z działalności ${
+      option.fourPlusExempt > 0 ? "do opodatkowania" : "po kosztach ZUS"
+    }: ${parts.join(" − ")} = ${formatNumberPL(option.businessAfterCosts)}\n`;
+  }
+
+  /* Ulga dla rodzin 4+ – wyliczenie zwolnionego przychodu. */
+  function getFourPlusExemptionLine(option, ctx, indent) {
+    const family = ctx.family;
+    const limit = TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT;
+    let text = `${indent}Ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153 lit. c i ust. 44 ustawy o PIT):\n`;
+    text += `${indent}  Limit ${formatNumberPL(limit)}${
+      family.fourPlusUsed > 0
+        ? ` − wykorzystany na innych przychodach ${formatNumberPL(family.fourPlusUsed)} = ${formatNumberPL(
+            family.fourPlusAvailable,
+          )}`
+        : ""
+    }\n`;
+    text += `${indent}  Przychód zwolniony: min(${formatNumberPL(
+      family.fourPlusAvailable,
+    )}; przychód ${formatNumberPL(ctx.revenue)}) = ${formatNumberPL(
+      option.fourPlusExempt,
+    )} (zwolnienie od początku roku; koszty odliczane w całości — art. 22 ust. 3a, art. 23 ust. 10${
+      option.form === "ryczalt" ? "" : "; strata nie jest przenoszona w kalkulatorze"
+    })\n`;
+    return text;
+  }
+
+  /* ---------- Rodzina: ulga na dzieci, preferencje, punkt odniesienia ---------- */
+  function formatChildrenList(children) {
+    return children
+      .map((child, index) => {
+        const tags = [];
+        if (child.disabled) tags.push("orzeczenie");
+        if (child.adult) tags.push("pełnoletnie uczące się");
+        return `${index + 1}) ${child.months} mies.${tags.length ? ` (${tags.join(", ")})` : ""}`;
+      })
+      .join("; ");
+  }
+
+  /* Kwota ulgi rodziny miesiąc po miesiącu (art. 27f ust. 2). */
+  function getChildReliefAmountLines(family, indent) {
+    const relief = family.relief;
+    let text = `${indent}Ulga na dzieci rodziny (art. 27f ust. 2 ustawy o PIT; kwota za każdy miesiąc, stawka wg liczby dzieci w miesiącu):\n`;
+    text += `${indent}  Dzieci: ${formatChildrenList(family.children)}\n`;
+    relief.groups.forEach((group) => {
+      text += `${indent}  ${group.months} mies. × ${group.count} ${
+        group.count === 1 ? "dziecko" : "dzieci"
+      } (${group.rates.map((rate) => formatAmountPL(rate)).join(" + ")} = ${formatNumberPL(
+        group.monthly,
+      )}/mies.) = ${formatNumberPL(group.amount)}\n`;
+    });
+    text += `${indent}  Kwota ulgi rodziny: ${formatNumberPL(relief.total)}\n`;
+    if (family.children.length > 1 && family.children.some((child) => child.months < 12)) {
+      text += `${indent}  (założenie: okresy dzieci nakładają się maksymalnie — dziecko z m miesiącami uprawnione w ostatnich m miesiącach roku)\n`;
+    }
+    return text;
+  }
+
+  function getChildReliefLimitLines(f, family, indent) {
+    if (!f.limitApplies) {
+      return `${indent}Limit dochodu: nie dotyczy (${
+        family.relief.maxCount >= 2
+          ? "co najmniej dwoje dzieci choćby przez jeden dzień — art. 27f ust. 2b"
+          : "jedyne dziecko z orzeczeniem o niepełnosprawności — art. 27f ust. 2e"
+      })\n`;
+    }
+    const limitRule = {
+      married: "art. 27f ust. 2 pkt 1 lit. a — dochody małżonków łącznie",
+      single: "art. 27f ust. 2 pkt 1 lit. b in fine — samotnie wychowujący",
+      singleCautious:
+        "samotny rodzic na liniowym / ryczałcie: ostrożnie 56 000 zł (MF — brak prawa do rozliczenia jako samotny rodzic); literalnie 112 000 zł",
+      other: "art. 27f ust. 2 pkt 1 lit. b",
+    }[f.limit.key];
+    let text = `${indent}Limit dochodu przy jednym dziecku (${limitRule}; ust. 2a: dochody ze skali, z art. 30b i 30c po składkach; ryczałt i dochód kwalifikowany IP BOX poza limitem):\n`;
+    text += `${indent}  ${f.limitParts
+      .map((part) => `${part.label} ${formatNumberPL(Math.max(part.amount, 0))}`)
+      .join(" + ")} = ${formatNumberPL(f.limitIncome)}\n`;
+    text += `${indent}  ${formatNumberPL(f.limitIncome)} ${f.eligible ? "≤" : ">"} ${formatNumberPL(
+      f.limit.amount,
+    )} → ${f.eligible ? "ulga przysługuje" : "ulga NIE przysługuje (limit zero-jedynkowy)"}\n`;
+    return text;
+  }
+
+  /* Ulga i zwrot w jednym wariancie (albo w sytuacji bez działalności). */
+  function getChildReliefUseLines(f, family, indent) {
+    let text = getChildReliefLimitLines(f, family, indent);
+    if (!family.married && f.share < 1) {
+      text += `${indent}Twój udział w uldze (art. 27f ust. 4): ${formatNumberPL(
+        f.familyAmount,
+      )} × ${formatPercentPL(f.share)} = ${formatNumberPL(f.amount)}\n`;
+    } else if (family.married) {
+      text += `${indent}Podział między małżonków: optymalny (art. 27f ust. 4 — dowolna proporcja; liczone dla gospodarstwa)\n`;
+    }
+    text += `${indent}Ulga do wykorzystania: ${formatNumberPL(f.amount)}\n`;
+    let absorbText;
+    if (f.mode === "joint") {
+      absorbText = `PIT wspólny pary ${formatNumberPL(f.householdScaleTax)}`;
+    } else if (family.married) {
+      absorbText = `podatnik ${formatNumberPL(f.scaleTaxAttr)} + małżonek (osobno) ${formatNumberPL(
+        f.spouseSolo,
+      )} = ${formatNumberPL(f.absorb)}`;
+    } else {
+      absorbText = formatNumberPL(f.absorb);
+    }
+    text += `${indent}Podatek wg skali, od którego odlicza się ulgę (art. 27 — nie od podatku liniowego, ryczałtu, 5% IP BOX ani daniny): ${absorbText}\n`;
+    text += `${indent}Odliczono od podatku (art. 27f ust. 1): min(${formatNumberPL(
+      f.amount,
+    )}; ${formatNumberPL(Math.max(f.absorb, 0))}) = ${formatNumberPL(f.used)}\n`;
+    if (f.unused > 0) {
+      text += `${indent}Niewykorzystana ulga: ${formatNumberPL(f.amount)} − ${formatNumberPL(
+        f.used,
+      )} = ${formatNumberPL(f.unused)}\n`;
+      if (!f.hasScaleReturn) {
+        text += `${indent}Zwrot (art. 27f ust. 8): nie przysługuje — brak zeznania PIT-36/PIT-37 z dochodem ze skali${
+          family.married ? " (podatnika ani małżonka)" : ""
+        }; niewykorzystana ulga przepada\n`;
+      } else {
+        const c = f.capParts;
+        const capItems = [];
+        if (c.social > 0 || f.kind === "scale") {
+          capItems.push(`składki społeczne z działalności (art. 26) ${formatNumberPL(c.social)}`);
+        }
+        if (f.kind === "scale") {
+          capItems.push(`zdrowotna z działalności ${formatNumberPL(c.health)}`);
+        }
+        capItems.push(
+          `składki od innych dochodów ${formatNumberPL(c.other.amount)}${
+            c.other.estimated ? " (szacunek jak dla etatu)" : " (podane)"
+          }`,
+        );
+        if (family.married) {
+          capItems.push(
+            `składki małżonka ${formatNumberPL(c.spouse.amount)}${
+              c.spouse.estimated ? " (szacunek)" : " (podane)"
+            } (ust. 10)`,
+          );
+        }
+        text += `${indent}Limit zwrotu (art. 27f ust. 9${family.married ? "–10" : ""}): ${capItems.join(
+          " + ",
+        )} = ${formatNumberPL(f.cap)}\n`;
+        if (c.notes.length) text += `${indent}  (${c.notes.join("; ")})\n`;
+        text += `${indent}Zwrot niewykorzystanej ulgi (art. 27f ust. 8): min(${formatNumberPL(
+          f.unused,
+        )}; ${formatNumberPL(f.cap)}) = ${formatNumberPL(f.refund)}${
+          f.lostUnused > 0 ? ` (przepada ${formatNumberPL(f.lostUnused)})` : ""
+        }\n`;
+      }
+    }
+    text += `${indent}Ulga odliczona + zwrot: ${formatNumberPL(f.used)} + ${formatNumberPL(
+      f.refund,
+    )} = ${formatNumberPL(f.benefit)}\n`;
+    return text;
+  }
+
+  /* Uwaga pod podatkiem od innych dochodów przy liniowym / ryczałcie:
+     utrata preferencji samotnego rodzica / wspólnego rozliczenia. */
+  function getLostPreferenceNote(evaluation, indent) {
+    const { best } = evaluation;
+    if (!best.family) return "";
+    const d = getFamilyDecomposition(evaluation);
+    if (d.loss === 0) return "";
+    return `${indent}(bez preferencji — art. 6 ust. 8: przy ${
+      best.form === "linear" ? "podatku liniowym" : "ryczałcie"
+    } ${d.mode0 === "single" ? "samotny rodzic nie rozlicza się 2 × od połowy dochodu" : "nie ma rozliczenia wspólnego z małżonkiem"})\n`;
+  }
+
+  /* Sekcja ulgi na dzieci w wyliczeniu wariantu. */
+  function getFamilyReliefText(evaluation) {
+    const { best, ctx } = evaluation;
+    const f = best.family;
+    if (!f) return "";
+    const family = ctx.family;
+    const d = getFamilyDecomposition(evaluation);
+    let text = `\n  Ulga na dzieci w tym wariancie (${FAMILY_STATUS_LABELS[family.status]}):\n`;
+    text += `    Kwota ulgi rodziny: ${formatNumberPL(family.relief.total)} (wyliczenie w sekcji „Rodzina: sytuacja bez działalności”)\n`;
+    text += getChildReliefUseLines(f, family, "    ");
+    text += `    Bez działalności: ulga odliczona + zwrot ${formatNumberPL(
+      d.base.relief.benefit,
+    )} → ${
+      d.reliefDelta > 0
+        ? `utrata ulgi na dzieci przez działalność: ${formatNumberPL(d.base.relief.benefit)} − ${formatNumberPL(
+            f.benefit,
+          )} = ${formatNumberPL(d.reliefDelta)}`
+        : d.reliefDelta < 0
+          ? `z działalnością ulga większa o ${formatNumberPL(-d.reliefDelta)}`
+          : "bez zmian"
+    }\n`;
+    if (d.loss !== 0) {
+      const modeHyp = FAMILY_MODE_LABELS[d.mode0];
+      text += `\n  ${getPreferenceLossLabel(d)} (${
+        d.forced ? "art. 6 ust. 8 — liniowy / ryczałt wyklucza preferencję" : "wybór wariantu"
+      }):\n`;
+      text += `    podatek wg skali w tym wariancie (${FAMILY_MODE_LABELS[d.modeV]}) ${formatNumberPL(
+        f.scaleTaxAttr,
+      )} − gdyby ${modeHyp} ${formatNumberPL(d.hypothetical)} = ${formatSignedAmountPL(d.loss)} zł\n`;
+    }
+    return text;
+  }
+
+  /* RAZEM w trybie „Rodzina”: podatki po uldze minus sytuacja bez
+     działalności (H0). */
+  function getFamilyTotalSummaryText(evaluation) {
+    const { ctx, best } = evaluation;
+    const family = ctx.family;
+    const attributed = taxMath.round2(best.taxes - ctx.baseline.total);
+    let text = `\n  Podatki z działalnością po uldze na dzieci i zwrocie: ${formatNumberPL(
+      best.taxesBeforeFamily,
+    )} − ${formatNumberPL(best.family.benefit)} = ${formatNumberPL(best.taxes)}\n`;
+    text += `  − to samo bez działalności (punkt odniesienia, ${FAMILY_MODE_LABELS[
+      ctx.baseline.family.mode
+    ]}): ${formatNumberPL(ctx.baseline.total)}\n`;
+    text += `  = podatki przypisane działalności: ${formatNumberPL(attributed)}\n`;
+    if (family.married) {
+      text += `  (PIT małżonka liczony samodzielnie, ${formatNumberPL(
+        best.family.spouseSolo,
+      )}, odjęty po obu stronach)\n`;
+    }
+    const parts = [attributed, best.health];
+    let label = "PIT + składka zdrowotna";
+    if (ctx.zusEnabled) {
+      parts.push(ctx.socialTotal);
+      label += " + składki społeczne ZUS";
+    }
+    label += "; obciążenie przypisane działalności";
+    text += `\nRAZEM (${label}):\n  ${parts
+      .map((part) => formatNumberPL(part))
+      .join(" + ")} = ${formatNumberPL(evaluation.total)}\n`;
+    return text;
+  }
+
+  /* Sekcja „Rodzina: sytuacja bez działalności” – punkt odniesienia H0
+     (zastępuje sekcję „Inne dochody”, gdy są dzieci). */
+  function getFamilyBaselineSectionText(ctx) {
+    const family = ctx.family;
+    const baseline = ctx.baseline;
+    const H0 = baseline.family;
+    let text = `\n--- RODZINA: SYTUACJA BEZ DZIAŁALNOŚCI (PUNKT ODNIESIENIA) ---\n\n`;
+    text += `Status: ${FAMILY_STATUS_LABELS[family.status]}${
+      isJointTaxationEnabled() && family.statusSelected !== "married"
+        ? " (przyjęty — rozliczenie wspólne)"
+        : ""
+    }\n`;
+    text += `Inne dochody opodatkowane skalą (podatnik): ${formatNumberPL(ctx.otherIncome)}\n`;
+    if (family.married) {
+      text += `Dochód małżonka opodatkowany skalą: ${formatNumberPL(family.spouseScaleIncome)}${
+        family.spouseLinRycz
+          ? `; małżonek stosuje liniowy / ryczałt (dochód liniowy / z art. 30b do limitu: ${formatNumberPL(
+              family.spouseLinearIncome,
+            )}) — rozliczenie wspólne niedostępne`
+          : ""
+      }\n`;
+    }
+    text += getChildReliefAmountLines(family, "");
+    text += `\nPorównane sposoby rozliczenia bez działalności (wybrany najkorzystniejszy dostępny):\n`;
+    H0.candidates.forEach((candidate) => {
+      const chosen = candidate.mode === H0.mode;
+      text += `  ${chosen ? "[x]" : "[ ]"} ${FAMILY_MODE_LABELS[candidate.mode]}: podatek ${formatNumberPL(
+        candidate.scaleTaxAttr,
+      )} − ulga i zwrot ${formatNumberPL(candidate.relief.benefit)} = ${formatNumberPL(candidate.net)}${
+        chosen ? "  ← punkt odniesienia" : ""
+      }\n`;
+    });
+    if (family.married && !family.jointAllowed) {
+      text += `  (rozliczenie wspólne ${
+        family.spouseLinRycz ? "niedostępne — małżonek na liniowym / ryczałcie" : "nieuwzględnione — wyłączone w karcie „Opcje”"
+      })\n`;
+    }
+    text += `\nWybrany sposób (${FAMILY_MODE_LABELS[H0.mode]}):\n`;
+    const detailsBase =
+      H0.mode === "single" ? getSingleParentHalf(ctx.otherIncome) : null;
+    if (H0.mode === "joint") {
+      text += getJointPitAttributionBreakdown(
+        ctx.otherIncome,
+        family.spouseScaleIncome,
+        "Łączny dochód (inne dochody podatnika + dochód małżonka)",
+      ).text;
+    } else if (detailsBase !== null) {
+      text += `  Połowa dochodu: ${formatNumberPL(ctx.otherIncome)} : 2 = ${formatNumberPL(detailsBase)}\n`;
+      text += getScalePitBracketLines(getScalePitDetails(detailsBase), "  ");
+      text += `  Podatek: 2 × ${formatNumberPL(calculateScalePitOnly(detailsBase))} = ${formatNumberPL(
+        H0.relief.scaleTaxAttr,
+      )}\n`;
+    } else {
+      text += getScalePitBracketLines(getScalePitDetails(ctx.otherIncome), "  ");
+    }
+    text += `  Podatek wg skali przypisany podatnikowi: ${formatNumberPL(baseline.pit)}\n`;
+    text += getChildReliefUseLines(H0.relief, family, "  ");
+    if (baseline.levy > 0) {
+      text += `  Danina solidarnościowa od innych dochodów: ${formatNumberPL(baseline.levy)}\n`;
+    }
+    text += `Punkt odniesienia (bez działalności): ${formatNumberPL(baseline.pit)} − ${formatNumberPL(
+      H0.relief.benefit,
+    )}${baseline.levy > 0 ? ` + ${formatNumberPL(baseline.levy)}` : ""} = ${formatNumberPL(
+      baseline.total,
+    )}\n`;
+    text += `(wynik wariantu = obciążenie z działalnością − obciążenie bez działalności; ulga na dzieci i preferencje liczone po obu stronach, więc wynik pokazuje także ich utratę przez formę opodatkowania${
+      family.married ? "; PIT małżonka liczony samodzielnie odjęty po obu stronach" : ""
+    })\n`;
+    return text;
   }
 
   /* ---------- Skala (indywidualnie / wspólnie / IP BOX) ---------- */
@@ -4664,6 +6328,18 @@
       );
       text += attribution.text;
       pitLabel = "PIT przypisany podatnikowi";
+    } else if (best.single) {
+      const half = getSingleParentHalf(best.pitBase);
+      const halfDetails = getScalePitDetails(half);
+      text += `  Samotny rodzic (art. 6 ust. 4c–4d ustawy o PIT): podatek = 2 × podatek od połowy dochodu${
+        hasIpBox ? " (bez dochodu kwalifikowanego IP BOX)" : ""
+      }\n`;
+      text += `    Połowa podstawy: ${formatNumberPL(best.pitBase)} : 2 = ${formatNumberPL(half)}\n`;
+      text += getScalePitBracketLines(halfDetails, "    ");
+      text += `    Podatek od połowy × 2: ${formatNumberPL(halfDetails.totalPit)} × 2 = ${formatNumberPL(
+        best.pit,
+      )}\n`;
+      pitLabel = "Podatek wg skali (samotny rodzic)";
     } else {
       text += getScalePitBracketLines(getScalePitDetails(best.pitBase), "  ");
       pitLabel = "Podatek wg skali";
@@ -4691,6 +6367,7 @@
     if (best.joint && getSolidarityLevyDetails(best.spouseIncome).levy > 0) {
       text += `  (danina małżonka nie jest wliczana — zapłaciłby ją także przy rozliczeniu indywidualnym)\n`;
     }
+    text += getFamilyReliefText(evaluation);
     text += getTotalSummaryText(evaluation);
     return text;
   }
@@ -4759,6 +6436,7 @@
       }\n`;
       text += getScalePitBracketLines(getScalePitDetails(best.scaleBase), "    ");
       text += `    PIT wg skali: ${formatNumberPL(best.scalePit)}\n`;
+      text += getLostPreferenceNote(evaluation, "    ");
     }
 
     const levyDetails = getSolidarityLevyDetails(best.levyBase);
@@ -4783,6 +6461,7 @@
         ? `${taxParts.map((part) => formatNumberPL(part)).join(" + ")} = `
         : ""
     }${formatNumberPL(best.taxes)}\n`;
+    text += getFamilyReliefText(evaluation);
     text += getTotalSummaryText(evaluation);
     return text;
   }
@@ -4834,6 +6513,9 @@
     text += `  Odliczenie od przychodu (50%, art. 11 ust. 1a ustawy o ryczałcie): ${formatNumberPL(
       best.healthDeduction,
     )}\n`;
+    if (best.fourPlusExempt > 0) {
+      text += `  (próg liczony od przychodu łącznie z przychodem zwolnionym — ulga 4+ nie zmienia składki zdrowotnej, art. 81 ust. 2zd pkt 2 u.ś.o.z.)\n`;
+    }
     return text;
   }
 
@@ -4870,7 +6552,9 @@
             )} / ${formatNumberPL(rate.rateRevenue)} = ${formatNumberPL(part.deduction)}\n`;
     });
     high.parts.forEach((part) => {
-      text += `${indent}  Część ${part.label}${part.high ? " (nadwyżka)" : ""}: (${formatNumberPL(
+      text += `${indent}  Część ${part.label}${part.high ? " (nadwyżka)" : ""}${
+        part.exempt > 0 ? ` (po zwolnieniu 4+ ${formatNumberPL(part.exempt)})` : ""
+      }: (${formatNumberPL(
         part.revenue,
       )} − ${formatNumberPL(part.deduction)}) × ${formatPercentPL(part.rate)} = ${formatNumberPL(
         part.tax,
@@ -4885,34 +6569,48 @@
   function getRyczaltRateLines(rateId, rate, indent) {
     if (rate.high) return getRyczaltHighRateLines(rateId, rate, indent);
     const label = RYCZALT_RATE_LABELS[rateId];
-    const base = Math.max(taxMath.round2(rate.rateRevenue - rate.deduction), 0);
+    // ulga 4+: przychód opodatkowany = przychód − przychód zwolniony
+    const exempt = rate.exempt || 0;
+    const taxable = exempt > 0 ? taxMath.round2(rate.rateRevenue - exempt) : rate.rateRevenue;
+    let exemptLine = "";
+    if (exempt > 0) {
+      exemptLine = `${indent}Przychód opodatkowany: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+        exempt,
+      )} (zwolniony — ulga 4+) = ${formatNumberPL(taxable)}\n`;
+    }
+    const base = Math.max(taxMath.round2(taxable - rate.deduction), 0);
     if (rateId !== "ryczalt8_5_12_5") {
       const baseLine =
-        rate.deduction > rate.rateRevenue
-          ? `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+        rate.deduction > taxable
+          ? `${indent}Podstawa: ${formatNumberPL(taxable)} − ${formatNumberPL(
               rate.deduction,
             )} < 0 → ${formatNumberPL(base)}\n`
-          : `${indent}Podstawa: ${formatNumberPL(rate.rateRevenue)} − ${formatNumberPL(
+          : `${indent}Podstawa: ${formatNumberPL(taxable)} − ${formatNumberPL(
               rate.deduction,
             )} = ${formatNumberPL(base)}\n`;
-      return `${baseLine}${indent}Ryczałt: ${formatNumberPL(
+      return `${exemptLine}${baseLine}${indent}Ryczałt: ${formatNumberPL(
         base,
       )} × ${label} = ${formatNumberPL(rate.tax)}\n`;
     }
-    const details = getRyczalt85125Details(rate.rateRevenue, rate.deduction);
-    let text = `${indent}Próg dla stawki 8,5% (art. 12 ust. 1 pkt 4): ${formatNumberPL(
+    const details = getRyczalt85125Details(rate.rateRevenue, rate.deduction, exempt);
+    let text = `${exemptLine}${indent}Próg dla stawki 8,5% (art. 12 ust. 1 pkt 4): ${formatNumberPL(
       details.threshold,
     )}\n`;
-    if (rate.rateRevenue <= details.threshold) {
-      text += `${indent}Cały przychód mieści się w progu 8,5%: (${formatNumberPL(
-        rate.rateRevenue,
+    if (exempt > 0) {
+      text += `${indent}Zwolnienie 4+ obejmuje przychód od początku roku: najpierw część do progu (8,5%) ${formatNumberPL(
+        details.exempt85,
+      )}${details.exempt125 > 0 ? `, potem część 12,5% ${formatNumberPL(details.exempt125)}` : ""} (założenie)\n`;
+    }
+    if (details.revenue125 <= 0) {
+      text += `${indent}Cały przychód ${exempt > 0 ? "opodatkowany " : ""}mieści się w progu 8,5%: (${formatNumberPL(
+        details.revenue85,
       )} − ${formatNumberPL(rate.deduction)}) × 8,5% = ${formatNumberPL(details.tax)}\n`;
       return text;
     }
     text += `${indent}Odliczenie dzielone proporcjonalnie do przychodu w każdej stawce (art. 11 ust. 3):\n`;
     text += `${indent}  - na część 8,5%: ${formatNumberPL(rate.deduction)} × ${formatNumberPL(
       details.revenue85,
-    )} / ${formatNumberPL(rate.rateRevenue)} = ${formatNumberPL(details.deduction85)}\n`;
+    )} / ${formatNumberPL(taxable)} = ${formatNumberPL(details.deduction85)}\n`;
     text += `${indent}  - na część 12,5%: ${formatNumberPL(rate.deduction)} − ${formatNumberPL(
       details.deduction85,
     )} = ${formatNumberPL(details.deduction125)}\n`;
@@ -4938,12 +6636,16 @@
     // 50% zdrowotnej ponad przychód nie da się odliczyć gdzie indziej
     // (art. 11 ust. 1a dotyczy tylko przychodu ryczałtowego; brak
     // odpowiednika w art. 26 ustawy o PIT)
+    const coverRevenue =
+      best.taxableRevenue !== undefined ? best.taxableRevenue : best.revenueTotal;
     const unusedHealth = taxMath.round2(
-      Math.max(best.healthDeduction - Math.max(best.revenueTotal, 0), 0),
+      Math.max(best.healthDeduction - Math.max(coverRevenue, 0), 0),
     );
     if (unusedHealth > 0) {
-      text += `${indent}  (przychód ${formatNumberPL(
-        best.revenueTotal,
+      text += `${indent}  (przychód${
+        best.taxableRevenue !== undefined ? " opodatkowany (po zwolnieniu 4+)" : ""
+      } ${formatNumberPL(
+        coverRevenue,
       )} pokrywa tylko część tego odliczenia; nieodliczone ${formatNumberPL(
         unusedHealth,
       )} przepada — art. 11 ust. 1a pozwala pomniejszyć wyłącznie przychód ryczałtowy, nie można tego przenieść na dochód ze skali)\n`;
@@ -4958,7 +6660,7 @@
       )}${
         capped
           ? ` (do wysokości przychodu pomniejszonego o 50% zdrowotnej: ${formatNumberPL(
-              best.revenueTotal,
+              coverRevenue,
             )} − ${formatNumberPL(best.healthDeduction)})`
           : ""
       }\n`;
@@ -5011,6 +6713,7 @@
     }\n`;
     text += getScalePitBracketLines(getScalePitDetails(best.scaleBase), `${indent}  `);
     text += `${indent}  PIT wg skali: ${formatNumberPL(best.scalePit)}\n`;
+    text += getLostPreferenceNote(evaluation, `${indent}  `);
     if (best.levy > 0) {
       text += getLevyLine(
         getSolidarityLevyDetails(best.scaleBase),
@@ -5079,6 +6782,7 @@
     text += getRyczaltRateLines(rateId, rate, "  ");
     text += getRyczaltOtherIncomeLines(evaluation, "  ");
     text += getRyczaltTaxSumLine(evaluation, "  ");
+    text += getFamilyReliefText(evaluation);
     text += getTotalSummaryText(evaluation);
     return text;
   }
@@ -5135,6 +6839,7 @@
     text += `\n  Suma ryczałtu: ${formatNumberPL(best.ryczaltTax)}\n`;
     text += getRyczaltOtherIncomeLines(evaluation, "  ");
     text += getRyczaltTaxSumLine(evaluation, "  ");
+    text += getFamilyReliefText(evaluation);
     text += getTotalSummaryText(evaluation);
     return text;
   }
@@ -5197,6 +6902,7 @@
         ? `tak — udział dochodu kwalifikowanego ${formatPercentPL(inputs.ipBoxCoeff)}`
         : "nie"
     }\n`;
+    text += getFamilyInputsText(inputs, ctx);
     const rateIds = getCheckedRateIds();
     if (!rateIds.length) {
       text += `Ryczałt: nie wybrano stawek\n`;
@@ -5248,6 +6954,52 @@
       text += `Data urodzenia / płeć: ${
         zus.birthDate ? formatDatePL(taxMath.parseISODate(zus.birthDate)) : "brak"
       } / ${zus.sex === "K" ? "kobieta" : zus.sex === "M" ? "mężczyzna" : "brak"}\n`;
+    }
+    return text;
+  }
+
+  /* Dane karty „Rodzina” w eksporcie (tylko gdy użyte – bez dzieci, bez
+     ulgi 4+ i bez zaznaczenia małżonka na liniowym eksport jest jak dawniej). */
+  function getFamilyInputsText(inputs, ctx) {
+    const family = inputs.family;
+    if (!family && !inputs.spouseLinRycz) return "";
+    let text = "";
+    const status = family ? family.status : getEffectiveFamilyStatus();
+    text += `Rodzina — status: ${FAMILY_STATUS_LABELS[status]}\n`;
+    if (family && family.hasChildren) {
+      text += `Dzieci (ulga na dzieci): ${family.children.length} — miesiące z prawem do ulgi: ${formatChildrenList(
+        family.children,
+      )}\n`;
+      if (status === "other") {
+        text += `Udział podatnika w uldze: ${formatPercentPL(family.share)}\n`;
+      }
+      const other = getOtherIncomeContributions(family, ctx.otherIncome);
+      text += `Składki od innych dochodów (limit zwrotu ulgi): ${formatNumberPL(other.amount)}${
+        other.estimated ? " (szacunek jak dla etatu)" : " (podane)"
+      }\n`;
+    }
+    if (status === "married" && (family || inputs.spouseLinRycz)) {
+      const spouse = family ? getSpouseContributions(family) : null;
+      text += `Małżonek: dochód ze skali ${formatNumberPL(
+        amountOf(DOM.spouseIncomeInput.value),
+      )}; liniowy / ryczałt: ${inputs.spouseLinRycz ? `tak (dochód liniowy / z art. 30b do limitu: ${formatNumberPL(
+        family ? family.spouseLinearIncome : amountOf(DOM.spouseLinearIncome.value),
+      )})` : "nie"}${
+        spouse && family.hasChildren
+          ? `; składki do limitu zwrotu ${formatNumberPL(spouse.amount)}${
+              spouse.estimated ? " (szacunek)" : " (podane)"
+            }`
+          : ""
+      }\n`;
+    }
+    if (family && family.fourPlus) {
+      text += `Ulga dla rodzin 4+: tak — limit ${formatNumberPL(
+        TAX_CONSTANTS.FOUR_PLUS_EXEMPTION_LIMIT,
+      )}, wykorzystany na innych przychodach ${formatNumberPL(
+        family.fourPlusUsed,
+      )}, dostępny dla działalności ${formatNumberPL(family.fourPlusAvailable)}; zwolniony przychód ${formatNumberPL(
+        ctx.fourPlusExempt,
+      )}\n`;
     }
     return text;
   }
@@ -5385,6 +7137,39 @@
     return text;
   }
 
+  /* Zakres i założenia eksportu – część „Rodzina”. */
+  function getFamilyScopeText(inputs, ctx) {
+    const family = inputs.family;
+    let text = "";
+    if (family && family.hasChildren) {
+      text += `Ulga na dzieci (art. 27f) i preferencje rodzinne: wynik wariantu\n`;
+      text += `= obciążenie gospodarstwa z działalnością − obciążenie bez\n`;
+      text += `działalności (${formatNumberPL(ctx.baseline.total)}; sekcja „Rodzina: sytuacja\n`;
+      text += `bez działalności”). Ulgę odliczamy tylko od podatku wg skali,\n`;
+      text += `niewykorzystaną zwracamy do limitu składek (ust. 8–10); wynik\n`;
+      text += `pokazuje więc utratę ulgi, preferencji samotnego rodzica\n`;
+      text += `i rozliczenia wspólnego (art. 6 ust. 8) przez formę opodatkowania.\n`;
+      text += `Założenia ostrożne: zdrowotna liniowca i nieodliczone 50% zdrowotnej\n`;
+      text += `ryczałtowca poza limitem zwrotu; samotny rodzic na liniowym /\n`;
+      text += `ryczałcie — limit 56 000 zł przy jednym dziecku.\n`;
+      if (getActiveScenario() && TAX_CONSTANTS.PIT_SCALE_BANDS.length > 2) {
+        text += `Projekt UD458: zmieniona skala zmienia podatek, od którego\n`;
+        text += `odlicza się ulgę na dzieci (a więc i zwrot); kwoty ulgi bez zmian.\n`;
+      }
+    }
+    if (family && family.fourPlus) {
+      text += `Ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153): zwolniony przychód\n`;
+      text += `z działalności do limitu; koszty w całości; składka zdrowotna\n`;
+      text += `i próg ryczałtu bez zmian (art. 81 ust. 2zd); przy kilku stawkach\n`;
+      text += `ryczałtu i IP BOX podział zwolnienia proporcjonalny (założenie).\n`;
+    }
+    if (inputs.spouseLinRycz && inputs.jointTaxation) {
+      text += `Małżonek stosuje liniowy / ryczałt — warianty wspólne niedostępne\n`;
+      text += `(art. 6 ust. 8), pokazane orientacyjnie, poza rankingiem.\n`;
+    }
+    return text;
+  }
+
   function getFormattedValues() {
     if (!validateAllInputs().valid) return INVALID_EXPORT_TEXT;
     const result = computeFromForm();
@@ -5425,11 +7210,12 @@
       text += `IP BOX: dochód kwalifikowany (5%, art. 30ca) nie wchodzi do podstawy\n`;
       text += `daniny (art. 30h ust. 2 – zamknięty katalog; art. 30c ust. 6).\n`;
     }
-    if (ctx.otherIncome > 0) {
+    if (ctx.otherIncome > 0 && !ctx.baseline.family) {
       text += `Przy innych dochodach ze skali wynik to obciążenie przypisane\n`;
       text += `działalności: od łącznych podatków odejmujemy podatek od samych\n`;
       text += `innych dochodów (${formatNumberPL(ctx.baseline.total)}).\n`;
     }
+    text += getFamilyScopeText(inputs, ctx);
     if (isJoint) {
       text += `Przy wspólnym rozliczeniu PIT jest wspólny dla pary\n`;
       text += `("2 × PIT((suma dochodów) / 2)"). Aby wynik był porównywalny\n`;
@@ -5444,16 +7230,23 @@
     text += `=== PODSUMOWANIE WYNIKÓW ===\n`;
     text += `${SEPARATOR_LINE}\n\n`;
 
+    const isSingle = !!variants.taxScaleSingle;
     text += `SKALA PODATKOWA:\n`;
     text += getVariantSummaryLine(
-      isJoint ? "Indywidualnie" : "Skala podatkowa",
+      isJoint || isSingle ? "Indywidualnie" : "Skala podatkowa",
       variants.taxScale,
     );
     if (ipBoxOn) {
       text += getVariantSummaryLine(
-        isJoint ? "Indywidualnie (IP BOX)" : "Skala podatkowa (IP BOX)",
+        isJoint || isSingle ? "Indywidualnie (IP BOX)" : "Skala podatkowa (IP BOX)",
         variants.taxScaleIpBox,
       );
+    }
+    if (isSingle) {
+      text += getVariantSummaryLine("Samotny rodzic", variants.taxScaleSingle);
+      if (variants.taxScaleIpBoxSingle) {
+        text += getVariantSummaryLine("Samotny rodzic (IP BOX)", variants.taxScaleIpBoxSingle);
+      }
     }
     if (isJoint) {
       text += getVariantSummaryLine("Wspólnie z małżonkiem", variants.taxScaleJoint);
@@ -5496,10 +7289,22 @@
     text += `=== SZCZEGÓŁY OBLICZEŃ ===\n`;
     text += `${SEPARATOR_LINE}\n`;
 
-    text += getOtherIncomeSectionText(ctx);
+    text += getBaselineSectionText(ctx);
     text += getScaleVariantText("SKALA PODATKOWA", variants.taxScale);
     if (ipBoxOn) {
       text += getScaleVariantText("SKALA PODATKOWA Z IP BOX", variants.taxScaleIpBox);
+    }
+    if (variants.taxScaleSingle) {
+      text += getScaleVariantText(
+        VARIANT_BREAKDOWN_TITLES.taxScaleSingle,
+        variants.taxScaleSingle,
+      );
+      if (variants.taxScaleIpBoxSingle) {
+        text += getScaleVariantText(
+          VARIANT_BREAKDOWN_TITLES.taxScaleIpBoxSingle,
+          variants.taxScaleIpBoxSingle,
+        );
+      }
     }
     if (isJoint) {
       text += getScaleVariantText(
@@ -6324,6 +8129,8 @@
       "info-other-income"),
     );
 
+    DOM.infoModalContent.appendChild(buildFamilyInfoSection(C, Y, scenario));
+
     const constantsSection = document.createElement("section");
     constantsSection.className = "info-section";
     constantsSection.id = "info-constants";
@@ -6357,6 +8164,102 @@
     DOM.infoModalContent.appendChild(footnote);
 
     infoModalBuilt = true;
+  }
+
+  /* „Założenia” – ulgi rodzinne (karta „Rodzina”). Każdy akapit ma kotwicę,
+     do której prowadzą dymki i uwagi przy wynikach. */
+  function buildFamilyInfoSection(C, Y, scenario) {
+    const zl = (value) => formatPLN(value);
+    return createInfoTextSection(
+      "Rodzina: ulga na dzieci, samotny rodzic, ulga dla rodzin 4+",
+      [
+        {
+          id: "info-family-baseline",
+          text: `Karta „Rodzina” jest domyślnie pusta (bez dzieci) — wtedy wyniki są liczone jak dotąd. Gdy dodasz dzieci, wynik każdego wariantu to obciążenie przypisane działalności liczone dla gospodarstwa: (podatki z działalnością po uldze na dzieci i zwrocie) − (to samo bez działalności, tylko z „innymi dochodami” i dochodem małżonka). Sytuację bez działalności liczymy najkorzystniej, jak pozwalają przepisy: jako samotny rodzic (2 × podatek od połowy dochodu) albo wspólnie z małżonkiem — gdy wspólne rozliczenie jest włączone w karcie „Opcje” i małżonek nie stosuje liniowego ani ryczałtu. Dzięki temu wynik pokazuje wprost utratę ulgi i preferencji przez formę opodatkowania (np. „utrata ulgi na dzieci: +1 112,04”, „utrata preferencji samotnego rodzica: +3 600,00”). PIT małżonka liczony samodzielnie odejmujemy po obu stronach (jak w wariancie wspólnym).`,
+        },
+        {
+          id: "info-family-status",
+          text: "Status: „małżeństwo” — przez cały rok podatkowy, bez separacji (limit przy jednym dziecku 112 000 zł dochodów obojga, łączny limit zwrotu, optymalny podział ulgi); „samotny rodzic” — w rozumieniu art. 6 ust. 4c–4f (panna, kawaler, wdowa, wdowiec, rozwiedziony, w separacji; bez wspólnej pieczy z drugim rodzicem, także naprzemiennej); „inna” — np. związek nieformalny, ślub w trakcie roku (limit 56 000 zł własnych dochodów). O tym, czy ktoś „samotnie wychowuje”, decydują fakty — kalkulator przyjmuje oświadczenie. Przy rozliczeniu wspólnym status to zawsze małżeństwo.",
+        },
+        {
+          id: "info-child-relief",
+          text: `Ulga na dzieci (art. 27f ustawy o PIT) — za każdy miesiąc, w którym wykonujesz władzę rodzicielską (opiekę, pieczę zastępczą): na 1. i 2. dziecko ${zl(
+            C.CHILD_RELIEF_MONTHLY_1_2,
+          )}, na 3. — ${zl(C.CHILD_RELIEF_MONTHLY_3)}, na 4. i każde kolejne — ${zl(
+            C.CHILD_RELIEF_MONTHLY_4PLUS,
+          )} (rocznie: 1 dziecko 1 112,04 zł, 2 — 2 224,08 zł, 3 — 4 224,12 zł, 4 — 6 924,12 zł). Stawka zależy od liczby uprawnionych dzieci w danym miesiącu; miesiąc urodzenia liczy się w całości. Uprawnione są dzieci małoletnie, pełnoletnie z zasiłkiem pielęgnacyjnym lub rentą socjalną oraz pełnoletnie uczące się do 25 lat (w limicie dochodu dziecka). Dziecko, które samo stosuje liniowy lub ryczałt, nie jest uprawnione (za cały rok). Kwoty są w tabeli „Stałe roku” (grupa „Ulgi rodzinne”).`,
+        },
+        {
+          id: "info-child-months",
+          text: "Liczba miesięcy zamiast dat (założenie): przyjmujemy, że okresy dzieci nakładają się maksymalnie — dziecko z m miesiącami jest uprawnione w ostatnich m miesiącach roku (jak dziecko urodzone w trakcie roku). Przy okresach rozłącznych (np. starsze dziecko kończy naukę w czerwcu, młodsze rodzi się w lipcu) kwota może być niższa — wtedy wpisz dzieci tak, aby liczba dzieci w każdym miesiącu się zgadzała.",
+        },
+        {
+          id: "info-child-adult",
+          text: "Dziecko pełnoletnie uczące się: kalkulator nie liczy jego dochodu — zaznaczając opcję, potwierdzasz, że mieści się ono w limicie z art. 6 ust. 4e (12 × renta socjalna z grudnia; za 2025 r. 22 546,92 zł, za 2026 r. prawdopodobnie 23 741,88 zł) i nie stosuje liniowego ani ryczałtu. Miesiąc ukończenia 25 lat wliczamy do ulgi (praktyka doradców — bez wyraźnego stanowiska MF).",
+        },
+        {
+          id: "info-child-limit",
+          text: `Limit dochodu (art. 27f ust. 2 pkt 1, ust. 2a) dotyczy tylko sytuacji, gdy przez cały rok było jedno uprawnione dziecko bez orzeczenia o niepełnosprawności (ust. 2b, 2e): małżonkowie — ${zl(
+            C.CHILD_RELIEF_LIMIT_MARRIED,
+          )} łącznie (także przy rozliczeniu osobnym; 224 000 zł w przepisach nie ma), samotny rodzic — ${zl(
+            C.CHILD_RELIEF_LIMIT_SINGLE_PARENT,
+          )}, pozostali — ${zl(
+            C.CHILD_RELIEF_LIMIT_OTHER,
+          )}. Działa zero-jedynkowo: 1 grosz ponad limit odbiera całą ulgę. Do limitu wliczamy dochody ze skali (działalność na skali i inne dochody), z art. 30b oraz dochód liniowy (art. 30c), po składkach społecznych i odliczonej zdrowotnej liniowca; nie wliczamy przychodów z ryczałtu (KIS 0112-KDSL1-1.4011.40.2023.1.MW) ani dochodu kwalifikowanego IP BOX (art. 30ca nie jest wymieniony w ust. 2a — wykładnia literalna, brak interpretacji). Strata z działalności nie pomniejsza innych dochodów (dochód źródła ≥ 0). Samotny rodzic na liniowym lub ryczałcie traci prawo do rozliczenia jako samotny rodzic (art. 6 ust. 8), więc ostrożnie stosujemy limit ${zl(
+            C.CHILD_RELIEF_LIMIT_OTHER,
+          )} (stanowisko MF w broszurze PIT/O); literalnie ustawa wskazuje ${zl(
+            C.CHILD_RELIEF_LIMIT_SINGLE_PARENT,
+          )}.`,
+        },
+        {
+          id: "info-child-deduction",
+          text: "Ulgę odliczamy wyłącznie od podatku wg skali (art. 27) — nie od podatku liniowego, ryczałtu, 5% IP BOX ani daniny. Przy liniowym i ryczałcie można ją odliczyć tylko od podatku od innych dochodów ze skali (np. etatu, PIT-37) albo przekazać małżonkowi. Kolejność jak w PIT-36: podatek wg skali, odliczenie ulgi (do wysokości podatku), doliczenie 5% IP BOX, na końcu zwrot niewykorzystanej ulgi.",
+        },
+        {
+          id: "info-child-share",
+          text: "Podział ulgi (art. 27f ust. 4): kwota ulgi jest jedna na dziecko. Małżonkowie dzielą ją dowolnie — kalkulator przyjmuje podział optymalny (ulgę odlicza ten, kto ma podatek; najpierw od podatku obojga, reszta jako zwrot do łącznego limitu składek). Przy statusie „inna” wpisz swój udział (np. 50% przy wspólnym zamieszkaniu bez porozumienia, 100%, gdy dziecko mieszka z Tobą); samotny rodzic — 100%.",
+        },
+        {
+          id: "info-child-refund",
+          text: "Zwrot niewykorzystanej ulgi (art. 27f ust. 8–10) przysługuje tylko w PIT-36 / PIT-37 (dochody ze skali podatnika lub małżonka), do limitu: składki społeczne „podlegające odliczeniu” na podstawie art. 26 (od dochodu; także gdy nie było od czego odliczyć, np. przy stracie; nie składki w kosztach, nie odliczone w PIT-36L ani od przychodu ryczałtowego) + zapłacona składka zdrowotna (przy skali w całości) + składki od innych dochodów (+ składki małżonka przy małżeństwie — ust. 10). FP i FS nie są składkami na ubezpieczenia społeczne. Ostrożnie pomijamy zdrowotną liniowca (także nadwyżkę ponad limit odliczenia) i nieodliczone 50% zdrowotnej ryczałtowca — literalnie mogłyby wchodzić do limitu, brak stanowiska MF. Dlatego sposób odliczenia składek (od dochodu / w kosztach / od innych dochodów) wpływa na zwrot — optymalizator liczy wynik z uwzględnieniem limitu zwrotu.",
+        },
+        {
+          id: "info-other-contrib",
+          text: `Składki od „innych dochodów” (limit zwrotu): jeśli ich nie wpiszesz, szacujemy je jak dla etatu z dochodu D z pola „Inne dochody”: brutto G = (D + ${zl(
+            C.OTHER_INCOME_EST_COSTS,
+          )}) / (1 − ${formatPercentPL(
+            C.OTHER_INCOME_EST_SOCIAL_RATE,
+          )}), składki społeczne = ${formatPercentPL(
+            C.OTHER_INCOME_EST_SOCIAL_RATE,
+          )} × G (emerytalna 9,76% + rentowa 1,5% + chorobowa 2,45%), zdrowotna = 9% × (G − społeczne). Przy zleceniach i innych źródłach szacunek może być błędny — wpisz kwoty z PIT-11. Tak samo szacujemy składki małżonka z jego dochodu ze skali.`,
+        },
+        {
+          id: "info-single-parent",
+          text: "Samotny rodzic (art. 6 ust. 4c–4d): podatek = 2 × podatek wg skali od połowy dochodów opodatkowanych skalą (bez dochodu kwalifikowanego IP BOX i dochodów zryczałtowanych) — próg i kwota zmniejszająca działają podwójnie. Preferencja przepada w całości, także dla etatu, gdy rodzic (lub dziecko) stosuje podatek liniowy albo ryczałt (art. 6 ust. 8); IP BOX przy skali jej nie wyklucza. Wariant „Skala — samotny rodzic” jest pokazany obok indywidualnego; przy liniowym i ryczałcie wynik zawiera „utratę preferencji samotnego rodzica”. Ulgę na dzieci odliczamy od podatku policzonego tą metodą.",
+        },
+        {
+          id: "info-family-spouse",
+          text: "Małżonek na liniowym lub ryczałcie (od działalności): rozliczenie wspólne jest niedostępne (art. 6 ust. 8) — warianty „wspólnie z małżonkiem” są wtedy pokazane orientacyjnie i pominięte w rankingu. Ulgę na dzieci małżonek może odliczyć od swojego podatku wg skali (np. z etatu — pole „Dochód małżonka”). Do limitu 112 000 zł wliczamy też dochód małżonka opodatkowany liniowo i z art. 30b (osobne pole), a nie jego przychody z ryczałtu.",
+        },
+        {
+          id: "info-four-plus",
+          text: `Ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153): zwolnienie przychodów do ${zl(
+            C.FOUR_PLUS_EXEMPTION_LIMIT,
+          )} rocznie (kwota bez waloryzacji; wspólny limit z ulgą dla młodych, na powrót i dla pracujących seniorów — ust. 44), m.in. z działalności opodatkowanej skalą, liniowo, IP BOX i ryczałtem od przychodów ewidencjonowanych — dla rodzica, który w roku (choćby przez jeden dzień) wychowywał co najmniej czworo dzieci z art. 6 ust. 4c (bez dzieci umieszczonych w instytucji na podstawie orzeczenia sądu — ust. 45). Warunki różnią się od ulgi na dzieci, dlatego to osobny przełącznik, a nie wynik listy dzieci. Zwolnienie działa od początku roku do wyczerpania limitu; najpierw zużywają je „inne przychody” w kwocie, którą wpiszesz (np. etat — „Inne dochody” wpisz już po zwolnieniu), reszta idzie na działalność (wybór źródła należy do podatnika — KIS 0115-KDIT2.4011.544.2023.1.AB; zwolnienie etatu zamiast działalności nie jest modelowane). Koszty odliczamy w całości (art. 22 ust. 3a, art. 23 ust. 10), więc dochód może być ujemny; strata może przejść na kolejne lata (art. 9 ust. 3a pkt 4 lit. b) — kalkulator jej nie przenosi. Składka zdrowotna i próg przychodu na ryczałcie bez zmian (art. 81 ust. 2zd pkt 2 u.ś.o.z.); składki społeczne odliczamy w pełnej wysokości od opodatkowanej części; danina — przychód zwolniony poza podstawą. Limit małżonka jest odrębny — jego dochód wpisz już po zwolnieniu.`,
+        },
+        {
+          id: "info-four-plus-split",
+          text: "Ulga 4+ przy kilku stawkach ryczałtu i przy IP BOX (założenie): o tym, który przychód jest zwolniony, decyduje kolejność jego uzyskania (odpowiedź MF z 18.04.2023, znana z drugiej ręki), a kalkulator nie zna dat. Dlatego zwolnienie dzielimy proporcjonalnie do przychodów stawek, a przy IP BOX — proporcjonalnie do udziału dochodu kwalifikowanego. Przy stawce 8,5% / 12,5% zwolnienie zużywa najpierw przychód do 100 000 zł (8,5%), bo obejmuje przychody od początku roku.",
+        },
+        {
+          id: "info-family-reform",
+          text: scenario
+            ? "Projekt UD458 nie zmienia kwot ulgi na dzieci ani limitów. Zmienia skalę (24% między 130 000 a 150 000 zł), a więc podatek, od którego odlicza się ulgę, i przez to jej odliczoną część oraz zwrot — także w sytuacji bez działalności i w preferencji samotnego rodzica (2 × podatek od połowy dochodu według nowej skali)."
+            : `Kwoty ulgi na dzieci, limity (112 000 / 56 000 zł) i limit ulgi 4+ (85 528 zł) są ustawowe i nie podlegają waloryzacji — w ${Y} r. takie same jak w poprzednich latach. Scenariusz projektu UD458 (gdy dostępny) zmienia skalę, a więc podatek, od którego odlicza się ulgę.`,
+        },
+      ],
+      "info-family",
+    );
   }
 
   /* topicId – kotwica tematu (np. „info-zus-holiday”): okno otwiera się

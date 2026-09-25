@@ -847,9 +847,402 @@
               id="spouseIncome-error"
               role="alert"
               aria-live="polite"></p>
-            <p class="field-foot">
-              Wpływa tylko na warianty „wspólnie z małżonkiem”.
-            </p>
+            <p class="field-foot" id="spouseIncomeFoot">Wpływa tylko na warianty „wspólnie z małżonkiem”.</p>
+          </div>
+        </fieldset>
+
+        <!-- Rodzina: ulga na dzieci (art. 27f), samotny rodzic (art. 6 ust. 4c–4f),
+             ulga dla rodzin 4+ (art. 21 ust. 1 pkt 153). Domyślnie zwinięta
+             i bez dzieci – wtedy wyniki są takie same jak bez tej karty. -->
+        <fieldset class="card card-family" id="familyCard">
+          <legend class="card-legend">Rodzina</legend>
+          <button
+            type="button"
+            class="zus-more-toggle family-toggle"
+            id="familyToggle"
+            aria-expanded="false"
+            aria-controls="familyBody">
+            <span class="zus-more-title">Dzieci, samotny rodzic, ulga 4+</span>
+            <span class="zus-more-summary" id="familySummary">bez dzieci — ulgi rodzinne nieuwzględniane</span>
+            <svg
+              class="zus-more-chevron"
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="family-body" id="familyBody" role="group" aria-label="Rodzina" hidden>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label-with-tip">
+                  <span class="field-label" id="familyStatusLabel">Sytuacja w&nbsp;<span data-year-text>2026</span>&nbsp;r.</span>
+                  <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Sytuacja rodzinna — więcej informacji"
+                    aria-describedby="familyStatusTooltip"
+                    aria-controls="familyStatusTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="familyStatusTooltip" role="tooltip">
+                    Decyduje o limicie dochodu przy jednym dziecku (112&nbsp;000 albo 56&nbsp;000&nbsp;zł), o preferencji samotnego rodzica (2 × podatek od połowy dochodu) i o podziale ulgi. Przy rozliczeniu wspólnym przyjmujemy małżeństwo.
+                    <a class="tip-more" href="#info-family-status" data-info-topic="info-family-status">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                </span>
+              </div>
+              <div
+                class="seg seg-3 family-status"
+                role="radiogroup"
+                aria-labelledby="familyStatusLabel"
+                aria-describedby="familyStatusHint">
+                <label class="seg-opt">
+                  <input type="radio" name="familyStatus" value="married" />
+                  <span>Małżeństwo</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="familyStatus" value="single" />
+                  <span>Samotny rodzic</span>
+                </label>
+                <label class="seg-opt">
+                  <input type="radio" name="familyStatus" value="other" checked />
+                  <span>Inna</span>
+                </label>
+              </div>
+              <p class="field-foot" id="familyStatusHint" aria-live="polite"></p>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label-with-tip">
+                  <span class="field-label" id="childrenLabel">Dzieci (ulga na dzieci, art. 27f)</span>
+                  <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Dzieci — więcej informacji"
+                    aria-describedby="childrenTooltip"
+                    aria-controls="childrenTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="childrenTooltip" role="tooltip">
+                    Dzieci, na które przysługuje ulga: małoletnie, pełnoletnie uczące się do 25&nbsp;lat (w limicie dochodu dziecka) i pełnoletnie z zasiłkiem pielęgnacyjnym lub rentą socjalną. Liczba miesięcy — np. urodzenie w trakcie roku.
+                    <a class="tip-more" href="#info-child-relief" data-info-topic="info-child-relief">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                </span>
+              </div>
+              <ol class="children-list" id="childrenList" aria-labelledby="childrenLabel"></ol>
+              <div class="children-actions">
+                <button type="button" class="link-btn" id="addChildBtn">+&nbsp;Dodaj dziecko</button>
+              </div>
+              <p class="field-foot" id="childrenHint" aria-live="polite"></p>
+            </div>
+
+            <div class="field" id="familyShareField" hidden>
+              <div class="field-head">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="familyShare">Twój udział w uldze na dzieci</label>
+                  <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Udział w uldze — więcej informacji"
+                    aria-describedby="familyShareTooltip"
+                    aria-controls="familyShareTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="familyShareTooltip" role="tooltip">
+                    Rodzice niebędący małżeństwem dzielą jedną ulgę na dziecko (art. 27f ust. 4): w uzgodnionej proporcji, bez porozumienia — po połowie przy wspólnym zamieszkaniu, inaczej 100% u rodzica, z którym dziecko mieszka.
+                    <a class="tip-more" href="#info-child-share" data-info-topic="info-child-share">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                </span>
+              </div>
+              <div class="ipbox-number family-share">
+                <input
+                  type="number"
+                  id="familyShare"
+                  value="100"
+                  min="0"
+                  max="100"
+                  step="1"
+                  inputmode="numeric"
+                  aria-describedby="familyShare-error" />
+                <span class="input-suffix" aria-hidden="true">%</span>
+              </div>
+              <p
+                class="error-message"
+                id="familyShare-error"
+                role="alert"
+                aria-live="polite"></p>
+            </div>
+
+            <div class="family-spouse" id="familySpouse" hidden>
+              <p class="field-foot family-spouse-note">
+                Dochód małżonka opodatkowany skalą: pole „Dochód małżonka” w&nbsp;karcie „Opcje” (wpływa też na limit 112&nbsp;000&nbsp;zł i&nbsp;podział ulgi).
+                <button type="button" class="link-btn" id="familySpouseJump">Przejdź do pola&nbsp;→</button>
+              </p>
+              <div class="field">
+                <div class="field-head field-head-toggle">
+                  <span class="field-label-with-tip">
+                    <label class="field-label" for="spouseLinRycz">
+                      Małżonek stosuje liniowy lub ryczałt
+                    </label>
+                    <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Małżonek na liniowym lub ryczałcie — więcej informacji"
+                    aria-describedby="spouseLinRyczTooltip"
+                    aria-controls="spouseLinRyczTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="spouseLinRyczTooltip" role="tooltip">
+                    Wtedy rozliczenie wspólne jest niedostępne (art. 6 ust. 8). Ulgę na dzieci małżonek może odliczyć tylko od swojego podatku wg skali.
+                    <a class="tip-more" href="#info-family-spouse" data-info-topic="info-family-spouse">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                  </span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="spouseLinRycz" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="field" id="spouseLinearIncomeField" hidden>
+                <label class="field-label" for="spouseLinearIncome">
+                  Dochód małżonka opodatkowany liniowo lub z&nbsp;art.&nbsp;30b (do limitu)
+                </label>
+                <div class="input-money">
+                  <input
+                    type="text"
+                    id="spouseLinearIncome"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0,00"
+                    aria-describedby="spouseLinearIncome-error" />
+                  <span class="input-suffix" aria-hidden="true">zł</span>
+                </div>
+                <p
+                  class="error-message"
+                  id="spouseLinearIncome-error"
+                  role="alert"
+                  aria-live="polite"></p>
+              </div>
+              <div class="field">
+                <label class="field-label" for="spouseContrib">
+                  Składki małżonka do limitu zwrotu ulgi (społeczne + zdrowotna)
+                </label>
+                <div class="input-money">
+                  <input
+                    type="text"
+                    id="spouseContrib"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="szacunek"
+                    aria-describedby="spouseContrib-error spouseContribHint" />
+                  <span class="input-suffix" aria-hidden="true">zł</span>
+                </div>
+                <p
+                  class="error-message"
+                  id="spouseContrib-error"
+                  role="alert"
+                  aria-live="polite"></p>
+                <p class="field-foot" id="spouseContribHint" aria-live="polite"></p>
+              </div>
+            </div>
+
+            <div class="field" id="otherContribField" hidden>
+              <div class="field-head">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="otherContrib">
+                    Twoje składki od innych dochodów (limit zwrotu ulgi)
+                  </label>
+                  <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Składki od innych dochodów — więcej informacji"
+                    aria-describedby="otherContribTooltip"
+                    aria-controls="otherContribTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="otherContribTooltip" role="tooltip">
+                    Składki społeczne i zdrowotna z PIT-11 (np. etat) — podnoszą limit zwrotu niewykorzystanej ulgi (art. 27f ust. 9). Puste pole = szacunek jak dla umowy o pracę.
+                    <a class="tip-more" href="#info-child-refund" data-info-topic="info-child-refund">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                </span>
+              </div>
+              <div class="input-money">
+                <input
+                  type="text"
+                  id="otherContrib"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="szacunek"
+                  aria-describedby="otherContrib-error otherContribHint" />
+                <span class="input-suffix" aria-hidden="true">zł</span>
+              </div>
+              <p
+                class="error-message"
+                id="otherContrib-error"
+                role="alert"
+                aria-live="polite"></p>
+              <p class="field-foot" id="otherContribHint" aria-live="polite"></p>
+            </div>
+
+            <div class="field field-separated">
+              <div class="field-head field-head-toggle">
+                <span class="field-label-with-tip">
+                  <label class="field-label" for="fourPlus">
+                    Ulga dla rodzin 4+ (warunki spełnione)
+                  </label>
+                  <span class="tip" data-tip>
+                  <button
+                    type="button"
+                    class="field-tooltip"
+                    aria-label="Ulga dla rodzin 4+ — więcej informacji"
+                    aria-describedby="fourPlusTooltip"
+                    aria-controls="fourPlusTooltip"
+                    aria-expanded="false">
+                    <svg
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                  <span class="field-tooltip-bubble" id="fourPlusTooltip" role="tooltip">
+                    Zwolnienie przychodu z działalności (każda forma) do 85&nbsp;528&nbsp;zł rocznie, gdy w roku choćby przez jeden dzień wychowujesz co najmniej czworo dzieci (art. 21 ust. 1 pkt 153). Nie wynika z listy dzieci — warunki są inne.
+                    <a class="tip-more" href="#info-four-plus" data-info-topic="info-four-plus">Więcej&nbsp;→</a>
+                  </span>
+                </span>
+                </span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="fourPlus" aria-describedby="fourPlusHint" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <p class="field-foot" id="fourPlusHint" aria-live="polite"></p>
+              <div class="field" id="fourPlusUsedField" hidden>
+                <label class="field-label" for="fourPlusUsed">
+                  Limit wykorzystany już na innych przychodach
+                </label>
+                <div class="input-money">
+                  <input
+                    type="text"
+                    id="fourPlusUsed"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0,00"
+                    aria-describedby="fourPlusUsed-error fourPlusUsedHint" />
+                  <span class="input-suffix" aria-hidden="true">zł</span>
+                </div>
+                <p
+                  class="error-message"
+                  id="fourPlusUsed-error"
+                  role="alert"
+                  aria-live="polite"></p>
+                <p class="field-foot" id="fourPlusUsedHint">
+                  Np. zwolniony przychód z etatu, zlecenia lub ulga dla młodych (wspólny limit). „Inne dochody” wpisz już po ich zwolnieniu.
+                </p>
+              </div>
+            </div>
           </div>
         </fieldset>
 
@@ -1070,6 +1463,33 @@
               <span class="results-row-tag" data-scale-tag="ipbox">5% / 12% / 32%</span>
               <span class="results-row-bar"><span data-bar></span></span>
               <input id="taxScaleIpBox" type="text" readonly tabindex="-1" />
+            </div>
+            <div
+              class="results-row input-group single-parent-card"
+              data-variant="taxScaleSingle">
+              <span class="results-row-label">
+                Skala podatkowa
+                <span class="variant-badge variant-badge--single">samotny rodzic</span>
+              </span>
+              <span class="results-row-tag" data-scale-tag>12% / 32%</span>
+              <span class="results-row-bar"><span data-bar></span></span>
+              <input id="taxScaleSingle" type="text" readonly tabindex="-1" />
+            </div>
+            <div
+              class="results-row input-group single-parent-card ipbox-card"
+              data-variant="taxScaleIpBoxSingle">
+              <span class="results-row-label">
+                Skala podatkowa
+                <span class="variant-badge variant-badge--ipbox">IP BOX</span>
+                <span class="variant-badge variant-badge--single">samotny rodzic</span>
+              </span>
+              <span class="results-row-tag" data-scale-tag="ipbox">5% / 12% / 32%</span>
+              <span class="results-row-bar"><span data-bar></span></span>
+              <input
+                id="taxScaleIpBoxSingle"
+                type="text"
+                readonly
+                tabindex="-1" />
             </div>
             <div
               class="results-row input-group joint-taxation-card"

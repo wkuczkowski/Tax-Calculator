@@ -1,6 +1,6 @@
-# 2026 Test Suite
+# Test Suite (`app/`)
 
-This folder contains regression tests for the `2026` tax calculator.
+This folder contains regression tests for the tax calculator in `app/` (until September 2026 the directory was `2026/`).
 
 The goal is simple: lock in today's calculator behavior so future refactors or legal-value updates can be compared against a known baseline.
 
@@ -26,9 +26,9 @@ These are DOM-based regression tests.
 
 They load the real:
 
-- `2026/index.html`
-- `2026/taxConstants.js`
-- `2026/script.js`
+- `app/index.html`
+- `app/taxConstants.js`
+- `app/script.js`
 
 Then they simulate user input and snapshot the final visible output fields.
 

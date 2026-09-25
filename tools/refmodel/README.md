@@ -1,4 +1,4 @@
-# Model referencyjny: narzędzie regresji dla kalkulatora `/2026`
+# Model referencyjny: narzędzie regresji dla kalkulatora (`app/`)
 
 ## Po co to jest
 
@@ -7,13 +7,13 @@
 - [`docs/decyzje/specyfikacja-zus.md`](../../docs/decyzje/specyfikacja-zus.md), w tym ADDENDUM A1–A10,
 - [`docs/decyzje/decyzje-implementacyjne.md`](../../docs/decyzje/decyzje-implementacyjne.md).
 
-**Autor modelu nie czytał kodu aplikacji** (`2026/script.js`, `2026/taxConstants.js`).
+**Autor modelu nie czytał kodu aplikacji** (`app/script.js`, `app/taxConstants.js`).
 
-Skrypty w tym katalogu uruchamiają prawdziwą aplikację w jsdom, wyłącznie przez DOM (loader testów `2026/tests/helpers/loadCalculator.js`). Wyniki aplikacji porównują z modelem. Rozbieżność oznacza błąd po jednej ze stron albo różnicę interpretacji, którą trzeba nazwać.
+Skrypty w tym katalogu uruchamiają prawdziwą aplikację w jsdom, wyłącznie przez DOM (loader testów `app/tests/helpers/loadCalculator.js`). Wyniki aplikacji porównują z modelem. Rozbieżność oznacza błąd po jednej ze stron albo różnicę interpretacji, którą trzeba nazwać.
 
 ### Zasada niezależności: nie łam jej
 
-- **Nie kopiuj kodu z `2026/script.js` ani `2026/taxConstants.js` do `refModel.mjs`.** Nie „poprawiaj” modelu tylko po to, żeby zgadzał się z aplikacją. Porównanie dwóch kopii tego samego kodu niczego nie dowodzi.
+- **Nie kopiuj kodu z `app/script.js` ani `app/taxConstants.js` do `refModel.mjs`.** Nie „poprawiaj” modelu tylko po to, żeby zgadzał się z aplikacją. Porównanie dwóch kopii tego samego kodu niczego nie dowodzi.
 - Model zmieniaj tylko z dwóch powodów:
   - zmienia się prawo (np. nowe kwoty na kolejny rok);
   - zapada nowa decyzja interpretacyjna. Najpierw zapisz ją w [`docs/decyzje/decyzje-implementacyjne.md`](../../docs/decyzje/decyzje-implementacyjne.md), potem zmień model.
@@ -47,7 +47,7 @@ npm run verify:hand         # checkHand.mjs: sam model, natychmiast
 
 - Wszystkie skrypty kończą się kodem 1, gdy znajdą nieoczekiwaną różnicę, więc nadają się do CI.
 - **Nie są podpięte pod `npm test`.** Są wolne, a `npm test` uruchamia użytkownik.
-- Po każdej zmianie w obliczeniach (`2026/script.js`, `2026/taxConstants.js`) uruchom co najmniej `verify:refmodel`. Zobacz też [`AGENTS.md`](../../AGENTS.md).
+- Po każdej zmianie w obliczeniach (`app/script.js`, `app/taxConstants.js`) uruchom co najmniej `verify:refmodel`. Zobacz też [`AGENTS.md`](../../AGENTS.md).
 
 Warianty:
 
@@ -60,14 +60,14 @@ node tools/refmodel/genCases.mjs          # przegeneruj (potem przejrzyj `git di
 
 ### Inna wersja aplikacji: `APP_DIR`
 
-Domyślnie skrypty ładują aplikację z `2026/` w tym repo. Zmienna `APP_DIR` wskazuje inny katalog aplikacji. Musi on zawierać `index.html`, `script.js`, `taxConstants.js` i `tests/helpers/loadCalculator.js`. Przykłady użycia:
+Domyślnie skrypty ładują aplikację z `app/` w tym repo (do 2026 r. katalog nazywał się `2026/`; stary adres przekierowuje). Zmienna `APP_DIR` wskazuje inny katalog aplikacji. Musi on zawierać `index.html`, `script.js`, `taxConstants.js` i `tests/helpers/loadCalculator.js`. Przykłady użycia:
 - porównanie ze starszym commitem;
 - praca, gdy katalog roboczy jest w trakcie edycji.
 
 ```sh
 git worktree add --detach ../tc-main origin/main
 ln -s "$PWD/node_modules" ../tc-main/node_modules   # loader importuje jsdom
-APP_DIR=../tc-main/2026 npm run verify:refmodel
+APP_DIR=../tc-main/app npm run verify:refmodel   # commity sprzed przeniesienia: ../tc-main/2026
 git worktree remove ../tc-main
 ```
 

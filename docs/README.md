@@ -1,6 +1,6 @@
-# Dokumentacja kalkulatora `/2026`
+# Dokumentacja kalkulatora (`app/`)
 
-W tym katalogu są dokumenty, na których opiera się logika kalkulatora: analizy prawne, specyfikacja, rejestr decyzji i raporty z weryfikacji. Większość to **raporty historyczne**, czyli zapis stanu wiedzy i kodu z dnia sporządzenia. Nie aktualizuje się ich. Wyjątkiem jest **rejestr decyzji**. To dokument żywy i trzeba go uzupełniać przy każdej zmianie obliczeń.
+Kalkulator jest w katalogu [`app/`](../app/) (do września 2026 r. `2026/`; stary adres `2026/` przekierowuje do `app/?rok=2026`). W tym katalogu są dokumenty, na których opiera się logika kalkulatora: analizy prawne, specyfikacja, rejestr decyzji i raporty z weryfikacji. Większość to **raporty historyczne**, czyli zapis stanu wiedzy i kodu z dnia sporządzenia. Nie aktualizuje się ich. Wyjątkiem jest **rejestr decyzji**. To dokument żywy i trzeba go uzupełniać przy każdej zmianie obliczeń.
 
 Każdy dokument zaczyna się krótkim nagłówkiem. Podaje w nim datę, status (raport historyczny, specyfikacja albo dokument żywy), zakres i pierwotną nazwę pliku.
 

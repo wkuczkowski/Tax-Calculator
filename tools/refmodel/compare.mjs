@@ -3,7 +3,7 @@
 // for every case in cases.json.
 //
 // Usage: node tools/refmodel/compare.mjs [idPrefix]      (npm run verify:refmodel)
-//   APP_DIR=<path to an app directory>  – default: <repo>/2026
+//   APP_DIR=<path to an app directory>  – default: <repo>/app
 // Writes out/compare_out.json (per case) and out/compare_soft.json (holiday-month diffs).
 // Exit code 1 when there is any mismatch, crash or ZUS-summary diff outside KNOWN_DIFFS.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { computeAll } from './refModel.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const APP_DIR = resolve(process.env.APP_DIR || resolve(HERE, '..', '..', '2026'));
+export const APP_DIR = resolve(process.env.APP_DIR || resolve(HERE, '..', '..', 'app'));
 export const OUT_DIR = resolve(HERE, 'out');
 const { loadCalculator } = await import(pathToFileURL(resolve(APP_DIR, 'tests', 'helpers', 'loadCalculator.js')).href);
 

@@ -58,7 +58,7 @@ export default [
   },
   // Config for tests - ESM modules running under Vitest/Node
   {
-    files: ["2026/tests/**/*.js"],
+    files: ["app/tests/**/*.js"],
     languageOptions: {
       sourceType: "module",
       globals: {

@@ -508,35 +508,62 @@ input[type="number"] {
   outline-offset: 3px;
   border-radius: 999px;
 }
-.field-tooltip-bubble {
-  position: absolute;
-  bottom: calc(100% + 8px);
+/* dymek (toggletip): pozycję liczy script.js (position: fixed – nad
+   przyciskiem albo pod całym polem, zawsze w oknie) */
+.tip {
+  display: inline-flex;
+  align-items: center;
+}
+.field-tooltip-bubble,
+.row-note-pop {
+  position: fixed;
+  top: 0;
   left: 0;
-  width: 280px;
-  max-width: min(280px, calc(100vw - 32px));
-  padding: 8px 10px;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 9px 11px;
   background: var(--ink);
   color: var(--surface-alt);
-  font-size: 12px;
-  line-height: 1.4;
+  font-family: var(--body);
+  font-size: 12.5px;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.45;
   border-radius: var(--r-sm);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   text-align: left;
-  transform: translateY(2px);
-  transition:
-    opacity var(--t-fast),
-    visibility var(--t-fast),
-    transform var(--t-fast);
-  z-index: 20;
-  box-shadow: var(--shadow-md);
+  white-space: normal;
+  /* widoczność zmienia się od razu (bez przejścia): link „Więcej” jest
+     osiągalny klawiszem Tab dokładnie wtedy, gdy dymek jest otwarty */
+  transition: opacity 140ms var(--ease);
+  z-index: 60;
+  box-shadow: var(--shadow-lg);
 }
-.field-tooltip:hover .field-tooltip-bubble,
-.field-tooltip:focus-visible .field-tooltip-bubble {
+.field-tooltip-bubble.is-open,
+.row-note-pop.is-open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  pointer-events: auto;
+}
+.tip-more {
+  color: #bcd3f0;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.tip-more:hover,
+.tip-more:focus-visible {
+  color: #fff;
+}
+.tip-more:focus-visible {
+  outline: 2px solid #bcd3f0;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* --------------------------------------------------------------------------
@@ -895,15 +922,33 @@ input.error {
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(31, 58, 95, 0.18);
 }
-/* opcja niedostępna (np. ulga na start bez daty rozpoczęcia) */
-.seg-opt.is-disabled span {
+/* opcja niedostępna (np. ulga na start bez daty rozpoczęcia):
+   wyszarzona, z notką „wymaga daty rozpoczęcia” */
+.seg-opt.is-disabled > span {
   cursor: not-allowed;
   color: var(--ink-4);
-  text-decoration: line-through;
-  text-decoration-color: var(--ink-5);
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(21, 22, 26, 0.035) 6px 12px
+  );
 }
-.seg-opt.is-disabled:hover span {
+.seg-opt.is-disabled:hover > span {
   color: var(--ink-4);
+}
+.seg-opt-note {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: 0;
+  color: var(--ink-3);
+  white-space: normal;
+}
+.seg-opt-note[hidden] {
+  display: none;
 }
 .seg-opt.is-disabled input:checked + span {
   box-shadow: inset 0 0 0 1px var(--warn);
@@ -919,9 +964,10 @@ input.error {
   grid-template-columns: repeat(3, 1fr);
   max-width: none;
 }
-.seg.seg-3 .seg-opt span {
+.seg.seg-3 .seg-opt > span {
   padding: 7px 6px;
   white-space: nowrap;
+  height: 100%;
 }
 .seg.seg-compact {
   width: auto;
@@ -969,6 +1015,68 @@ input.error {
   margin-top: 0;
   overflow: visible;
   pointer-events: auto;
+}
+
+/* „Więcej opcji ZUS” – sekcja zwijana */
+.zus-more {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.zus-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.zus-more-toggle:hover .zus-more-title {
+  color: var(--primary);
+}
+.zus-more-title {
+  flex: 0 0 auto;
+}
+.zus-more-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zus-more-summary[data-custom="true"] {
+  color: var(--primary);
+}
+.zus-more-toggle[aria-expanded="true"] .zus-more-summary {
+  visibility: hidden;
+}
+.zus-more-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+  transition: transform var(--t-med);
+}
+.zus-more-toggle[aria-expanded="true"] .zus-more-chevron {
+  transform: rotate(180deg);
+}
+.zus-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.zus-more-body[hidden] {
+  display: none;
 }
 
 .zus-birth-row {
@@ -1376,15 +1484,6 @@ input.error {
   box-shadow: 0 0 0 4px rgba(31, 58, 95, 0.18);
 }
 
-/* --------------------------------------------------------------------------
-   footnote
-   -------------------------------------------------------------------------- */
-.footnote {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  line-height: 1.55;
-  padding: 0 6px;
-}
 
 /* --------------------------------------------------------------------------
    results panel
@@ -1605,7 +1704,9 @@ input.error {
   grid-template-areas:
     "label amount"
     "detail detail"
-    "bar bar";
+    "bar bar"
+    "tag tools"
+    "breakdown breakdown";
   align-items: center;
   gap: 4px 18px;
   padding: 14px 22px;
@@ -1746,6 +1847,8 @@ input.error {
 }
 
 .results-row-tag {
+  grid-area: tag;
+  justify-self: start;
   display: inline-block;
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1825,6 +1928,149 @@ input.error {
 }
 .results-row.is-best .results-row-bar > span {
   background: var(--best-bar);
+}
+
+/* „Pokaż wyliczenie” – obliczenia jednego wariantu w wierszu */
+.row-breakdown-toggle {
+  grid-area: tools;
+  justify-self: end;
+  align-self: center;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 58, 95, 0.3);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.row-breakdown-toggle::after {
+  content: " ▸";
+}
+.row-breakdown-toggle[aria-expanded="true"]::after {
+  content: " ▾";
+}
+.row-breakdown-toggle:hover {
+  text-decoration-color: currentColor;
+}
+.row-breakdown-toggle[hidden],
+.row-breakdown[hidden] {
+  display: none;
+}
+.rates-total > .row-breakdown-toggle {
+  align-self: flex-end;
+}
+.row-breakdown {
+  grid-area: breakdown;
+  margin: 6px 0 2px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* „i” przy wierszu: uwagi o uproszczeniach / interpretacjach */
+.row-note[hidden] {
+  display: none;
+}
+.row-note-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line-3);
+  background: var(--surface);
+  color: var(--primary);
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  align-self: center;
+  padding: 0;
+}
+.row-note-btn:hover,
+.row-note-btn[aria-expanded="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.row-note-title {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.row-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row-note-item {
+  display: block;
+  padding-left: 10px;
+  position: relative;
+}
+.row-note-item::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+}
+
+.panel-results[data-state="invalid"] .row-breakdown-toggle,
+.panel-results[data-state="invalid"] .row-note {
+  display: none;
+}
+
+/* monit o stawkę ryczałtu i przypis pod porównaniem */
+.results-prompt {
+  margin: 0;
+  padding: 12px 22px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  background: var(--surface-alt);
+}
+.results-prompt[hidden] {
+  display: none;
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.results-footnote {
+  margin: -6px 0 0;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.results-footnote a {
+  color: var(--primary);
+  font-weight: 500;
+  text-underline-offset: 3px;
+  white-space: nowrap;
 }
 
 /* multi-rate total */
@@ -1949,6 +2195,50 @@ input.error {
 }
 .breakdown[open] .breakdown-chevron {
   transform: rotate(180deg);
+}
+
+.breakdown-toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 22px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.breakdown-toc[hidden] {
+  display: none;
+}
+.breakdown-toc-title {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.breakdown-toc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.breakdown-toc-list li.is-sub {
+  font-size: 11.5px;
+}
+.breakdown-toc-list li.is-sub::before {
+  content: "↳ ";
+  color: var(--ink-4);
+}
+.breakdown-toc-list a {
+  color: var(--primary);
+  text-underline-offset: 3px;
+}
+.breakdown-anchor {
+  scroll-margin-top: 84px;
+  outline: none;
+}
+.breakdown-anchor:focus-visible {
+  background: var(--primary-soft);
 }
 
 .breakdown-pre {
@@ -2142,6 +2432,22 @@ input.error {
   line-height: 1.55;
   margin: 0 0 8px;
 }
+.info-section,
+.info-section-text {
+  scroll-margin-top: 12px;
+}
+.info-section.is-target > h4,
+.info-section-text.is-target {
+  background: var(--warn-soft);
+  box-shadow: 0 0 0 4px var(--warn-soft);
+  border-radius: 2px;
+  transition: background 600ms var(--ease);
+}
+.info-section:focus,
+.info-section-text:focus {
+  outline: none;
+}
+
 .info-section-text:last-child {
   margin-bottom: 0;
 }
@@ -2289,19 +2595,6 @@ input.error {
   .card {
     padding: 18px 16px 16px;
   }
-  /* tooltip anchored to the whole field head, never wider than the field */
-  .field-head {
-    position: relative;
-  }
-  .field-tooltip {
-    position: static;
-  }
-  .field-tooltip-bubble {
-    left: 0;
-    right: 0;
-    width: auto;
-    max-width: none;
-  }
   .results-block-head,
   .results-row,
   .rates-total,
@@ -2310,6 +2603,8 @@ input.error {
     padding-right: 16px;
   }
   .breakdown summary,
+  .breakdown-toc,
+  .results-prompt,
   .breakdown-pre {
     padding-left: 16px;
     padding-right: 16px;

@@ -46,6 +46,16 @@ export default [
       },
     },
   },
+  // Config for Node tools (reference model, regression scripts) - ESM modules run with node
+  {
+    files: ["tools/**/*.{js,mjs}"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   // Config for tests - ESM modules running under Vitest/Node
   {
     files: ["2026/tests/**/*.js"],

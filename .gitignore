@@ -2,3 +2,5 @@ package-lock.json
 .cursorignore
 node_modules/
 *.txt
+# Output of tools/refmodel scripts (regenerated on every run)
+tools/refmodel/out/

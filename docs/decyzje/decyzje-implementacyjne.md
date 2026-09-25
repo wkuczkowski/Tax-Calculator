@@ -1,0 +1,119 @@
+# IMPL_DECISIONS: składki ZUS, inne dochody, optymalizacja odliczeń (kalkulator /2026)
+
+> **Data:** 2026-09-24 (utworzenie); aktualizowany na bieżąco  
+> **Status:** **DOKUMENT ŻYWY: rejestr decyzji.** Zapisuj tu każdą decyzję, która wpływa na wynik obliczeń, jego prezentację albo interpretację przepisów. Dotyczy to też decyzji „bez zmian” wraz z uzasadnieniem. Aktualizuj rejestr w tym samym commicie co zmianę w `2026/`. Nowy wpis dostaje kolejny identyfikator w nowej sekcji albo w pasującej tabeli, a przy nim regułę, podstawę prawną i, jeśli jest, odwołanie do raportu lub przypadku z modelu referencyjnego. Wpisów nie usuwa się: nieaktualny wpis oznacz jako zastąpiony i wskaż nowy.  
+> **Zakres:** sposób rozstrzygnięcia punktów specyfikacji oznaczonych „sprawdzić”/„zbadać”, wybory z raportu ZUS, zastosowanie ADDENDUM A1–A10 oraz poprawki z kolejnych recenzji: kalendarz składek (D), wakacje składkowe (W), składka zdrowotna (H), optymalizacja odliczeń, inne dochody (O), poprawki z recenzji (R), runda końcowa (F), świadome uproszczenia.  
+> **Pierwotna nazwa pliku:** `IMPL_DECISIONS.md`. Odwołania do plików roboczych (`fp.txt`, `pit592.txt`, `uzdr.txt`, `t2026_199.txt` itp.) wskazują lokalne kopie tekstów aktów i poradników ZUS użyte podczas analizy. Kopii nie przeniesiono do repozytorium; źródła są wymienione w [raporcie ZUS](../prawo/research-zus-2026.md). Po każdej zmianie obliczeń uruchom `npm run verify:refmodel` ([`tools/refmodel/`](../../tools/refmodel/)).
+
+> Nazwy dokumentów w treści: SPEC_ZUS = [specyfikacja-zus.md](specyfikacja-zus.md), research_zus = [research-zus-2026.md](../prawo/research-zus-2026.md), legal_check = [weryfikacja-danina-ulga-na-start.md](../prawo/weryfikacja-danina-ulga-na-start.md), review_04de063 = [recenzja-04de063.md](../weryfikacja/recenzja-04de063.md), FINAL_VERIFICATION = [weryfikacja-koncowa.md](../weryfikacja/weryfikacja-koncowa.md).
+
+This file covers the points where [SPEC_ZUS.md](specyfikacja-zus.md) says "sprawdzić" or "zbadać", the choices from [research_zus.md](../prawo/research-zus-2026.md) §9, and how the addendum (A1–A10) and the review ([review_04de063.md](../weryfikacja/recenzja-04de063.md)) were applied. Each decision gives the rule, then the legal basis.
+
+## 1. Kalendarz składek społecznych (`taxMath.buildSocialSchedule`)
+
+| # | Decyzja | Podstawa |
+|---|---|---|
+| D1 | **No start date** means the business ran all of 2026: full ZUS from January and 12 months of health contribution. The path choice is ignored. | SPEC p.2 |
+| D2 | **Ulga na start, start on the 1st:** that month is month 1 of 6. **Start mid-month:** the partial month is free of social contributions, then 6 full months follow. The relief always ends on the last day of a month. | art. 18 Prawa przedsiębiorców; ZUS explanation (example 7.05 → 30.11) |
+| D3 | **Preferential period after ulga:** 24 full calendar months from the 1st of the month after ulga ends, then full ZUS. | art. 18aa ust. 3 u.s.u.s.; ZUS example 1.05.2022 → 31.10.2024 |
+| D4 | **Path "mały ZUS" without ulga (sprawdzić):** a partial first month on the preferential base, then **24 full** calendar months. With a start on the 1st, the 24 months start with the start month. ZUS example: coverage from 20.10.2022, preference until 31.10.2024. | art. 18a ust. 1 ("24 miesięcy kalendarzowych od dnia rozpoczęcia") read together with ZUS practice |
+| D5 | **Partial first month (paths full and pref without ulga):** base = round2(base × days covered / actual days in the month). Every contribution is computed from that base and rounded to the grosz. | art. 18 ust. 9 u.s.u.s. |
+| D6 | **FP in the partial first month on full ZUS (sprawdzić; addendum A7):** FP **is due**, computed on the proportional base. The test is whether the base "converted to a month" reaches the minimum wage (5652 ≥ 4806). The ZUS guide says FP is due "za każdy miesiąc, w którym podlegały … chociaż przez jeden dzień" for people on the 60% base. FP and FS are rounded **jointly** at 2.45%, as in ZUS DRA. On the preferential base (1441.80 < 4806) no FP is due. | ZUS guide "Zasady opłacania składek na FP…" pp. 25–27 (fp.txt lines 723, 777–802); art. 259 ust. 1 pkt 4 of the labour-market act |
+| D7 | **FP exemption by age:** women 55, men 60. The exemption starts the month after the birthday month; if the birthday falls on the 1st, it starts that month. Born 29 Feb: the age is treated as reached on 1 March, which gives the same month either way. Missing date of birth or sex means FP is due. | art. 261 of the labour-market act; ZUS guide p. 2.2 (fp.txt 317–343) |
+| D8 | **Employment contract paying at least the minimum wage:** no social contributions from the business all year, and voluntary ones are not added. Health contribution is still due. Civil-law contracts and part-time pay below the minimum are **not** modelled; this is documented in Założenia. | art. 9 ust. 1 i 1a u.s.u.s. |
+| D9 | **Rates and bases:** full base 5652.00, preferential base 1441.80, pension 19.52%, disability 8%, sickness 2.45% (voluntary), accident 1.67%, FP 1% + FS 1.45%. Minimum bases only. Mały ZUS Plus is not modelled. | research §1, ZUS 30.12.2025 |
+| D10 | **Social ZUS switch off (addendum A3):** the start date **still** sets the number of health-contribution months, so the date field sits outside the switch. Months before the start are regime `inactive`; the rest are `off`. | SPEC A3 |
+
+## 2. Wakacje składkowe
+
+| # | Decyzja | Podstawa |
+|---|---|---|
+| W1 | **Earliest month:** exemption month E ≥ F + 2, where F is the first month of coverage (a partial month counts). The application is filed in E−1, and the person must be covered in E−2. There are no holidays during ulga (no coverage) or with an employment contract (no mandatory coverage from the business). Only one month per calendar year. | art. 17a ust. 1 pkt 4 and art. 17b ust. 1 u.s.u.s. (t2026_199.txt 1037–1062); A8 |
+| W2 | **The exemption covers** pension, disability, accident and sickness contributions. Sickness is included because it is voluntary and paid in the application month and the month before. FP and FS are also covered. Health contribution is **not** covered. | art. 17a ust. 3; art. 259 ust. 1 pkt 4 lit. o of the labour-market act |
+| W3 | **Month choice per variant (A2):** each tax variant tests every eligible month **and** "no holidays", and keeps the lowest burden. Ties go to the earliest month. Including "no holidays" is my addition: the relief is voluntary, and in the ryczałt case a lower S can push revenue over the 60k/300k health threshold (art. 81 ust. 2g). The results-panel summary and the table in the export show the default month (highest contributions, earliest on a tie). Each variant's own month is in `data-holiday-month` and in its section of the details. | SPEC A2 |
+| W4 | **Conditions assumed to be met:** at most 10 insured persons, revenue ≤ €2m, de minimis limit available, no work for a former employer. Contributions waived by the holiday are not deducted anywhere. | art. 17a ust. 1 pkt 1–3, art. 17b ust. 2 |
+
+## 3. Składka zdrowotna
+
+| # | Decyzja | Podstawa |
+|---|---|---|
+| H1 | Health contribution is due from the start month, also during ulga, at the full amount for a partial month. n = number of months from the start month to December; n = 12 if the business started before 2026. | art. 79 ust. 2, art. 81 ust. 2, 2b, 2e u.ś.o.z. |
+| H2 | **Skala, liniowy, IP BOX:** base = D − FP − S (FP booked as a cost; S not booked as a cost), regardless of where S is deducted. Minimum = n × 432.54. January is also 432.54 (SPEC). | art. 81 ust. 2 i 2b; research §6.2, §9 pt 2 |
+| H3 | **Liniowy, 14 100 zł limit for a partial year (sprawdzić):** annual limit with **no** proration. The act says "nie może przekroczyć w roku podatkowym" and has no proration rule. The health contribution is deducted from income. Booking it as a cost does **not** lower its own base (A4, cautious reading). | art. 30c ust. 2 pkt 2 PIT (pit592.txt 7400–7414); MP 2025/1274 |
+| H4 | **Ryczałt:** monthly amount for the threshold × n. The 60k/300k thresholds are fixed amounts and are not prorated. The threshold revenue = revenue − **social contributions not deducted from scale income under the PIT act** (literal reading, A6). That covers contributions deducted from ryczałt revenue and contributions not deducted anywhere. FP does not reduce it. | art. 81 ust. 2e, 2f, 2g u.ś.o.z. (uzdr.txt 5555) |
+| H5 | **Ryczałt, multi-rate mode:** the threshold and the "ogólna kwota przychodów" ratio are based on **total revenue from the business** (the revenue field), not on the sum of allocations (review F6 / B10). If the allocations do not add up to revenue, the app shows an inline warning and the total is excluded from the ranking. | art. 81 ust. 2e–2f, art. 11 ust. 3 of the ryczałt act |
+
+## 4. Odliczanie składek społecznych: optimisation per variant
+
+Rule: for each variant the engine computes the total burden for every legal method and keeps the cheapest. On a tie it keeps the first method in the list. The details section lists every method with its total and the difference from the chosen one.
+
+| Forma | Sposoby (kolejność = preferencja przy remisie) | Uwagi |
+|---|---|---|
+| Skala (indiv./joint/IP BOX) | `income` (art. 26 ust. 1 pkt 2, from total scale income incl. other income), `costs` (tax-deductible cost) | A business loss does not reduce other income in the same year (art. 9 ust. 2–3). With joint filing, S reduces only the taxpayer's income, floored at 0. |
+| Liniowy (±IP BOX) | `linear` (art. 30c ust. 2 pkt 1), `costs`, `scale` (art. 26 from other income, ust. 13a) | Per A5, no splitting: any excess over the chosen source is lost. |
+| Ryczałt (single/multi) | `ryczalt` (art. 11 ust. 1 of the ryczałt act; excess over revenue goes to scale income, art. 26 ust. 13a), `scale` (art. 26; excess is lost) | The ryczałt→scale excess is the only split allowed (A5). The choice feeds into the health threshold via art. 81 ust. 2g. |
+| IP BOX | (A1) Contributions can be a cost, in which case they reduce qualified income proportionally, or can be deducted from scale or linear income. Nothing is deducted from income taxed at 5%. FP/FS as a cost is split proportionally by the coefficient (A9). The IP BOX coefficient is applied to income **after** these costs. With a loss, qualified income = 0. | art. 30ca; A1, A9 |
+
+- The `scale` option for linear and ryczałt is offered only when other income > 0; without it, it is either identical to or worse than the other options.
+- FP/FS is always a cost on skala and liniowy. On ryczałt it cannot be deducted anywhere (research §4.1).
+- Cash-basis assumption: contributions due for 2026 are treated as paid and deducted in 2026 (research §9 pt 3).
+- A tax loss carry-forward to later years is not modelled. Where "costs" and "income" give the same result, the tie rule picks the first option.
+
+## 5. Inne dochody i wynik wariantu
+
+| # | Decyzja | Podstawa |
+|---|---|---|
+| O1 | The "Inne dochody" field takes annual income after deductible costs **and after social contributions withheld by the payer** (PIT-11 base), before tax. With the youth relief, enter only the taxable part. This clarifies SPEC ("po kosztach, przed PIT"). | art. 26 ust. 1 pkt 2 (the employee's own contributions are deducted by the payer/in the return) |
+| O2 | Result = taxes in total (including other income) − **PIT + solidarity levy on other income alone** (individual, scale) + health + social ZUS (A10). With joint filing, the PIT the spouse would pay alone is also subtracted (B3). | SPEC, A10 |
+| O3 | On skala the other income is added to business income. On liniowy, ryczałt and liniowy+IP BOX it is taxed separately at the scale. The solidarity levy (art. 30h ust. 2) is charged on linear income + scale income after deductions; ryczałt and IP BOX are outside the levy base. | art. 30h ust. 2 PIT |
+| O4 | Health contribution on the other income (e.g. employment) is out of scope. | SPEC |
+
+## 6. Poprawki z recenzji 04de063 ([review_04de063.md](../weryfikacja/recenzja-04de063.md))
+
+- **F1:** `getIpBoxIncomeSplit` floors a loss at 0 and clamps the coefficient to [0, 1]. Only `taxScaleJoint` and `taxScaleIpBoxJoint` may have a negative value in the ranking.
+- **F2:** the taxpayer's income entering the joint sum is `max(0, …)`. This applies to `calculateJointScalePitOnly`, to the breakdown, and to the engine (pitBase ≥ 0). Checked: 50k/100k with a 100k spouse gives 1590.48.
+- **F4:** when the best amount is negative, the best card shows the note "Kwota ujemna: …".
+- **F5:** below 600 px the tooltip is anchored to the whole `.field-head` (left/right 0). On desktop it has max-width `min(280px, 100vw − 32px)`. Playwright at 390 px measured 0 tooltip overflows.
+- **F6 (B10):** see H5.
+- **F7:** deduction shares use the largest-remainder method (`splitProportionally`) and add up to the grosz.
+- **F8:** `TAX_CONSTANTS.LEGAL_STATUS_DATE` is the single source. `.brand-sub` is set from JS, and the static HTML text stays as a fallback.
+- **F9:** "Dochód małżonka" appears once in the joint breakdown. The "zdrowotna zdrowotna" typo is gone (the ryczałt/export text was rewritten). Rate-input validation now marks the rate field itself (`validateRateInput`).
+- **Other:** `calculateRyczaltRateTax` now rounds to the grosz. When several variants tie, the best card says "Wszystkie widoczne warianty dają tę samą kwotę".
+
+## 7. Uproszczenia pozostawione świadomie
+
+- Amounts are computed to the grosz; bases are not rounded to whole złoty (art. 63 Ordynacji; research B7).
+- Mały ZUS Plus, concurrent civil-law contracts, and voluntary contributions for someone with an employment contract are not modelled.
+- Whether the taxpayer qualifies for ulga or mały ZUS (60-month rule, former employer) is not checked.
+- The cascade effect of booking linear health contribution as a cost is not modelled (A4).
+- A business loss is not carried forward to later years.
+
+## 8. Poprawki po recenzji, modelu referencyjnym i przeglądzie UX (runda „fix”)
+
+| # | Decyzja | Podstawa |
+|---|---|---|
+| R1 | **Ryczałt, metoda „od przychodu”:** najpierw 50% zdrowotnej (art. 11 ust. 1a), potem składki społeczne do wysokości `max(P − 50%·H, 0)`, reszta od dochodu ze skali (art. 26 ust. 13a). Stara kolejność (składki najpierw) jest zdominowana, więc zastąpiona, a nie dodana jako trzecia metoda. Próg zdrowotnej (art. 81 ust. 2g) zależy od podziału, a podział od H — rozwiązywane jako punkt stały od najniższego progu (odwzorowanie monotoniczne, ≤ 3 kroki). Bez innych dochodów wynik bez zmian. Kontrola: 15 000 / inne 100 000 / pełny ZUS → 27 967,37 (ręcznie); I-265 → 27 367,37. | REVIEW #1, COMPARE RC1 |
+| R2 | **round2:** połówka od zera, `Math.round(Number((|n|·100).toPrecision(15)))`, bez −0. `splitProportionally` liczy grosze z `round2(amount)`. Dochód w kontekście = `round2(przychód − koszty)`. | REVIEW #4 |
+| R3 | **PIT wg skali** liczony i pokazywany wzorem art. 27 ust. 1: `max(round2(12%·P) − 3600, 0)` dla P ≤ 120 000, `10 800 + round2(32%·(P − 120 000))` powyżej. Liczbowo identyczne z przedziałami. | UX U13 |
+| R4 | **Jeden parser kwot** `taxMath.parseAmount` (w taxConstants.js, żeby testy miały do niego dostęp): spacje/NBSP i „zł” pomijane; oba separatory → ostatni dziesiętny; pojedynczy „.”/„,” z 1–2 cyframi na końcu → dziesiętny; pojedynczy separator na samym końcu („1234,” — w trakcie pisania) → dziesiętny bez cyfr; w pozostałych przypadkach separatory tysięcy z **wymuszonymi grupami po 3 cyfry** („1,5,5”, „1234,567”, „12 34” = błąd). Wykładnik, litery = błąd. Wszystkie pola kwotowe są nieujemne i ≤ 999 999 999. | REVIEW #2, UX U1 |
+| R5 | **Walidacja blokująca:** `calculate()` zawsze waliduje wszystkie pola (kwoty, dochód małżonka przy wspólnym, udział IP BOX przy IP BOX, przychody stawek w „Wiele stawek”, daty). Przy błędzie: brak wyników i rankingu, `data-*` wyczyszczone, panel `data-state="invalid"`, karta z listą pól (przyciski ustawiające fokus), eksport zwraca komunikat. Data: niepełna (`validity.badInput`) = błąd; data urodzenia ≥ data rozpoczęcia albo > 31.12.2026 = błąd. Poprawna kwota jest formatowana przy blur, błędna zostaje bez zmian. | REVIEW #3, COMPARE probe 2, UX U6 |
+| R6 | **Ścieżka bez daty rozpoczęcia:** opcje „Ulga na start” i „Mały ZUS” są `disabled` (przekreślone); zaznaczona wcześniej zostaje zaznaczona, ale podpowiedź (stan `warn`) mówi, że bez daty liczymy pełny ZUS przez cały rok. Obliczenie bez zmian (D1). | UX U7 |
+| R7 | **Etat + ulga/mały ZUS:** `buildSocialSchedule` nie ustala `ulgaEnd`/`prefEnd` przy umowie o pracę; eksport: „Ścieżka składek: nie dotyczy — umowa o pracę …”. | REVIEW #5 |
+| R8 | **Wakacje w tabeli ZUS:** składniki miesiąca zwolnienia = 0 (kolumny sumują się do Σ); zwolniona kwota z rozbiciem w przypisie pod tabelą. | REVIEW #6 |
+| R9 | **RC2 (niepełny podział w „Wiele stawek”)** — interpretacja bez zmian (H5), ale komunikat mówi wprost: ryczałt tylko od kwot przypisanych, próg i proporcje od całego przychodu, wynik niepełny i pominięty w rankingu; ta sama informacja w karcie najlepszego wariantu i w rankingu eksportu. | COMPARE RC2 |
+| R10 | **Ranking** liczony z wyniku obliczeń (`buildRanking`), nie z DOM; ta sama lista w karcie, kolejności wierszy i eksporcie. W „Wiele stawek” wiersze stawek („część ryczałtu”) stoją razem przed sumą „Łącznie” i nie są rangowane; grupa ustawiana wg sumy (pominięta suma → na końcu). Remis na 1. miejscu → „Ex aequo: …”. | UX U4, U10, U15 |
+| R11 | **Danina a IP BOX** — bez zmian (dochód z art. 30ca poza podstawą), dopisane do Założeń i eksportu z podstawą: art. 30h ust. 2 (katalog zamknięty), art. 30c ust. 6, KIS 0112-KDIL2-1.4011.110.2019.1.AMN. Sugestia UX N1/U2 odrzucona na podstawie [legal_check_danina_ulga.md](../prawo/weryfikacja-danina-ulga-na-start.md). | legal_check §1 |
+| R12 | **Ulga na start — liczenie** bez zmian (pełne miesiące kalendarzowe), w Założeniach i eksporcie link do wyjaśnień ZUS. Przy liniowym z IP BOX zdrowotna odliczana tylko od dochodu liniowego — opisane jako założenie. | UX N4, N7 |
+| R13 | **Eksport:** nagłówek z datą i godziną sporządzenia (czas lokalny przeglądarki), blok „DANE WEJŚCIOWE” (wszystkie pola, w tym stawki ryczałtu i opcje ZUS), „RANKING” z różnicą do najlepszego i linią składników, blok założeń (grosze/art. 63 O.p., IP BOX a danina). `<pre>` w szczegółach i w oknie eksportu: `white-space: pre` + przewijanie w poziomie. | UX U5, U11 |
+| R14 | **Pominięte świadomie:** zapis/udostępnianie scenariuszy (URL/localStorage), arkusz stylów do druku, domyślna stawka ryczałtu / monit o jej wybór (dodano tylko uwagę „zweryfikuj stawkę” w karcie, gdy wygrywa ryczałt), wybór miesiąca wakacji przez użytkownika (U9), Mały ZUS Plus. | zakres rundy |
+
+## 9. Runda po FINAL_VERIFICATION
+
+| # | Decyzja |
+|---|---|
+| F1 | Walidacja pomija pola nieaktywne: data urodzenia tylko przy włączonych składkach społecznych; ogólnie pole w `[inert]`/`[hidden]`/`disabled` nie blokuje wyników (błąd czyszczony). Linki błędów w karcie przewijają i ustawiają fokus na widocznym polu. |
+| F2 | Zdarzenia input/change pola z fokusem: niedokończony wpis (błąd formatu kwoty, niepełna/pośrednia data, pusty/niepoprawny udział IP BOX) nie zmienia wyników — zostają ostatnie poprawne, komunikat pola bez zmian. Pełna walidacja przy blur. Kwota ujemna / zbyt duża jest błędem od razu. Zdarzenia bez fokusu (testy, harness) – pełna walidacja jak dotąd. |
+| F3 | Parser: przy grupowaniu spacjami pojedynczy „,”/„.” po ostatniej spacji jest dziesiętny, więc „1 000,555” = błąd, „1 000,5” = 1000,5. „1,234” / „1.234” bez spacji nadal = 1234. |
+| F4 | Ryczałt — opis: nieodliczona część 50% zdrowotnej ponad przychód „przepada” (art. 11 ust. 1a; brak odpowiednika w art. 26); etykieta metody wg faktycznych kwot (np. „od dochodu ze skali (przychód w całości pokryty odliczeniem 50% zdrowotnej)”, „od przychodu i (nadwyżka) od dochodu ze skali”); „nadwyżka ponad przychód pomniejszony o 50% zdrowotnej”; wskazówka do PIT-28 (E.1 — kwota odliczona od przychodu) i PIT-36/37 (reszta, art. 26 ust. 13a). Linia podstawy przy odliczeniu > przychód: „A − B < 0 → 0,00 zł”. W kodzie aplikacji nie było odwołań do „art. 11 ust. 1b” (sprawdzone grep). |
+| F5 | Pola kwotowe z przyrostkiem „zł” formatowane bez „zł” („150 000,00”); pola przychodu stawek (bez przyrostka) zachowują „zł”. |
+| F6 | Tło otwartego okna modalnego dostaje `inert` + `data-modal-inert`; `isFieldActive` pomija tylko sekcje zwinięte (inert bez tego znacznika / hidden / disabled), więc otwarty eksport nie wyłącza walidacji. |

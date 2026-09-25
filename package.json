@@ -16,10 +16,13 @@
     "lint:fix": "eslint app/ tools/ --fix",
     "verify:refmodel": "node tools/refmodel/compare.mjs",
     "verify:refmodel2027": "node tools/refmodel/compare.mjs --year=2027",
+    "verify:refmodelFamily": "node tools/refmodel/compare.mjs --family",
     "verify:breakdown": "node tools/refmodel/checkBreakdown.mjs",
     "verify:breakdown2027": "node tools/refmodel/checkBreakdown.mjs --year=2027",
+    "verify:breakdownFamily": "node tools/refmodel/checkBreakdown.mjs --family",
     "verify:fuzz": "node tools/refmodel/fuzz.mjs 200 7 99 2024",
     "verify:fuzz2027": "node tools/refmodel/fuzz.mjs --year=2027 200 7 99 2024",
+    "verify:fuzzFamily": "node tools/refmodel/fuzz.mjs --family 200 7 99 2024",
     "verify:hand": "node tools/refmodel/checkHand.mjs"
   },
   "repository": {

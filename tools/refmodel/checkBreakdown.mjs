@@ -5,26 +5,30 @@
 //  (4) generic arithmetic lines inside the text are self-consistent:
 //      "A × p% = B", "A + B (+ C…) = D", "A − B = C", "A : 2 = B", "A × 2 = B".
 //
-// Usage: node tools/refmodel/checkBreakdown.mjs [--year=2027]
+// Usage: node tools/refmodel/checkBreakdown.mjs [--year=2027 | --family]
 //        (npm run verify:breakdown / verify:breakdown2027; APP_DIR as in compare.mjs)
 // Writes out/breakdown_check[_2027].json. Exit code 1 when any problem is found.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { APP_DIR, OUT_DIR, YEAR, runApp } from './compare.mjs';
+import { APP_DIR, OUT_DIR, YEAR, FAMILY, KNOWN_DIFFS_FAMILY, runApp } from './compare.mjs';
+import { computeAll } from './refModel.mjs';
 
-const cases = JSON.parse(readFileSync(new URL(YEAR === 2026 ? './cases.json' : `./cases${YEAR}.json`, import.meta.url), 'utf8')).cases;
+const cases = JSON.parse(readFileSync(new URL(FAMILY ? './casesFamily.json' : YEAR === 2026 ? './cases.json' : `./cases${YEAR}.json`, import.meta.url), 'utf8')).cases;
 const HEAD = {
   'SKALA PODATKOWA': 'taxScale',
   'SKALA PODATKOWA Z IP BOX': 'taxScaleIpBox',
   'SKALA PODATKOWA WSPÓLNIE Z MAŁŻONKIEM': 'taxScaleJoint',
   'SKALA PODATKOWA Z IP BOX WSPÓLNIE Z MAŁŻONKIEM': 'taxScaleIpBoxJoint',
+  'SKALA PODATKOWA — SAMOTNY RODZIC': 'taxScaleSingle',
+  'SKALA PODATKOWA Z IP BOX — SAMOTNY RODZIC': 'taxScaleIpBoxSingle',
   'PODATEK LINIOWY': 'taxLinear',
   'PODATEK LINIOWY Z IP BOX': 'taxLinearIpBox',
   'RYCZAŁT (WIELE STAWEK)': 'ryczaltMulti',
 };
 const RYHEAD = { '2%': 'ryczalt2', '3%': 'ryczalt3', '5,5%': 'ryczalt5_5', '8,5%': 'ryczalt8_5', '10%': 'ryczalt10', '12%': 'ryczalt12', '14%': 'ryczalt14', '15%': 'ryczalt15', '17%': 'ryczalt17' };
-const num = (s) => Number(s.replace(/\s/g, '').replace(/\u00a0/g, '').replace(',', '.'));
-const NUM = '(-?\\d[\\d\\s\\u00a0]*,\\d{2})';
+// Amounts may carry an ASCII hyphen or a typographic minus (U+2212) – both are negative.
+const num = (s) => Number(s.replace(/\s/g, '').replace(/\u00a0/g, '').replace(/\u2212/g, '-').replace(',', '.'));
+const NUM = '([-\u2212]?\\d[\\d\\s\\u00a0]*,\\d{2})';
 
 function sectionId(h) {
   if (HEAD[h]) return HEAD[h];
@@ -38,7 +42,9 @@ function sectionId(h) {
 
 // pick ~50 cases spread over all groups
 // 2027: every 7th case plus the joint / IP BOX / ryczałt-EUR / multi / hand-check groups (both scenarios).
-const sample = YEAR === 2026
+const sample = FAMILY
+  ? cases.filter((_, i) => i % 3 === 0).concat(cases.filter((c) => /^F(N|H|E)-/.test(c.id) && Number(c.id.split('-')[1]) % 3 !== 0)).slice(0, 110)
+  : YEAR === 2026
   ? cases.filter((_, i) => i % 8 === 0).concat(cases.filter((c) => /^(J|K|L|N|H)-/.test(c.id) && Number(c.id.slice(2)) % 5 === 1)).slice(0, 60)
   : cases.filter((_, i) => i % 7 === 0).concat(cases.filter((c) => /^27(J|K|R|L|N)-/.test(c.id) && Number(c.id.split('-')[1]) % 3 === 0)).slice(0, 90);
 const problems = [];
@@ -55,6 +61,24 @@ for (const cs of sample) {
     if (h) { cur = sectionId(h[1]); if (cur) sections[cur] = []; continue; }
     if (/^={5,}/.test(ln)) cur = null;
     if (cur) sections[cur].push(ln);
+  }
+  // --family: the relief amount, the part deducted and the refund in each variant section agree with the model.
+  const mFam = FAMILY && cs.input.family && cs.input.family.children.length ? computeAll(cs.input) : null;
+  if (mFam && !mFam.error) {
+    const m = mFam;
+    const ku = text.match(new RegExp('Kwota ulgi rodziny: ' + NUM + ' zł'));
+    checkedArith++;
+    if (!ku || Math.abs(num(ku[1]) - m.family.baseline.family.reliefTotal) > 0.011) problems.push({ id: cs.id, issue: 'relief amount ≠ model', text: ku && ku[0], model: m.family.baseline.family.reliefTotal });
+    for (const [id, sl] of Object.entries(sections)) {
+      const mv = m.variants[id];
+      if (!mv || !mv.family) continue;
+      const used = sl.map((l) => l.match(new RegExp('Odliczono od podatku \\(art\\. 27f ust\\. 1\\): .*= ' + NUM + ' zł'))).find(Boolean);
+      const ref = sl.map((l) => l.match(new RegExp('Zwrot niewykorzystanej ulgi \\(art\\. 27f ust\\. 8\\): .*= ' + NUM + ' zł'))).find(Boolean);
+      checkedArith++;
+      if (used && Math.abs(num(used[1]) - mv.family.used) > 0.011) problems.push({ id: cs.id, variant: id, issue: 'deducted relief ≠ model', text: used[0], model: mv.family.used });
+      if (ref && Math.abs(num(ref[1]) - mv.family.refund) > 0.011 && !KNOWN_DIFFS_FAMILY[cs.id]) problems.push({ id: cs.id, variant: id, issue: 'refund ≠ model', text: ref[0], model: mv.family.refund });
+      if (!ref && mv.family.refund > 0.005) problems.push({ id: cs.id, variant: id, issue: 'model refund but no refund line', model: mv.family.refund });
+    }
   }
   for (const [id, sl] of Object.entries(sections)) {
     const d = a.variants[id];
@@ -79,7 +103,10 @@ for (const cs of sample) {
   // generic arithmetic
   for (const ln of lines) {
     let m;
-    if ((m = ln.match(new RegExp(NUM + ' zł × (\\d+(?:,\\d+)?)% = ' + NUM + ' zł')))) {
+    if ((m = ln.match(new RegExp('min\\(' + NUM + ' zł; ' + NUM + ' zł\\) = ' + NUM + ' zł')))) {
+      checkedArith++;
+      if (Math.abs(Math.min(num(m[1]), num(m[2])) - num(m[3])) > 0.011) problems.push({ id: cs.id, issue: 'min(A; B) ≠ C', text: ln.trim() });
+    } else if ((m = ln.match(new RegExp(NUM + ' zł × (\\d+(?:,\\d+)?)% = ' + NUM + ' zł')))) {
       checkedArith++;
       const A = num(m[1]), p = num(m[2]), B = num(m[3]);
       if (Math.abs(Math.round(A * p) / 100 - B) > 0.011) problems.push({ id: cs.id, issue: 'A × p% ≠ B', text: ln.trim() });
@@ -111,7 +138,7 @@ for (const cs of sample) {
   }
 }
 mkdirSync(OUT_DIR, { recursive: true });
-const OUT_NAME = YEAR === 2026 ? 'breakdown_check.json' : `breakdown_check_${YEAR}.json`;
+const OUT_NAME = FAMILY ? 'breakdown_check_family.json' : YEAR === 2026 ? 'breakdown_check.json' : `breakdown_check_${YEAR}.json`;
 writeFileSync(resolve(OUT_DIR, OUT_NAME), JSON.stringify({ sampled: sample.length, checkedSections, checkedArith, problems }, null, 1));
 console.log('APP_DIR:', APP_DIR, 'year:', YEAR);
 console.log({ sampled: sample.length, checkedSections, checkedArith, problems: problems.length });

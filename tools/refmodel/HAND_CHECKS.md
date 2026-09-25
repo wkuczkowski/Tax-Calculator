@@ -1,6 +1,6 @@
 # Hand checks: reference model for 2026 and 2027
 
-Six 2026 examples and four 2027 examples (Y1–Y4, current law and the draft reform), worked through by hand. `node tools/refmodel/checkHand.mjs` (or `npm run verify:hand`) compares every number below with `refModel.mjs`. All 148 checks match (58 for 2026, 90 for 2027 incl. two reform-scale spot checks).
+Six 2026 examples, four 2027 examples (Y1–Y4, current law and the draft reform) and five family-relief examples (R1–R5), worked through by hand. `node tools/refmodel/checkHand.mjs` (or `npm run verify:hand`) compares every number below with `refModel.mjs`. All 240 checks match (58 for 2026, 90 for 2027 incl. two reform-scale spot checks, 92 for the family reliefs R1–R5).
 
 Conventions:
 - Every social contribution is rounded to the grosz, separately for each component and each month.
@@ -192,3 +192,55 @@ Input: revenue 1 500 000, **2026 revenue 800 000**, start **2025-08-15**, path p
 4. **Liniowy (reform, danina 5%):** health = 4,9% × (1 500 000 − 589,96 − 11 377,44) = 4,9% × 1 488 032,60 = 72 913,5974 → **72 913,60**; deductible 15 100. Base = 1 488 032,60 − 15 100 = 1 472 932,60. PIT = 279 857,194 → **279 857,19**. Danina = 5% × 472 932,60 = 23 646,63 → **23 646,63**. Total = 279 857,19 + 23 646,63 + 72 913,60 + 11 377,44 + 589,96 = **388 384,82**.
 5. Cross-check, **current law** (no 17%, danina 4%): ryczałt 12% = 12% × (1 500 000 − 20 825,28) = 12% × 1 479 174,72 = **177 500,97**, total **208 364,05** (the 17% surcharge costs 5% × 184 896,84 = 9 244,84); liniowy danina 4% × 472 932,60 = **18 917,30**, total **383 655,49**.
 6. If the 2026 revenue were 1 100 000 (> 1 093 750), every ryczałt variant would be flagged `unavailable` and the best variant would be liniowy (388 384,82).
+
+---
+
+# Rodzina (ulga na dzieci, samotny rodzic, małżonkowie, ulga 4+)
+
+Conventions of the family mode (see `refModel.mjs`, "Family reliefs"):
+- **Result = household burden attributed to the business**: taxes with the business (after the child relief deducted from scale tax and the refund) − **H0** (the same household without the business: other income and spouse only, best legal mode, with relief and refund) + health + social + FP.
+- Model `pit` = the taxpayer's taxes after relief and refund **plus the spouse's separate PIT** (married, not joint). The app shows `data-taxes` = that − spouse PIT and `data-baseline` = H0 − spouse PIT; the difference is the same.
+- Relief per month: 92,67 for the 1st and 2nd child, 166,67 for the 3rd, 225 for the 4th and next (art. 27f ust. 2); a child with m months is eligible in the last m months of the year (assumption, RD3).
+- Refund cap (art. 27f ust. 9–10): social contributions "podlegające odliczeniu" under art. 26 (not in costs, not deducted in PIT-36L/PIT-28) + health paid minus health deducted in PIT-36L/PIT-28 (literal ust. 9 pkt 2: scale health in full, the non-deducted 50% of ryczałt health and linear health above the deducted amount count; app 4c0ee3d excluded the latter two – fix in progress) + contributions on other income + spouse's (married). The taxpayer's JDG social contributions count on liniowy/ryczałt only when he files PIT-36/37 (other income > 0).
+- Contributions on other income / spouse when not given: G = r((D + 3 000) / 0,8629), social r(13,71% × G), health r(9% × (G − social)); e.g. 60 000 → 15 679,62; 50 000 → 13 190,79; 30 000 → 8 213,13; 10 000 → 3 235,48.
+
+## R1: single parent, one child, other income 60 000, business 100 000, ZUS off (research §4.2; case `FN-242`)
+
+- Relief 12 × 92,67 = **1 112,04**. One child without a disability certificate → income limit applies.
+- **H0**: single-parent mode 2 × T(30 000) = 2 × (3 600 − 3 600) = 0; nothing to deduct; refund min(1 112,04; cap 15 679,62) = 1 112,04. H0 = **−1 112,04** (individually: T(60 000) = 3 600 − 1 112,04 = 2 487,96, worse).
+- **Skala — samotny rodzic** (`taxScaleSingle`): scale base 160 000 > limit 112 000 → relief lost. PIT 2 × T(80 000) = 2 × (9 600 − 3 600) = **12 000**. Health 9% × 100 000 = **9 000**. Total 12 000 + 9 000 − (−1 112,04) = **22 112,04**.
+- **Skala indywidualnie**: 10 800 + 32% × 40 000 = **23 600**; total **33 712,04**.
+- **Liniowy** (preference lost, art. 6 ust. 8; limit 56 000 cautious): health max(4,9% × 100 000; 12 × 432,54) = **5 190,48**; linear base 94 809,52 → 18 013,81; other T(60 000) = 3 600; PIT **21 613,81**; limit income 154 809,52 > 56 000 → no relief. Total 21 613,81 + 5 190,48 + 1 112,04 = **27 916,33**.
+- **Ryczałt 12%**: health tier 2 → **9 966,96**, 50% = 4 983,48; ryczałt 12% × 95 016,52 = 11 401,98; other 3 600; limit income = other 60 000 > 56 000 (cautious) → no relief. PIT **15 001,98**; total **26 080,98**. (Literal 112 000: relief 1 112,04 would be deducted from the 3 600 → −1 112,04; `alt.familySingleParentLimitLiteral`.)
+- Research §4.2 counted only PIT: 22 112,04 − 9 000 = 13 112,04 ✓.
+
+## R2: married, separate returns, spouse 50 000, 3 children (3rd for 5 months), revenue 180 000, costs 30 000, full ZUS 2026 (case `FN-243`)
+
+- Relief: Jan–Jul 2 × 92,67 × 7 = 1 297,38; Aug–Dec (92,67 × 2 + 166,67) × 5 = 1 760,05; **3 057,43**. Three children → no income limit.
+- Spouse: separate PIT T(50 000) = 2 400; contributions (estimate) 13 190,79.
+- **H0** (no business, taxpayer has no income): relief split freely → used min(3 057,43; 0 + 2 400) = 2 400; refund min(657,43; 13 190,79) = 657,43 (spouse files PIT-37). H0 = 2 400 − 2 400 − 657,43 = **−657,43**.
+- **Skala**: base 150 000 − 1 661,64 − 21 459,48 = 126 878,88; T = 10 800 + 32% × 6 878,88 = **13 001,24**; pool 13 001,24 + 2 400 → whole relief deducted (3 057,43), refund 0. `pit` = 13 001,24 + 2 400 − 3 057,43 = **12 343,81**. Health 9% × 126 878,88 = **11 419,10**. Total 12 343,81 + 11 419,10 + 23 121,12 + 657,43 = **47 541,46**.
+- **Liniowy**: health 4,9% × 126 878,88 = **6 217,07**; base 126 878,88 − 6 217,07 = 120 661,81 → **22 925,74**. Only the spouse can deduct: used 2 400, refund 657,43 (cap = spouse's 13 190,79; the taxpayer files no PIT-36/37). `pit` = 22 925,74 + 2 400 − 2 400 − 657,43 = **22 268,31**; total 22 268,31 + 6 217,07 + 23 121,12 + 657,43 = **52 263,93** (the business changes nothing in the relief).
+- **Ryczałt 12%**: tier revenue 158 540,52 → **9 966,96**; base 180 000 − 21 459,48 − 4 983,48 = 153 557,04 → 18 426,84; `pit` 18 426,84 − 657,43 = **17 769,41**; total **51 514,92**.
+
+## R3: ulga 4+ with the 8,5% / 12,5% band, 4 children, revenue 150 000, limit used elsewhere 20 000, other income 30 000 (case `FN-244`)
+
+- Exemption E = min(85 528 − 20 000; 150 000) = **65 528**. Relief (92,67 × 2 + 166,67 + 225) × 12 = **6 924,12** (no limit). Other-income contributions (estimate) 8 213,13.
+- **H0**: T(30 000) = 0 → refund min(6 924,12; 8 213,13) = 6 924,12; H0 = **−6 924,12**.
+- **Ryczałt 8,5%/12,5%**: health tier from the full revenue (art. 81 ust. 2zd): 150 000 − 21 459,48 = 128 540,52 → **9 966,96**, 50% = 4 983,48. Exempt revenue comes first in the year (RD16 assumption) and uses the part below 100 000: 8,5% part 100 000 − 65 528 = 34 472; 12,5% part 50 000. Deductions 21 459,48 + 4 983,48 = 26 442,96 split by taxable revenue: 26 442,96 × 34 472 / 84 472 = 10 791,05 and 15 651,91. Tax 8,5% × 23 680,95 = 2 012,88 and 12,5% × 34 348,09 = 4 293,51 → 6 306,39. Scale tax on other income 0 → refund 6 924,12 (cap 8 213,13). `pit` = 6 306,39 − 6 924,12 = **−617,73**; total −617,73 + 9 966,96 + 23 121,12 + 6 924,12 = **39 394,47**.
+- **Liniowy**: taxable 150 000 − 65 528 − 1 661,64 − 21 459,48 − 6 217,07 = 55 133,81 → 10 475,42 (health **6 217,07** on the unreduced base); refund 6 924,12; `pit` **3 551,30**; total **39 813,61**.
+- **Skala**: base 84 472 − 1 661,64 + 30 000 − 21 459,48 = 91 350,88; T = 10 962,11 − 3 600 = 7 362,11; whole relief deducted; `pit` **437,99**; health **11 419,10**; total **41 902,33**.
+
+## R4: 2027 reform, 5 children, other income 10 000, revenue 150 000, full ZUS 2027 (case `FN-245`; RD7-like)
+
+- Relief (92,67 × 2 + 166,67 + 225 × 2) × 12 = **9 624,12**. Other-income contributions (estimate) **3 235,48**. H0: T(10 000) = 0 → refund 3 235,48 → **H0 = −3 235,48**.
+- **Liniowy, social from other income (method `scale`)** – optimal because it lifts the refund cap: health 4,9% × 125 374,20 = **6 143,34**; base 148 230,12 − 6 143,34 = 142 086,78 → 26 996,49; other income 10 000 − 10 000 = 0; cap 22 855,92 + 3 235,48 = 26 091,40 → refund **9 624,12**. `pit` 26 996,49 − 9 624,12 = **17 372,37**; total 17 372,37 + 6 143,34 + 24 625,80 + 3 235,48 = **51 376,99**. (Method `lin`: base 119 230,86 → 22 653,86, refund only 3 235,48 → 53 423,00, worse by 2 046,01.)
+- **Skala (reform)**: base 148 230,12 + 10 000 − 22 855,92 = 135 374,20 → 12 000 + 24% × 5 374,20 = **13 289,81**; relief fully deducted; `pit` **3 665,69**; health 9% × 125 374,20 = **11 283,68**; total **42 810,65**. Current law 2027: 10 800 + 32% × 15 374,20 = 15 719,74 → `pit` 6 095,62, total **45 240,58**.
+- **Ryczałt 3% (method `scale`)**: S 10 000 from other income, 12 855,92 not deducted; tier revenue 150 000 − 12 855,92 = 137 144,08 → **10 497,60**; base 150 000 − 5 248,80 = 144 751,20 → 4 342,54; cap 22 855,92 + 3 235,48 → refund 9 624,12; `pit` **−5 281,58**; total **33 077,30** (method `ryczalt`: ryczałt 3 656,86; cap 3 235,48 + non-deducted 50% health 5 248,80 = 8 484,28 → refund 8 484,28; `pit` −4 827,42 → total −4 827,42 + 10 497,60 + 24 625,80 + 3 235,48 = 33 531,46, worse by 454,16).
+
+## R5: per-child periods (model only – the app at 4c0ee3d takes a number of months, fix in progress)
+
+Children given as `{ from, to }` months (art. 27f ust. 2 and 2b – the law). ZUS off, status "inna".
+- Child A January–March, child B November–December: never two children in one month → 5 × 92,67 = **463,35**, and the one-child limit **applies** (ust. 2b needs at least one day with two children). Revenue 40 000: T = 1 200 → deducted **463,35**. Revenue 56 000,01 > 56 000 → **0**.
+- Child A January–March, child B March–December: two children in March → limit does not apply; 13 child-months × 92,67 = **1 204,71**, deducted in full from T(56 000,01) = 3 120,00.
+- The same children entered as numbers of months (3 and 2, or 3 and 10) are placed at the end of the year (maximal overlap, RD3) → the limit would be switched off: this is the difference the app is fixing.

@@ -24,15 +24,36 @@ export const KNOWN_DIFFS = {
   'L-385': 'RC2: wiele stawek, suma przydziałów ≠ przychód – aplikacja liczy próg zdrowotnej i proporcje od pełnego przychodu, model od sumy przydziałów (docs/weryfikacja/porownanie-z-modelem-referencyjnym.md)',
 };
 export const KNOWN_DIFFS_2027 = {};
+// Family grid vs app 4c0ee3d. "W TOKU POPRAWKI" = the app is being changed to the literal art. 27f ust. 9
+// pkt 2 (health not deducted in PIT-28/36L counts toward the refund cap; legal review 25.09.2026, RD6 → literal).
+// When the fix lands these should stop reproducing (the script then prints "no longer reproduces").
+const FIX_HEALTH_CAP = 'W TOKU POPRAWKI (limit zwrotu, art. 27f ust. 9 pkt 2): model wlicza nieodliczone 50% zdrowotnej ryczałtowca i zdrowotną liniowca ponad kwotę odliczoną w PIT-36L; aplikacja 4c0ee3d – nie (RD6, ostrożnie).';
+export const KNOWN_DIFFS_FAMILY = {
+  'FC-100': FIX_HEALTH_CAP,
+  'FC-109': FIX_HEALTH_CAP,
+  'FC-110': FIX_HEALTH_CAP,
+  'FE-151': FIX_HEALTH_CAP + ' Tu składka ryczałtowca (bez PIT-36/37) podnosi łączny limit małżonków (ust. 10).',
+  'FE-155': FIX_HEALTH_CAP + ' Łączny limit małżonków (ust. 10).',
+  'FH-186': FIX_HEALTH_CAP,
+  'FI-195': FIX_HEALTH_CAP,
+  'FI-205': FIX_HEALTH_CAP,
+  'FN-245': FIX_HEALTH_CAP,
+  'FC-103': FIX_HEALTH_CAP + ' Tu różnica wymaga obu odstępstw RD6: także składek społecznych ponad dochód liniowy (model: w limicie – nieodliczone w PIT-36L, art. 27f ust. 9 pkt 1 + art. 26 ust. 13a; aplikacja: 0). Po poprawce zdrowotnej wynik będzie ten sam (limit pokryty); różnica interpretacyjna zostaje ukryta.',
+  'FC-106': FIX_HEALTH_CAP + ' Jak FC-103 (liniowy, składki ponad dochód liniowy).',
+};
 
-const TOL = 0.02;
 const RY = { '2': 'ryczalt2', '3': 'ryczalt3', '5.5': 'ryczalt5_5', '8.5': 'ryczalt8_5', '8.5-12.5': 'ryczalt8_5_12_5', '10': 'ryczalt10', '12': 'ryczalt12', '14': 'ryczalt14', '15': 'ryczalt15', '17': 'ryczalt17' };
 const ARGS = process.argv.slice(2);
 const YEAR_ARG = ARGS.find((a) => a.startsWith('--year='));
 export const YEAR = YEAR_ARG ? Number(YEAR_ARG.slice(7)) : 2026;
-const SUFFIX = YEAR === 2026 ? '' : `_${YEAR}`;
-const CASES_FILE = YEAR === 2026 ? './cases.json' : `./cases${YEAR}.json`;
-const KNOWN = YEAR === 2026 ? KNOWN_DIFFS : KNOWN_DIFFS_2027;
+// --family: the family-relief grid (casesFamily.json, both years; each case carries its own year).
+export const FAMILY = ARGS.includes('--family');
+// Family grid: 2 × T(½) rounding (single parent / joint) differs in the variant and in the household
+// baseline (app: half and T(½) to the grosz, then × 2; model: once after doubling) → up to ~0,02 + 0,01.
+const TOL = FAMILY ? 0.03 : 0.02;
+const SUFFIX = FAMILY ? '_family' : YEAR === 2026 ? '' : `_${YEAR}`;
+const CASES_FILE = FAMILY ? './casesFamily.json' : YEAR === 2026 ? './cases.json' : `./cases${YEAR}.json`;
+const KNOWN = FAMILY ? KNOWN_DIFFS_FAMILY : YEAR === 2026 ? KNOWN_DIFFS : KNOWN_DIFFS_2027;
 const cases = JSON.parse(readFileSync(new URL(CASES_FILE, import.meta.url), 'utf8')).cases;
 const filter = ARGS.find((a) => !a.startsWith('--'));
 
@@ -57,6 +78,22 @@ export function runApp(inp, { breakdown = false } = {}) {
     c.setHoliday(!!z.wakacje);
     c.setBirthDate(z.birthDate || '');
     c.setSex(z.sex || '');
+    const f = inp.family;
+    if (f) {
+      // Karta „Rodzina” (loader setters), expanded as a user would (so its validation is active).
+      // Status before the spouse fields; joint filing forces „married”.
+      const tg = c.document.getElementById('familyToggle');
+      if (tg && tg.getAttribute('aria-expanded') !== 'true') tg.click();
+      if (!inp.joint.enabled) c.setFamilyStatus(f.status || 'other');
+      for (const ch of f.children || []) c.addChild({ months: ch.months ?? 12, disabled: !!ch.disabled, adult: !!ch.adult });
+      if ((f.status || 'other') === 'other' && f.share !== undefined && f.share !== null) c.setFamilyShare(f.share);
+      if (f.status === 'married' && !inp.joint.enabled && inp.joint.spouseIncome) c.setSpouseIncome(pl(inp.joint.spouseIncome));
+      if (f.spouseLinRycz) c.setSpouseLinRycz(true);
+      if (f.spouseLinearIncome) c.setSpouseLinearIncome(pl(f.spouseLinearIncome));
+      if (f.spouseContrib !== undefined && f.spouseContrib !== null) c.setSpouseContrib(pl(f.spouseContrib));
+      if (f.otherContrib !== undefined && f.otherContrib !== null) c.setOtherContrib(pl(f.otherContrib));
+      if (f.fourPlus) c.setFourPlus(true, f.fourPlusUsed ? pl(f.fourPlusUsed) : '');
+    }
     if (inp.reform2027 && inp.revenuePrevYear !== null && inp.revenuePrevYear !== undefined) c.setPrevYearRevenue(pl(inp.revenuePrevYear));
     const multi = inp.multiRate.enabled;
     if (multi) {
@@ -70,6 +107,7 @@ export function runApp(inp, { breakdown = false } = {}) {
     const ids = ['taxScale', 'taxLinear'];
     if (inp.joint.enabled) ids.push('taxScaleJoint');
     if (inp.ipBox.enabled) { ids.push('taxScaleIpBox', 'taxLinearIpBox'); if (inp.joint.enabled) ids.push('taxScaleIpBoxJoint'); }
+    if (inp.family && inp.family.status === 'single' && !inp.joint.enabled && (inp.family.children || []).length) { ids.push('taxScaleSingle'); if (inp.ipBox.enabled) ids.push('taxScaleIpBoxSingle'); }
     if (!multi) ids.push(...Object.values(RY));
     for (const id of ids) {
       const el = c.document.getElementById(id);

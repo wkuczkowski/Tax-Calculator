@@ -80,6 +80,16 @@ const CONSTANTS_2026 = {
   DANINA_RATE: 0.04,
   DANINA_INCLUDES_IPBOX: false, // art. 30h ust. 2 – closed list without art. 30ca
   R85_THRESHOLD: 100000, // art. 12 ust. 1 pkt 4 uRycz (8,5% do 100 000 zł, 12,5% nadwyżki)
+  // Family reliefs (unchanged in 2027: statutory amounts, no indexation; druki 824/1898 not enacted)
+  CHILD_RATE_1_2: 92.67, // art. 27f ust. 2 pkt 1–3 lit. a uPIT – 1st and 2nd child per month
+  CHILD_RATE_3: 166.67, // art. 27f ust. 2 pkt 3 lit. b – 3rd child
+  CHILD_RATE_4PLUS: 225.0, // art. 27f ust. 2 pkt 3 lit. c – 4th and each next child
+  CHILD_LIMIT_MARRIED: 112000, // art. 27f ust. 2 pkt 1 lit. a – spouses' incomes together
+  CHILD_LIMIT_SINGLE_PARENT: 112000, // art. 27f ust. 2 pkt 1 lit. b (exception for art. 6 ust. 4c)
+  CHILD_LIMIT_OTHER: 56000, // art. 27f ust. 2 pkt 1 lit. b
+  FOUR_PLUS_LIMIT: 85528, // art. 21 ust. 1 pkt 153 and ust. 44 uPIT (shared limit with pkt 148, 152, 154)
+  EST_EMPLOYEE_COSTS: 3000, // estimate of contributions on "other income" (research §4.1 pt 5): KUP 12 × 250
+  EST_EMPLOYEE_SOCIAL_RATE: 0.1371, // employee social 9,76 + 1,5 + 2,45
   RYCZALT_EUR_RULES: null, // no 250k/300k EUR rules (2 mln EUR prior-year limit not modelled, as in 2026)
 };
 
@@ -184,6 +194,28 @@ export const DEFAULT_OPTIONS = {
   wakacjeAllowNone: true,
   // Round PIT bases/taxes to full złoty (art. 63 Ordynacji). App convention is grosze → false.
   roundPitToZloty: false,
+};
+
+// Family-relief interpretation switches. Kept OUT of DEFAULT_OPTIONS so that outputs without the
+// family card stay byte-identical (DEFAULT_OPTIONS is echoed into every result).
+export const FAMILY_OPTIONS = {
+  // Single parent who uses liniowy / ryczałt (art. 6 ust. 8 excludes art. 6 ust. 4d): one-child income
+  // limit. SPEC (binding) + MF: 'cautious' = 56 000; literal art. 27f ust. 2 pkt 1 lit. b refers to the
+  // status in art. 6 ust. 4c → 'literal' = 112 000.
+  singleParentLimitLinRycz: 'cautious',
+  // Refund cap (art. 27f ust. 9 pkt 1), liniowy with social contributions deducted from linear income:
+  // the part of S that did NOT fit into linear income (not "odliczone w zeznaniu PIT-36L") is still
+  // "podlegające odliczeniu" under art. 26 (ust. 13a) → counts ('undeducted', my reading of the law).
+  // RD6 of the app: 0 for that method ('zero').
+  linearLinMethodCapSocial: 'undeducted',
+  // Refund cap (art. 27f ust. 9 pkt 2): health contributions paid, minus those DEDUCTED in PIT-36L /
+  // under the ryczałt act. Literally (and per MF / podatki.gov.pl: "nie uwzględniasz składek … odliczone w
+  // PIT-28, PIT-36L") the linear health above the deduction limit and the 50% of ryczałt health that is
+  // not deducted COUNT → true (the law). SPEC/RD6 of 4c0ee3d (cautious): false – being changed in the app.
+  capIncludesUndeductedHealth: true,
+  // Contributions on "other income" / spouse when the field is empty: estimate as for employment
+  // (research §4.1 pt 5, RD15) only when the income is > 0; 0 otherwise.
+  estimateContribWhenZeroIncome: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -433,6 +465,107 @@ function baselineFor(ctx, opts, spouseIncluded) {
   return { pitOther, daninaOther: dan, spousePit: spouse, total: r2(pitOther + dan + spouse) };
 }
 
+// ---------------------------------------------------------------------------
+// Family reliefs: ulga na dzieci (art. 27f), samotny rodzic (art. 6 ust. 4c–4f, 8), ulga 4+ (art. 21
+// ust. 1 pkt 153). Sources: docs/prawo/research-ulgi-rodzinne.md, docs/decyzje/specyfikacja-ulg-rodzinnych.md.
+// ---------------------------------------------------------------------------
+
+// Relief of the family per year, month by month (art. 27f ust. 2): in a month with n eligible children
+// the rates of children 1…n are added (92,67 / 92,67 / 166,67 / 225 …). A child is given either as an
+// explicit period { from, to } (months 1–12, inclusive – the law) or as a NUMBER of months { months }; for
+// the latter the ASSUMPTION (SPEC/RD3 of the app at 4c0ee3d) is that periods overlap maximally: a child
+// with m months is eligible in the last m months of the year.
+export function childEligible(c, m) {
+  if (c.from !== undefined && c.to !== undefined) return m >= c.from && m <= c.to;
+  return c.months >= 13 - m;
+}
+export function childReliefAmount(children) {
+  let U = 0;
+  for (let m = 1; m <= 12; m++) {
+    const n = children.filter((c) => childEligible(c, m)).length;
+    for (let k = 1; k <= n; k++) U += k <= 2 ? C.CHILD_RATE_1_2 : k === 3 ? C.CHILD_RATE_3 : C.CHILD_RATE_4PLUS;
+  }
+  return r2(U);
+}
+// art. 27f ust. 2b: the one-child income limit does not apply once the taxpayer had more than one eligible
+// child for at least one day (≈ month); ust. 2e: nor when the only child has a disability certificate.
+// Sequential children (never together) → the limit applies unless every child is disabled (my reading).
+export function childLimitApplies(children) {
+  let maxN = 0;
+  for (let m = 1; m <= 12; m++) maxN = Math.max(maxN, children.filter((c) => childEligible(c, m)).length);
+  if (maxN >= 2) return false;
+  return !children.every((c) => c.disabled);
+}
+
+// Contributions on employment income when the user leaves the field empty (research §4.1 pt 5):
+// gross G = (D + 3 000) / (1 − 13,71%); social 13,71% × G; health 9% × (G − social); each to the grosz.
+export function estimateEmployeeContrib(D, fopts = FAMILY_OPTIONS) {
+  if (!(D > 0) && !fopts.estimateContribWhenZeroIncome) return 0;
+  const G = r2((pos(D) + C.EST_EMPLOYEE_COSTS) / (1 - C.EST_EMPLOYEE_SOCIAL_RATE));
+  const soc = r2(C.EST_EMPLOYEE_SOCIAL_RATE * G);
+  return r2(soc + r2(0.09 * (G - soc)));
+}
+
+// One household evaluation of the child relief for one variant/mode.
+//  info.mode: 'indiv' | 'single' (art. 6 ust. 4d) | 'joint' (art. 6 ust. 2)
+//  info.userScaleTax: taxpayer's tax under art. 27 in this mode (joint: the couple's joint tax)
+//  info.limitIncomeUser: taxpayer's incomes for the one-child limit (art. 27f ust. 2a: art. 27 + 30c
+//    incomes after art. 26 social and deducted linear health; no ryczałt, no IP BOX qualified income)
+//  info.capBusiness: JDG contributions that count for the refund cap (art. 27f ust. 9)
+//  info.hasScaleReturnUser: the taxpayer files PIT-36/37 (refund only there – art. 27f ust. 8)
+//  info.linOrRycz: the taxpayer uses art. 30c or ryczałt (art. 6 ust. 8)
+function familyEval(ctx, info) {
+  const F = ctx.fam, fo = ctx.fopts;
+  const married = F.status === 'married';
+  let limit;
+  if (married) limit = C.CHILD_LIMIT_MARRIED;
+  else if (F.status === 'single') limit = info.linOrRycz && fo.singleParentLimitLinRycz === 'cautious' ? C.CHILD_LIMIT_OTHER : C.CHILD_LIMIT_SINGLE_PARENT;
+  else limit = C.CHILD_LIMIT_OTHER;
+  // art. 27f ust. 2a: sum of incomes; each source floored at 0 by the callers (art. 9 ust. 2).
+  const limitIncome = r2(pos(info.limitIncomeUser) + (married ? pos(ctx.spouse) + pos(F.spouseLinearIncome) : 0));
+  const limitFailed = F.limitApplies && limitIncome > limit; // all-or-nothing
+  const U = limitFailed ? 0 : F.reliefTotal;
+  // art. 27f ust. 4: spouses split freely → optimal for the household; single parent 100%; others: share.
+  const Uu = married || F.status === 'single' ? U : r2((U * F.share) / 100);
+  const spouseSepTax = married && info.mode !== 'joint' ? scaleTax(ctx.spouse) : 0;
+  const pool = pos(info.userScaleTax) + spouseSepTax;
+  const used = r2(Math.min(Uu, pool));
+  // art. 27f ust. 9–10: cap = taxpayer's (+ spouse's) contributions; refund only through PIT-36/37.
+  const cap = r2(info.capBusiness + F.otherContrib + (married ? F.spouseContrib : 0));
+  const canRefund = info.hasScaleReturnUser || (married && ctx.spouse > 0);
+  const refund = canRefund ? r2(Math.min(Uu - used, cap)) : 0;
+  return { mode: info.mode, reliefTotal: F.reliefTotal, limitApplies: F.limitApplies, limit, limitIncome, limitFailed, relief: Uu, used, refund, lost: r2(Uu - used - refund), cap, spouseSepTax };
+}
+
+function applyFamily(ctx, res, info) {
+  const fe = familyEval(ctx, info);
+  res.pit = r2(res.pit + fe.spouseSepTax - fe.used - fe.refund);
+  res.baseline = ctx.famBaseline;
+  res.total = r2(res.pit + res.danina + res.health + ctx.S + ctx.FP - res.baseline.total);
+  res.family = fe;
+  return res;
+}
+
+// H0: the household without the business (only other income and the spouse), best legal mode:
+// individual, single parent (status single), joint (married, joint filing enabled, spouse not on
+// liniowy/ryczałt) – with relief, split and refund. Danina on other income as in A10.
+function familyBaseline(ctx, opts) {
+  const F = ctx.fam;
+  const modes = ['indiv'];
+  if (F.status === 'single') modes.push('single');
+  if (F.jointPossible) modes.push('joint');
+  let best = null;
+  for (const mode of modes) {
+    const tax = mode === 'indiv' ? scaleTax(ctx.other, opts) : jointScaleTax(ctx.other, mode === 'joint' ? ctx.spouse : 0, opts);
+    const fe = familyEval(ctx, { mode, userScaleTax: tax, limitIncomeUser: ctx.other, capBusiness: 0, hasScaleReturnUser: ctx.other > 0, linOrRycz: false });
+    const val = r2(tax + fe.spouseSepTax - fe.used - fe.refund);
+    if (!best || val < best.val - 1e-9) best = { val, mode, tax, fe };
+  }
+  const dan = opts.baselineIncludesDanina ? danina(ctx.other) : 0;
+  const spousePit = F.status === 'married' ? scaleTax(ctx.spouse, opts) : 0;
+  return { pitOther: best.tax, daninaOther: dan, spousePit, total: r2(best.val + dan), mode: best.mode, family: best.fe };
+}
+
 // Skala (optionally IP BOX, optionally joint).
 // Social options: 'art26' – deducted from the taxpayer's total scale income (art. 26 ust. 1 pkt 2
 // lit. a uPIT; excess lost), 'kup' – booked as KUP (art. 22 ust. 1; a JDG loss cannot reduce
@@ -440,19 +573,21 @@ function baselineFor(ctx, opts, spouseIncluded) {
 // Health: 9% × max(D − FP − S, n × 4 806) (art. 79 ust. 1, 81 ust. 2 & 2b uŚOZ) – the base is
 // the same whether S is KUP or deducted ("pomniejszony o składki… jeżeli nie zostały zaliczone do KUP").
 // Health is not deductible on the scale (nor with IP BOX).
-function evalScale(ctx, opts, { ip, joint }) {
+function evalScale(ctx, opts, { ip, joint, single = false }) {
   const methods = ['art26'];
   if (!ip || opts.ipBoxAllowKupSocial) methods.push('kup');
   const results = methods.map((method) => {
     const kupSocial = method === 'kup' ? ctx.S : 0;
     const fpNqOnly = ip && opts.ipBoxFpAllocation === 'nonQualified' ? ctx.FP : 0;
-    const incAfterKup = ctx.D - ctx.FP - kupSocial;
+    // 4+ (art. 21 ust. 1 pkt 153): exempt revenue E; all costs stay deductible (art. 22 ust. 3a, 23 ust. 10).
+    const incAfterKup = ctx.D - ctx.E - ctx.FP - kupSocial;
     let q = 0, nq = incAfterKup;
     if (ip) ({ q, nq } = splitIp(incAfterKup, ctx.coeff, fpNqOnly));
     const scaleIncome = pos(nq) + ctx.other; // loss of a source does not reduce other sources
     const art26 = method === 'art26' ? Math.min(ctx.S, scaleIncome) : 0;
     const taxable = scaleIncome - art26;
-    const pitScale = joint ? jointScaleTax(taxable, ctx.spouse, opts) : scaleTax(taxable, opts);
+    // single parent (art. 6 ust. 4d): 2 × tax on half of the scale income (IP BOX qualified income outside)
+    const pitScale = joint ? jointScaleTax(taxable, ctx.spouse, opts) : single ? jointScaleTax(taxable, 0, opts) : scaleTax(taxable, opts);
     const pitIp = ip ? taxRound(C.IPBOX_RATE * baseRound(q, opts), opts) : 0;
     const healthBase = ctx.D - ctx.FP - ctx.S;
     const health = r2(Math.max(C.HEALTH_SCALE_RATE * healthBase, C.HEALTH_MIN_MONTHLY * ctx.n));
@@ -461,12 +596,22 @@ function evalScale(ctx, opts, { ip, joint }) {
     const baseline = baselineFor(ctx, opts, joint);
     const pit = r2(pitScale + pitIp);
     const total = r2(pit + dan + health + ctx.S + ctx.FP - baseline.total);
-    return {
+    const res = {
       method: { social: method, health: 'none' },
       pit, pitParts: { scale: pitScale, ipBox5: pitIp }, danina: dan, health, social: ctx.S, fp: ctx.FP,
       baseline, total,
       detail: { qualifiedIncome: r2(q), nonQualifiedIncome: r2(nq), scaleIncome: r2(scaleIncome), socialDeductedArt26: r2(art26), socialKup: kupSocial, taxableScale: r2(taxable), healthBase: r2(healthBase) },
     };
+    if (ctx.E) res.detail.fourPlusExempt = ctx.E;
+    // Refund cap (art. 27f ust. 9): S deducted under art. 26 in full (also when it exceeds income),
+    // S booked as KUP does not count; scale health in full (never deducted on the scale).
+    if (ctx.famChild) {
+      // Limit income: amounts in grosze as in the return – the qualified IP BOX income is rounded first
+      // (a half-grosz split must not decide the all-or-nothing test).
+      const limitTaxable = ip && q > 0 ? pos(incAfterKup - r2(q)) + ctx.other - art26 : taxable;
+      applyFamily(ctx, res, { mode: joint ? 'joint' : single ? 'single' : 'indiv', userScaleTax: pitScale, limitIncomeUser: limitTaxable, capBusiness: (method === 'art26' ? ctx.S : 0) + health, hasScaleReturnUser: true, linOrRycz: false });
+    }
+    return res;
   });
   return pickBest(results);
 }
@@ -496,7 +641,7 @@ function evalLinear(ctx, opts, { ip }) {
     }
     const Hded = Math.min(H, C.LINEAR_HEALTH_DEDUCTION_LIMIT);
     const fpNqOnly = ip && opts.ipBoxFpAllocation === 'nonQualified' ? ctx.FP : 0;
-    const incAfterKup = ctx.D - ctx.FP - kupSocial - (hm === 'kup' ? Hded : 0);
+    const incAfterKup = ctx.D - ctx.E - ctx.FP - kupSocial - (hm === 'kup' ? Hded : 0);
     let q = 0, nq = incAfterKup;
     if (ip) ({ q, nq } = splitIp(incAfterKup, ctx.coeff, fpNqOnly));
     let linIncome = pos(nq);
@@ -518,12 +663,31 @@ function evalLinear(ctx, opts, { ip }) {
     const baseline = baselineFor(ctx, opts, false);
     const pit = r2(pitLin + pitIp + pitOther);
     const total = r2(pit + dan + H + ctx.S + ctx.FP - baseline.total);
-    results.push({
+    const healthDeducted = hm === 'deduct' ? healthFromLin : Hded;
+    const res = {
       method: { social: sm, health: hm },
       pit, pitParts: { linear: pitLin, ipBox5: pitIp, otherScale: pitOther }, danina: dan, health: H, social: ctx.S, fp: ctx.FP,
       baseline, total,
-      detail: { qualifiedIncome: r2(q), nonQualifiedIncome: r2(nq), linearTaxBase: r2(linBase), socialFromLinear: r2(socialFromLin), socialFromScale: r2(socialFromScale), socialKup: kupSocial, healthDeducted: r2(hm === 'deduct' ? healthFromLin : Hded), healthBase: r2(healthBase0), otherTaxable: r2(otherTaxable) },
-    });
+      detail: { qualifiedIncome: r2(q), nonQualifiedIncome: r2(nq), linearTaxBase: r2(linBase), socialFromLinear: r2(socialFromLin), socialFromScale: r2(socialFromScale), socialKup: kupSocial, healthDeducted: r2(healthDeducted), healthBase: r2(healthBase0), otherTaxable: r2(otherTaxable) },
+    };
+    if (ctx.E) res.detail.fourPlusExempt = ctx.E;
+    if (ctx.famChild) {
+      // Refund cap: method 'scale' – S deducted under art. 26 → counts; 'kup' → 0; 'lin' – only the part
+      // not deducted in PIT-36L (see FAMILY_OPTIONS.linearLinMethodCapSocial). Linear health: the part not
+      // deducted in PIT-36L (above the limit / above linear income) counts (FAMILY_OPTIONS.capIncludesUndeductedHealth).
+      // The taxpayer's own JDG contributions count only when he files PIT-36/37 (other scale income):
+      // MF (broszura PIT-36, część M) – składki „podlegające odliczeniu od dochodu w zeznaniu PIT-37/36”.
+      let capS = 0;
+      if (sm === 'scale') capS = ctx.S;
+      else if (sm === 'lin' && ctx.fopts.linearLinMethodCapSocial === 'undeducted') capS = ctx.S - socialFromLin;
+      const capH = ctx.fopts.capIncludesUndeductedHealth ? H - healthDeducted : 0;
+      // Social: only when the taxpayer files PIT-36/37 (MF: "podlegających odliczeniu od dochodu w PIT-37/36");
+      // health (ust. 9 pkt 2): paid minus deducted in PIT-36L, no such condition (matters for the spouse, ust. 10).
+      const files36 = ctx.other > 0;
+      const limitLin = ip && q > 0 ? pos(pos(incAfterKup - r2(q)) - socialFromLin - healthFromLin) : pos(linBase);
+      applyFamily(ctx, res, { mode: 'indiv', userScaleTax: pitOther, limitIncomeUser: limitLin + otherTaxable, capBusiness: (files36 ? capS : 0) + capH, hasScaleReturnUser: files36, linOrRycz: true });
+    }
+    results.push(res);
   }
   return pickBest(results);
 }
@@ -542,17 +706,32 @@ function ryczaltTier(rev) {
 // the buckets in proportion to their revenue (chronology unknown); the 8,5%/12,5% split applies to the
 // bucket's non-excess part; all excess portions are pooled into one 17% part; the total deduction is
 // split in proportion to revenue over all parts, the 17% part included.
-function ryczaltTaxOnBuckets(buckets, Dtot, opts, surcharge = null) {
+//
+// 4+ exemption (art. 21 ust. 1 pkt 153, `exempt` = E zł of revenue): the exempt revenue is the FIRST
+// revenue of the year (exemption "od początku roku" until the limit is used – KIS
+// 0115-KDIT2.4011.544.2023.1.AB). ASSUMPTIONS (RD16, research §8.9): with several rates E is split in
+// proportion to the buckets' revenue; inside the 8,5%/12,5% bucket E uses up the part below 100 000 first;
+// the reform's 17% excess (end of the year) is not affected. Deductions are split over taxable parts only.
+function ryczaltTaxOnBuckets(buckets, Dtot, opts, surcharge = null, exempt = 0) {
   const parts = [];
   const Ptot = Object.values(buckets).reduce((a, v) => a + (v > 0 ? v : 0), 0);
   const excess = surcharge && Ptot > surcharge.threshold ? Ptot - surcharge.threshold : 0;
   for (const [key, rev0] of Object.entries(buckets)) {
     if (!(rev0 > 0)) continue;
     const rev = excess > 0 ? rev0 - (excess * rev0) / Ptot : rev0;
+    const ex = exempt > 0 ? Math.min(rev, (exempt * rev0) / Ptot) : 0;
     if (key === '8.5-12.5') {
-      const p85 = Math.min(rev, C.R85_THRESHOLD);
-      parts.push({ rate: 0.085, rev: p85, key: '8.5(≤100k)' });
-      if (rev > C.R85_THRESHOLD) parts.push({ rate: 0.125, rev: rev - C.R85_THRESHOLD, key: '12.5(>100k)' });
+      const p85 = Math.min(rev, C.R85_THRESHOLD) - Math.min(ex, C.R85_THRESHOLD);
+      if (ex > 0) {
+        if (p85 > 0) parts.push({ rate: 0.085, rev: p85, key: '8.5(≤100k)' });
+        const p125 = rev - Math.max(C.R85_THRESHOLD, ex);
+        if (p125 > 0) parts.push({ rate: 0.125, rev: p125, key: '12.5(>100k)' });
+      } else {
+        parts.push({ rate: 0.085, rev: p85, key: '8.5(≤100k)' });
+        if (rev > C.R85_THRESHOLD) parts.push({ rate: 0.125, rev: rev - C.R85_THRESHOLD, key: '12.5(>100k)' });
+      }
+    } else if (ex > 0) {
+      if (rev - ex > 0) parts.push({ rate: Number(key) / 100, rev: rev - ex, key });
     } else parts.push({ rate: Number(key) / 100, rev, key });
   }
   if (excess > 0) parts.push({ rate: surcharge.rate, rev: excess, key: '17(>300kEUR)' });
@@ -580,6 +759,9 @@ function ryczaltTaxOnBuckets(buckets, Dtot, opts, surcharge = null) {
 function evalRyczalt(ctx, opts, buckets) {
   // Sum in grosze: a float sum like 9731.85 + 71727.63 = 81459.48000000001 would wrongly exceed a tier.
   const P = r2(Object.values(buckets).reduce((a, v) => a + (v > 0 ? v : 0), 0));
+  // 4+: taxable revenue after the exemption; the health tier still uses the full revenue (art. 81 ust. 2zd).
+  const E = ctx.fourPlusLeft > 0 ? Math.min(ctx.fourPlusLeft, P) : 0;
+  const Ptax = E ? r2(P - E) : P;
   const methods = ['ryczalt', 'scale'];
   const results = [];
   for (const method of methods) {
@@ -589,7 +771,7 @@ function evalRyczalt(ctx, opts, buckets) {
       const Hd = r2(C.RYCZALT_HEALTH_DEDUCTION_SHARE * H);
       let Sr = 0, toScale = 0;
       if (method === 'ryczalt') {
-        Sr = Math.min(ctx.S, pos(P - Hd));
+        Sr = Math.min(ctx.S, pos(Ptax - Hd));
         toScale = opts.ryczaltSurplusToScale ? ctx.S - Sr : 0;
       } else toScale = ctx.S;
       const Sscale = Math.min(toScale, ctx.other);
@@ -600,19 +782,29 @@ function evalRyczalt(ctx, opts, buckets) {
     }
     if (!chosen) throw new Error('no consistent ryczałt tier');
     const { H, Hd, Sr, Sscale, tierRevenue, tier } = chosen;
-    const rt = ryczaltTaxOnBuckets(buckets, Sr + Hd, opts, ctx.ryczaltSurcharge);
+    const rt = ryczaltTaxOnBuckets(buckets, Sr + Hd, opts, ctx.ryczaltSurcharge, E);
     const otherTaxable = ctx.other - Sscale;
     const pitOther = scaleTax(otherTaxable, opts);
     const dan = danina(otherTaxable);
     const baseline = baselineFor(ctx, opts, false);
     const pit = r2(rt.tax + pitOther);
     const total = r2(pit + dan + H + ctx.S + ctx.FP - baseline.total);
-    results.push({
+    const res = {
       method: { social: method, health: 'ryczalt50' },
       pit, pitParts: { ryczalt: rt.tax, otherScale: pitOther }, danina: dan, health: H, social: ctx.S, fp: ctx.FP,
       baseline, total,
       detail: { revenue: P, tierRevenue: r2(tierRevenue), healthTier: tier + 1, healthDeduction50: Hd, socialFromRyczalt: r2(Sr), socialFromScale: r2(Sscale), socialWasted: r2(ctx.S - Sr - Sscale), buckets: rt.detail, otherTaxable: r2(otherTaxable) },
-    });
+    };
+    if (E) res.detail.fourPlusExempt = E;
+    // Refund cap: S not deducted from ryczałt revenue (art. 27f ust. 9 pkt 1) – only when the taxpayer
+    // files PIT-36/37 (other scale income; MF broszura PIT-36 część M); health not deducted (pkt 2) counts.
+    if (ctx.famChild) {
+      const files36 = ctx.other > 0;
+      // 50% health actually deducted = min(Hd, taxable revenue) (the rest is lost, F4) → the remainder counts.
+      const capH = ctx.fopts.capIncludesUndeductedHealth ? H - Math.min(Hd, Ptax) : 0;
+      applyFamily(ctx, res, { mode: 'indiv', userScaleTax: pitOther, limitIncomeUser: otherTaxable, capBusiness: (files36 ? ctx.S - Sr : 0) + capH, hasScaleReturnUser: files36, linOrRycz: true });
+    }
+    results.push(res);
   }
   return pickBest(results);
 }
@@ -639,6 +831,31 @@ export function normalizeInput(inp) {
     year: inp.year === undefined || inp.year === null ? 2026 : Number(inp.year),
     reform2027: !!inp.reform2027,
     revenuePrevYear: inp.revenuePrevYear === undefined || inp.revenuePrevYear === null || inp.revenuePrevYear === '' ? null : Number(inp.revenuePrevYear),
+    family: normalizeFamily(inp),
+  };
+}
+
+// FAMILY INPUT (optional; null/absent = no family card → outputs identical to the model without it):
+// family: { status: 'married'|'single'|'other', children: [{ months: 1..12, disabled, adult }],
+//           share: 0..100 (status 'other'), spouseLinRycz, spouseLinearIncome, spouseContrib: null|zł,
+//           otherContrib: null|zł (null = estimate), fourPlus, fourPlusUsed }
+// The spouse's scale income is joint.spouseIncome (also used when not filing jointly).
+function normalizeFamily(inp) {
+  const f = inp.family;
+  if (!f) return null;
+  const num = (x) => (x === undefined || x === null || x === '' ? null : Number(x));
+  let status = f.status || 'other';
+  if (inp.joint && inp.joint.enabled) status = 'married'; // art. 6 ust. 2: joint filing ⇒ spouses (RD13)
+  return {
+    status,
+    children: (f.children || []).map((c) => ({ months: Number(c.months ?? 12), ...(c.from !== undefined && c.to !== undefined ? { from: Number(c.from), to: Number(c.to) } : {}), disabled: !!c.disabled, adult: !!c.adult })),
+    share: f.share === undefined || f.share === null ? 100 : Number(f.share),
+    spouseLinRycz: !!f.spouseLinRycz,
+    spouseLinearIncome: num(f.spouseLinearIncome) || 0,
+    spouseContrib: num(f.spouseContrib),
+    otherContrib: num(f.otherContrib),
+    fourPlus: !!f.fourPlus,
+    fourPlusUsed: num(f.fourPlusUsed) || 0,
   };
 }
 
@@ -667,12 +884,33 @@ function evaluateVariants(inp, sched, n, opts) {
     spouse: inp.joint.spouseIncome || 0,
     coeff: (inp.ipBox.coeff || 0) / 100,
     ryczaltSurcharge: C.RYCZALT_EUR_RULES ? { threshold: r2(C.RYCZALT_EUR_RULES.surchargeThresholdEur * C.EUR_RATE), rate: C.RYCZALT_EUR_RULES.surchargeRate } : null,
+    E: 0, fourPlusLeft: 0, fam: null, famChild: false, fopts: { ...FAMILY_OPTIONS, ...(opts.family || {}) },
   };
+  const F = inp.family;
+  if (F) {
+    // 4+: E = min(85 528 − limit used on other revenue, JDG revenue); a larger "used" amount = 0 left.
+    ctx.fourPlusLeft = F.fourPlus ? pos(C.FOUR_PLUS_LIMIT - F.fourPlusUsed) : 0;
+    ctx.E = ctx.fourPlusLeft > 0 ? Math.min(ctx.fourPlusLeft, pos(inp.revenue)) : 0;
+    if (F.children.length) {
+      ctx.fam = {
+        ...F,
+        reliefTotal: childReliefAmount(F.children),
+        limitApplies: childLimitApplies(F.children),
+        otherContrib: F.otherContrib !== null ? F.otherContrib : estimateEmployeeContrib(ctx.other, ctx.fopts),
+        spouseContrib: F.status === 'married' ? (F.spouseContrib !== null ? F.spouseContrib : estimateEmployeeContrib(ctx.spouse, ctx.fopts)) : 0,
+        jointPossible: F.status === 'married' && inp.joint.enabled && !F.spouseLinRycz,
+      };
+      ctx.famChild = true;
+      ctx.famBaseline = familyBaseline(ctx, opts);
+    }
+  }
   const v = {};
   v.taxScale = evalScale(ctx, opts, { ip: false, joint: false });
+  if (ctx.famChild && F.status === 'single') v.taxScaleSingle = evalScale(ctx, opts, { ip: false, joint: false, single: true });
   if (inp.joint.enabled) v.taxScaleJoint = evalScale(ctx, opts, { ip: false, joint: true });
   if (inp.ipBox.enabled) {
     v.taxScaleIpBox = evalScale(ctx, opts, { ip: true, joint: false });
+    if (ctx.famChild && F.status === 'single') v.taxScaleIpBoxSingle = evalScale(ctx, opts, { ip: true, joint: false, single: true });
     if (inp.joint.enabled) v.taxScaleIpBoxJoint = evalScale(ctx, opts, { ip: true, joint: true });
   }
   v.taxLinear = evalLinear(ctx, opts, { ip: false });
@@ -703,6 +941,8 @@ const RYCZALT_KEYS = new Set([...Object.values(RYCZALT_VARIANT_KEY), 'ryczaltMul
 function computeAllActive(inp, opts) {
   const s = parseDate(inp.zus.startDate);
   if (s && (s.y > C.YEAR)) return { error: `startDate after ${C.YEAR}-12-31` };
+  // 4+: "limit already used" above 85 528 is an input error (the app blocks results – RD16).
+  if (inp.family && inp.family.fourPlus && inp.family.fourPlusUsed > C.FOUR_PLUS_LIMIT) return { error: 'fourPlusUsed above the 85 528 limit' };
   const n = healthMonths(inp.zus, opts);
   const sched = computeSchedule(inp.zus, opts);
   let variants = evaluateVariants(inp, sched, n, opts);
@@ -733,7 +973,10 @@ function computeAllActive(inp, opts) {
       baseline: r.baseline, method: r.method, detail: r.detail, alternatives: r.alternatives,
       holidayMonth: r.holidayMonth !== undefined ? r.holidayMonth : (sched.wakacje.month ?? null),
     };
+    if (r.family) out.variants[k].family = r.family;
   }
+  // Spouse on liniowy/ryczałt (art. 6 ust. 8): joint variants computed for information, not available.
+  if (inp.family && inp.family.spouseLinRycz) for (const k of ['taxScaleJoint', 'taxScaleIpBoxJoint']) if (out.variants[k]) out.variants[k].unavailable = true;
   // Reform 2027: ryczałt not available (2026 revenue > 250 000 EUR) → variants stay computed for
   // information but are flagged and excluded from the ranking (SPEC_MULTIYEAR: "niedostępny").
   const elig = ryczaltEligibility(inp);
@@ -741,6 +984,13 @@ function computeAllActive(inp, opts) {
   const ranked = Object.entries(out.variants).filter(([, v]) => !v.unavailable).sort((a, b) => a[1].total - b[1].total);
   out.best = ranked.length ? { variant: ranked[0][0], total: ranked[0][1].total } : null;
   out.options = opts;
+  if (inp.family) {
+    // Only with the family card, so outputs without it stay byte-identical.
+    const f = inp.family;
+    out.family = { status: f.status, children: f.children.length, fourPlusExempt: f.fourPlus ? Math.min(pos(C.FOUR_PLUS_LIMIT - f.fourPlusUsed), pos(inp.revenue)) : 0 };
+    const any = Object.values(variants).find((r) => r.family);
+    if (any) out.family.baseline = any.baseline;
+  }
   if (C.YEAR !== 2026) {
     // Extra fields only for years other than 2026, so the 2026 snapshot (expected.json) is unchanged.
     out.year = C.YEAR;

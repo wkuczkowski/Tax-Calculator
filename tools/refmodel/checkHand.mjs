@@ -39,6 +39,25 @@ const HAND = [
     v: { ryczalt12: { pit: 177500.97, health: 18895.68, total: 208364.05 }, taxLinear: { pit: 279857.19, health: 72913.6, danina: 18917.3, total: 383655.49 } } },
   // SPEC_MULTIYEAR explicit tests: reform scale T(140 000) = 14 400, T(200 000) = 32 800 (ZUS off ⇒ base = revenue).
   { name: 'T140k', input: { year: 2027, reform2027: true, revenue: 140000, zus: Z({ enabled: false }) }, social: { S: 0, FP: 0 }, n: 12, v: { taxScale: { pit: 14400 } } },
+  // ---- Family reliefs (HAND_CHECKS.md, section "Rodzina", R1–R4) ----
+  { name: 'R1', input: { revenue: 100000, otherScaleIncome: 60000, zus: Z({ enabled: false }), family: { status: 'single', children: [{ months: 12 }] } }, social: { S: 0, FP: 0 }, n: 12, H0: -1112.04,
+    v: { taxScaleSingle: { pit: 12000, health: 9000, total: 22112.04, used: 0, refund: 0 }, taxScale: { pit: 23600, total: 33712.04 }, taxLinear: { pit: 21613.81, health: 5190.48, total: 27916.33 }, ryczalt12: { pit: 15001.98, health: 9966.96, total: 26080.98, used: 0 } } },
+  { name: 'R2', input: { revenue: 180000, costs: 30000, joint: { enabled: false, spouseIncome: 50000 }, zus: Z({}), family: { status: 'married', children: [{ months: 12 }, { months: 12 }, { months: 5 }] } }, social: { S: 21459.48, FP: 1661.64 }, n: 12, H0: -657.43,
+    v: { taxScale: { pit: 12343.81, health: 11419.1, total: 47541.46, used: 3057.43, refund: 0 }, taxLinear: { pit: 22268.31, health: 6217.07, total: 52263.93, used: 2400, refund: 657.43 }, ryczalt12: { pit: 17769.41, health: 9966.96, total: 51514.92, used: 2400, refund: 657.43 } } },
+  { name: 'R3', input: { revenue: 150000, otherScaleIncome: 30000, zus: Z({}), family: { status: 'other', children: [{ months: 12 }, { months: 12 }, { months: 12 }, { months: 12 }], fourPlus: true, fourPlusUsed: 20000 } }, social: { S: 21459.48, FP: 1661.64 }, n: 12, H0: -6924.12,
+    v: { ryczalt8_5_12_5: { pit: -617.73, health: 9966.96, total: 39394.47, used: 0, refund: 6924.12 }, taxLinear: { pit: 3551.3, health: 6217.07, total: 39813.61, refund: 6924.12 }, taxScale: { pit: 437.99, health: 11419.1, total: 41902.33, used: 6924.12, refund: 0 } } },
+  { name: 'R4-reform', input: { year: 2027, reform2027: true, revenue: 150000, otherScaleIncome: 10000, zus: Z({}), family: { status: 'other', children: [{ months: 12 }, { months: 12 }, { months: 12 }, { months: 12 }, { months: 12 }] } }, social: { S: 22855.92, FP: 1769.88 }, n: 12, H0: -3235.48,
+    v: { taxLinear: { pit: 17372.37, health: 6143.34, total: 51376.99, used: 0, refund: 9624.12 }, taxScale: { pit: 3665.69, health: 11283.68, total: 42810.65, used: 9624.12 }, ryczalt3: { pit: -5281.58, health: 10497.6, total: 33077.3, refund: 9624.12 } } },
+  { name: 'R4-current', input: { year: 2027, revenue: 150000, otherScaleIncome: 10000, zus: Z({}), family: { status: 'other', children: [{ months: 12 }, { months: 12 }, { months: 12 }, { months: 12 }, { months: 12 }] } }, social: { S: 22855.92, FP: 1769.88 }, n: 12, H0: -3235.48,
+    v: { taxScale: { pit: 6095.62, total: 45240.58 } } },
+  // Per-child periods (art. 27f ust. 2b – law; the app is switching to from–to months): a child for Jan–Mar and
+  // another from November never overlap → 5 × 92,67 = 463,35 and the one-child limit still applies.
+  { name: 'R5-periods', input: { revenue: 40000, zus: Z({ enabled: false }), family: { status: 'other', children: [{ from: 1, to: 3 }, { from: 11, to: 12 }] } }, social: { S: 0, FP: 0 }, n: 12,
+    v: { taxScale: { used: 463.35 } } },
+  { name: 'R5-periods-limit', input: { revenue: 56000.01, zus: Z({ enabled: false }), family: { status: 'other', children: [{ from: 1, to: 3 }, { from: 11, to: 12 }] } }, social: { S: 0, FP: 0 }, n: 12,
+    v: { taxScale: { used: 0 } } },
+  { name: 'R5-overlap', input: { revenue: 56000.01, zus: Z({ enabled: false }), family: { status: 'other', children: [{ from: 1, to: 3 }, { from: 3, to: 12 }] } }, social: { S: 0, FP: 0 }, n: 12,
+    v: { taxScale: { used: 1204.71 } } },
   { name: 'T200k', input: { year: 2027, reform2027: true, revenue: 200000, zus: Z({ enabled: false }) }, social: { S: 0, FP: 0 }, n: 12, v: { taxScale: { pit: 32800 } } },
 ];
 let bad = 0;
@@ -48,6 +67,8 @@ for (const h of HAND) {
   chk('S', r.social.S, h.social.S); chk('FP', r.social.FP, h.social.FP); chk('n', r.healthMonths, h.n);
   if (h.wak) chk('wakacje month', r.wakacje.month, h.wak);
   for (const [k, e] of Object.entries(h.v)) for (const f of ['pit', 'health', 'danina', 'total']) if (e[f] !== undefined) chk(`${k}.${f}`, r.variants[k][f], e[f]);
+  for (const [k, e] of Object.entries(h.v)) for (const f of ['used', 'refund']) if (e[f] !== undefined) chk(`${k}.family.${f}`, r.variants[k].family[f], e[f]);
+  if (h.H0 !== undefined) chk('household baseline H0', r.family.baseline.total, h.H0);
   if (h.input.year === 2027 && h.input.zus.enabled && !h.input.zus.startDate) {
     // one full month 2027: 1 904,66 social + 147,49 FP = 2 052,15; health minimum 12 × 445,50 = 5 346
     chk('full month total', r.social.months[0].total, 2052.15);

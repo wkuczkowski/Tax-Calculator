@@ -2,7 +2,7 @@
 
 ## Po co to jest
 
-`refModel.mjs` to **niezależny model obliczeń** (PIT w czterech formach, składka zdrowotna, składki społeczne ZUS miesiąc po miesiącu, FP/FS, wakacje składkowe, danina, IP BOX, rozliczenie z małżonkiem, ryczałt z wieloma stawkami) na lata 2026 i 2027 (2027: obowiązujące prawo oraz scenariusz projektu UD458 + UD116). Model został napisany **z przepisów i udokumentowanych decyzji**:
+`refModel.mjs` to **niezależny model obliczeń** (PIT w czterech formach, składka zdrowotna, składki społeczne ZUS miesiąc po miesiącu, FP/FS, wakacje składkowe, danina, IP BOX, rozliczenie z małżonkiem, ryczałt z wieloma stawkami) na lata 2026 i 2027 (2027: obowiązujące prawo oraz scenariusz projektu UD458 + UD116), z kartą „Rodzina” (ulga na dzieci, samotny rodzic, małżonkowie, ulga dla rodzin 4+). Model został napisany **z przepisów i udokumentowanych decyzji**:
 - [`docs/prawo/`](../../docs/prawo/),
 - [`docs/decyzje/specyfikacja-zus.md`](../../docs/decyzje/specyfikacja-zus.md), w tym ADDENDUM A1–A10,
 - [`docs/decyzje/decyzje-implementacyjne.md`](../../docs/decyzje/decyzje-implementacyjne.md).
@@ -26,12 +26,12 @@ Skrypty w tym katalogu uruchamiają prawdziwą aplikację w jsdom, wyłącznie p
 |---|---|
 | `refModel.mjs` | Model. Eksportuje `computeAll(input, options)`. Format wejścia jest opisany w nagłówku pliku. |
 | `genCases.mjs` | Generator siatek przypadków brzegowych: 2026 (grupy A–N, 396 przypadków) → `cases.json` / `expected.json`; 2027 (grupy 27A–27N i 27R, 321 przypadków, obowiązujące prawo i projekt) → `cases2027.json` / `expected2027.json`. Wyniki modelu + `alt`. |
-| `cases.json`, `cases2027.json` | Wejścia, jeden przypadek na linię. Wszystkie kwoty w pełnych groszach (generator to sprawdza). |
-| `expected.json`, `expected2027.json` | Migawka wyników modelu, jeden przypadek na linię. Służy do wykrywania dryfu modelu (`--check`) i do przeglądania wyników. Nie wpływa na `compare.mjs`, który liczy model na bieżąco. |
+| `cases.json`, `cases2027.json`, `casesFamily.json` | Wejścia, jeden przypadek na linię. Wszystkie kwoty w pełnych groszach (generator to sprawdza). |
+| `expected.json`, `expected2027.json`, `expectedFamily.json` | Migawka wyników modelu, jeden przypadek na linię. Służy do wykrywania dryfu modelu (`--check`) i do przeglądania wyników. Nie wpływa na `compare.mjs`, który liczy model na bieżąco. |
 | `compare.mjs` | Główne porównanie: aplikacja vs model dla każdego przypadku z `cases.json` (`--year=2027`: `cases2027.json`). Eksportuje też `runApp()` dla pozostałych skryptów. |
 | `checkBreakdown.mjs` | Spójność tekstu „Pokaż szczegółowe obliczenia” na próbce 60 przypadków 2026 albo 78 przypadków 2027 (`--year=2027`; szczegóły niżej). |
 | `fuzz.mjs` | Losowy test różnicowy aplikacja vs model (ziarno ⇒ powtarzalny; `--year=2027` losuje też scenariusz projektu i przychód 2026). |
-| `checkHand.mjs` + `HAND_CHECKS.md` | 6 przykładów 2026 i 4 przykłady 2027 (Y1–Y4, w tym projekt) policzone ręcznie (148 liczb) porównane z modelem. Sprawdza sam model, bez aplikacji. |
+| `checkHand.mjs` + `HAND_CHECKS.md` | 6 przykładów 2026, 4 przykłady 2027 (Y1–Y4, w tym projekt) i 5 przykładów rodzinnych (R1–R5) policzone ręcznie (240 liczb) porównane z modelem. Sprawdza sam model, bez aplikacji. |
 | `out/` | Wyniki szczegółowe ostatniego uruchomienia (JSON). Katalog jest w `.gitignore`. |
 
 ## Jak uruchomić
@@ -46,6 +46,9 @@ npm run verify:hand         # checkHand.mjs: sam model, natychmiast (2026 i 2027
 npm run verify:refmodel2027  # compare.mjs --year=2027: 321 przypadków 2027 (ok. 5 min)
 npm run verify:breakdown2027 # checkBreakdown.mjs --year=2027: 78 przypadków (ok. 1 min)
 npm run verify:fuzz2027      # fuzz.mjs --year=2027: 200 wejść × ziarna 7, 99, 2024 (ok. 7 min)
+npm run verify:refmodelFamily   # compare.mjs --family: 245 przypadków rodzinnych, 2026/2027/projekt (ok. 2 min)
+npm run verify:breakdownFamily  # checkBreakdown.mjs --family: ~105 przypadków + kwota ulgi, odliczenie, zwrot vs model
+npm run verify:fuzzFamily       # fuzz.mjs --family: 200 losowych wejść z kartą „Rodzina” × 3 ziarna
 ```
 
 - Wszystkie skrypty kończą się kodem 1, gdy znajdą nieoczekiwaną różnicę, więc nadają się do CI.
@@ -131,3 +134,12 @@ Różnice prezentacji, które `compare.mjs` normalizuje (to nie są rozbieżnoś
 - **Zaokrąglenie przy rozliczeniu wspólnym:** aplikacja zaokrągla podatek od połowy dochodów, potem go podwaja. Model zaokrągla po podwojeniu. Różnica wynosi najwyżej 0,01 zł i mieści się w tolerancji.
 
 Historia: w siatce były też przypadki L-374…L-377. Ich przychód był zapisany z szumem zmiennoprzecinkowym (`61459.479999999996`), więc aplikacja słusznie odrzucała go jako kwotę z ponad dwoma miejscami po przecinku. `genCases.mjs` zaokrągla teraz sumy do groszy i sprawdza, czy każda kwota ma najwyżej 2 miejsca po przecinku. Te przypadki są poprawnymi wejściami i zgadzają się z aplikacją.
+
+### Ulgi rodzinne (karta „Rodzina”)
+
+Źródła: [`research-ulgi-rodzinne.md`](../../docs/prawo/research-ulgi-rodzinne.md) (§1–8, pseudokod §6 i §8.8), [`specyfikacja-ulg-rodzinnych.md`](../../docs/decyzje/specyfikacja-ulg-rodzinnych.md); decyzje aplikacji RD1–RD20 przeczytane, ale model liczy wg przepisu, a różnice są przełącznikami `FAMILY_OPTIONS`.
+- **Wejście:** `input.family = { status: 'married'|'single'|'other', children: [{ months | from, to, disabled, adult }], share, spouseLinRycz, spouseLinearIncome, spouseContrib, otherContrib, fourPlus, fourPlusUsed }` (null = brak karty; wyniki bez zmian bajt w bajt). Dochód małżonka ze skali = `joint.spouseIncome` (także bez rozliczenia wspólnego). `runApp()` rozwija kartę i wpisuje pola setterami loadera.
+- **Model:** kwota ulgi miesiąc po miesiącu (przy `months` – okresy nałożone maksymalnie, jak RD3; przy `from/to` – faktyczne okresy), limit jednego dziecka (112 000 / 56 000, zero-jedynkowo, dochody z art. 27 i 30c po składkach, bez ryczałtu i dochodu kwalifikowanego IP BOX), odliczenie tylko od podatku wg skali, podział optymalny dla małżonków, udział przy „inna”, zwrot z limitem art. 27f ust. 9–10, optymalizator sposobu odliczenia składek z uwzględnieniem zwrotu, warianty `taxScaleSingle` / `taxScaleIpBoxSingle` (2 × T(½)), punkt odniesienia gospodarstwa H0 (najlepszy tryb bez działalności), ulga 4+ (zwolnienie przychodu do 85 528 − wykorzystany limit; koszty w całości; zdrowotna i progi ryczałtu bez zmian; 8,5%/12,5% – zwolnienie zużywa najpierw część do 100 000; kilka stawek – proporcjonalnie).
+- **`FAMILY_OPTIONS` (domyślnie = przepis, alternatywy w `expectedFamily.json` → `alt`):** `capIncludesUndeductedHealth: true` (nieodliczona zdrowotna ryczałtowca/liniowca w limicie zwrotu – dosłownie ust. 9 pkt 2; aplikacja 4c0ee3d: nie, poprawka w toku); `linearLinMethodCapSocial: 'undeducted'` (składki społeczne ponad dochód liniowy w limicie zwrotu; aplikacja RD6: 0); `singleParentLimitLinRycz: 'cautious'` (56 000 dla samotnego rodzica na liniowym/ryczałcie, SPEC); `estimateContribWhenZeroIncome: false`. Nadpisanie: `computeAll(inp, { family: { … } })`, w fuzzie zmienna `FAMILY_OPTS`.
+- **Tolerancja** w trybie `--family`: 0,03 zł (2 × T(½) zaokrąglane inaczej w wariancie i w H0: aplikacja – połowa i T(½) do grosza, model – raz po podwojeniu).
+- `KNOWN_DIFFS_FAMILY` w `compare.mjs`: różnice „W TOKU POPRAWKI” (limit zwrotu a nieodliczona zdrowotna) i interpretacja składek ponad dochód liniowy (FC-103, FC-106).

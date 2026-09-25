@@ -126,14 +126,23 @@
     const params = new URLSearchParams(window.location.search);
     const rawYear = params.get(YEAR_PARAM);
     const requested = Number(rawYear);
-    const valid = rawYear !== null && taxYears.has(requested);
+    // tylko cztery cyfry znanego roku („2027.0”, „0x7EB” – błędne)
+    const valid =
+      rawYear !== null && /^\d{4}$/.test(rawYear) && taxYears.has(requested);
     const year = valid ? requested : taxYears.getDefaultYear(new Date());
     const scenarios = taxYears.scenariosFor(year);
+    // scenariusz tylko przy &projekt=1 i gdy rok go ma
     const scenario =
       params.get(SCENARIO_PARAM) === "1" && scenarios.length
         ? scenarios[0].id
         : null;
-    return { year, scenario, invalidParam: rawYear !== null && !valid };
+    return {
+      year,
+      scenario,
+      invalidParam: rawYear !== null && !valid,
+      hasYearParam: rawYear !== null,
+      hasParams: rawYear !== null || params.has(SCENARIO_PARAM),
+    };
   }
 
   const initialYearState = getInitialYearState();
@@ -296,7 +305,10 @@
     ipBoxCoeff: "Udział dochodu kwalifikowanego IP BOX",
     zusStartDate: "Data rozpoczęcia działalności",
     zusBirthDate: "Data urodzenia",
-    prevYearRevenue: "Przychód z roku poprzedniego (limit ryczałtu)",
+    // jak etykieta w formularzu (rok zależny od aktywnego roku)
+    get prevYearRevenue() {
+      return `Przychód z działalności w ${getActiveYear() - 1} r. (limit prawa do ryczałtu)`;
+    },
     familyShare: "Twój udział w uldze na dzieci",
     spouseLinearIncome: "Dochód małżonka opodatkowany liniowo / z art. 30b",
     spouseContrib: "Składki małżonka do limitu zwrotu ulgi",
@@ -3088,6 +3100,7 @@
     DOM.zusFpTotal.textContent = formatPLN(schedule.totals.fpfs);
     DOM.zusHealthMonths.textContent = String(ctx.healthMonths);
     setText(DOM.zusSummaryMeta, "wliczone w każdy wariant");
+    renderZusForecastNote(schedule);
     if (DOM.zusScheduleSummary) {
       DOM.zusScheduleSummary.textContent = getScheduleRanges(schedule).join(
         " · ",
@@ -3132,6 +3145,45 @@
       });
       renderZusLegend(regimesUsed, anyPartial);
     }
+  }
+
+  /* Prognozowane parametry ZUS (wspólne dla wszystkich wariantów) – raz,
+     na karcie składek, zamiast przy każdym wierszu wyniku. */
+  function renderZusForecastNote(schedule) {
+    const note = document.getElementById("zusForecastNote");
+    if (!note) return;
+    const keys = getZusForecastKeys(schedule, schedule.enabled);
+    const signature = keys.join(",");
+    if (note.dataset.signature === signature) return;
+    note.dataset.signature = signature;
+    note.textContent = "";
+    note.hidden = !keys.length;
+    if (!keys.length) return;
+    const tag = document.createElement("span");
+    tag.className = "zus-forecast-tag";
+    tag.textContent = "prognoza";
+    note.append(
+      tag,
+      document.createTextNode(
+        ` Dotyczy wszystkich wariantów: ${keys
+          .map((key) => {
+            const info = TAX_CONSTANT_LABELS[key] || { label: key };
+            const meta = getActiveMeta()[key] || {};
+            return `${info.short || info.label} ${formatConstantValue(key)}${
+              meta.finalByMonth
+                ? ` (ostateczna ok. ${formatMonthRoman(meta.finalByMonth)})`
+                : ""
+            }`;
+          })
+          .join("; ")}. `,
+      ),
+    );
+    const link = document.createElement("a");
+    link.className = "tip-more";
+    link.href = "#info-forecast";
+    link.dataset.infoTopic = "info-forecast";
+    link.textContent = `Więcej${NBSP}→`;
+    note.appendChild(link);
   }
 
   function renderZusLegend(regimesUsed, anyPartial) {
@@ -3939,8 +3991,10 @@
      nieostateczne wpłynęły na wynik wariantu i o ile scenariusz projektu
      zmienia wynik względem obowiązujących przepisów.
   ================================================== */
-  /* Klucze stałych o statusie innym niż „final”, od których zależy wynik. */
-  function getForecastDependencies(evaluation, result) {
+  /* Prognozy wspólne dla wszystkich wariantów (składki ZUS: podstawa
+     pełnego ZUS, FP/FS, wypadkowa) – pokazywane raz: w banerze, na karcie
+     „Składki społeczne ZUS” i w eksporcie, nie przy każdym wierszu. */
+  function getZusForecastKeys(schedule, zusEnabled) {
     const meta = getActiveMeta();
     const keys = [];
     const add = (key) => {
@@ -3948,8 +4002,7 @@
         keys.push(key);
       }
     };
-    const { best, ctx, schedule } = evaluation;
-    if (ctx.zusEnabled) {
+    if (zusEnabled) {
       const amount = (entry, key) =>
         entry[key] || (entry.waived && entry.waived[key]) || 0;
       if (schedule.months.some((entry) => entry.regime === "full")) {
@@ -3969,6 +4022,41 @@
         add("ZUS_RATE_ACCIDENT");
       }
     }
+    return keys;
+  }
+
+  /* Kurs EUR wpływa na wynik tylko w pobliżu limitów projektu UD458:
+     przychód z roku poprzedniego w granicach ±5% limitu prawa do ryczałtu,
+     nadwyżka ponad próg 17% albo przychód ≥ 95% tego progu. */
+  const EUR_SENSITIVITY = 0.05;
+  function isEurRateRelevant(best, elig) {
+    if (
+      elig &&
+      !elig.newBusiness &&
+      Math.abs(elig.prevRevenue - elig.limit) <= EUR_SENSITIVITY * elig.limit
+    ) {
+      return true;
+    }
+    if (best.highExcess > 0) return true;
+    return !!(
+      best.highThreshold &&
+      best.revenueTotal >= (1 - EUR_SENSITIVITY) * best.highThreshold
+    );
+  }
+
+  /* Klucze stałych o statusie innym niż „final”, które różnicują wynik
+     wariantu (oznaczenie „prognoza” przy wierszu): przeciętne wynagrodzenie
+     z IV kw. (ryczałt), limit odliczenia zdrowotnej (liniowy, gdy
+     osiągnięty), kurs EUR (tylko gdy wynik od niego zależy). */
+  function getForecastDependencies(evaluation, result) {
+    const meta = getActiveMeta();
+    const keys = [];
+    const add = (key) => {
+      if (meta[key] && meta[key].status !== "final" && !keys.includes(key)) {
+        keys.push(key);
+      }
+    };
+    const { best } = evaluation;
     if (best.form === "ryczalt") add("AVG_SALARY_Q4_PREV");
     if (
       best.form === "linear" &&
@@ -3976,10 +4064,9 @@
     ) {
       add("LINEAR_HEALTH_DEDUCTION_LIMIT");
     }
-    const elig = result.ryczaltEligibility;
     if (
       best.form === "ryczalt" &&
-      ((elig && !elig.newBusiness) || best.highExcess > 0)
+      isEurRateRelevant(best, result.ryczaltEligibility)
     ) {
       add("EUR_PLN_RATE");
     }
@@ -4016,14 +4103,27 @@
     const unavailable =
       (evaluation.best.form === "ryczalt" && isRyczaltUnavailable(result)) ||
       jointUnavailable;
-    const draft = change && Math.abs(change.delta) > 0.004 ? change : null;
+    // wariant niedostępny wg projektu nie ma „zmiany” – pokazujemy kwotę
+    // wg obowiązujących przepisów
+    const draft =
+      !unavailable && change && Math.abs(change.delta) > 0.004 ? change : null;
     if (!forecast.length && !draft && !unavailable) return null;
     return {
       forecast,
       draft,
       unavailable,
       ...(jointUnavailable ? { unavailableKind: "joint" } : {}),
+      ...(unavailable && change ? { lawTotal: change.lawTotal } : {}),
     };
+  }
+
+  /* „Projekt UD458 + UD116” (z nazwy scenariusza, bez powtórzenia słowa
+     „Projekt”). */
+  function getScenarioShortLabel() {
+    const scenario = getActiveScenario();
+    if (!scenario) return "";
+    const match = /\(([^)]+)\)/.exec(scenario.label);
+    return match ? `Projekt ${match[1]}` : scenario.label;
   }
 
   function getRowStatusLabel(status) {
@@ -4042,7 +4142,11 @@
       parts.push(
         status.unavailableKind === "joint"
           ? "niedostępny (art. 6 ust. 8)"
-          : "niedostępny wg projektu",
+          : `niedostępny wg projektu${
+              status.lawTotal !== undefined
+                ? `; wg obowiązujących przepisów: ${formatPLN(status.lawTotal)}`
+                : ""
+            }`,
       );
     }
     if (status.forecast.length) {
@@ -4100,6 +4204,9 @@
     pop.textContent = "";
     if (!status) {
       delete tip.dataset.kind;
+      // ukryty przycisk nie zachowuje starego opisu
+      button.textContent = "";
+      button.removeAttribute("aria-label");
       return;
     }
     tip.dataset.kind = status.unavailable
@@ -4127,23 +4234,36 @@
       }
       list.appendChild(item);
     };
-    const list = document.createElement("span");
-    list.className = "row-note-list";
+    const heading = (text) => {
+      const title = document.createElement("span");
+      title.className = "row-note-title";
+      title.textContent = text;
+      pop.appendChild(title);
+      const list = document.createElement("span");
+      list.className = "row-note-list";
+      pop.appendChild(list);
+      return list;
+    };
     if (status.unavailable) {
+      const list = heading("Wariant niedostępny:");
       if (status.unavailableKind === "joint") {
         addItem(list, `${JOINT_UNAVAILABLE_REASON} Kwota orientacyjna.`, "info-family-spouse");
       } else {
         addItem(
           list,
-          `${getRyczaltUnavailableReason(result)} Kwota orientacyjna.`,
+          `${getRyczaltUnavailableReason(result)} Kwota orientacyjna.${
+            status.lawTotal !== undefined
+              ? ` Wg obowiązujących przepisów ${result.year} r.: ${formatPLN(status.lawTotal)}.`
+              : ""
+          }`,
           "info-reform-ryczalt",
         );
       }
     }
     if (status.draft) {
       addItem(
-        list,
-        `Projekt (${getActiveScenario().label}): ${formatSignedAmountPL(
+        heading("Scenariusz projektu:"),
+        `${getScenarioShortLabel()}: ${formatSignedAmountPL(
           status.draft.delta,
         )}${NBSP}zł wobec obowiązujących przepisów (${formatPLN(
           status.draft.lawTotal,
@@ -4151,20 +4271,13 @@
         "info-reform",
       );
     }
-    status.forecast.forEach((key) => {
-      addItem(list, `${formatForecastItem(key)}.`, null);
-    });
     if (status.forecast.length) {
+      const list = heading("Wartości prognozowane (wynik od nich zależy):");
+      status.forecast.forEach((key) => {
+        addItem(list, `${formatForecastItem(key)}.`, null);
+      });
       addItem(list, "Lista wszystkich prognoz:", "info-forecast");
     }
-    const title = document.createElement("span");
-    title.className = "row-note-title";
-    title.textContent = status.forecast.length
-      ? "Wynik zależy od wartości nieostatecznych:"
-      : status.unavailableKind === "joint"
-        ? "Wariant niedostępny:"
-        : "Scenariusz projektu:";
-    pop.append(title, list);
   }
 
   /* ==================================================
@@ -4565,33 +4678,52 @@
     const scenario = getActiveScenario();
     DOM.bestCard.dataset.forecast = status && status.forecast.length ? "true" : "";
     DOM.bestCard.dataset.scenario = scenario ? scenario.id : "";
+    // notka w dwóch długościach: pełna i skrócona (wąski ekran – CSS)
+    const addNote = (className, long, short) => {
+      const note = document.createElement("span");
+      note.className = `best-card-note ${className}`;
+      const longText = document.createElement("span");
+      longText.className = "note-long";
+      longText.textContent = long;
+      const shortText = document.createElement("span");
+      shortText.className = "note-short";
+      shortText.textContent = short;
+      note.append(longText, shortText);
+      DOM.bestCardSavings.appendChild(note);
+    };
     if (scenario) {
       const change = getDraftChange(bestEntry.id, result);
-      const note = document.createElement("span");
-      note.className = "best-card-note best-card-note--draft";
-      note.textContent = `Scenariusz: ${scenario.label} — projekt nieuchwalony (stan na ${
-        scenario.statusDate
-      }).${
-        change
-          ? ` Wg obowiązujących przepisów ten wariant: ${formatPLN(change.lawTotal)}${
-              Math.abs(change.delta) > 0.004
-                ? ` (zmiana ${formatSignedAmountPL(change.delta)}${NBSP}zł)`
-                : " (bez zmian)"
-            }.`
-          : ""
-      }`;
-      DOM.bestCardSavings.appendChild(note);
+      const changeText = change
+        ? Math.abs(change.delta) > 0.004
+          ? ` (zmiana ${formatSignedAmountPL(change.delta)}${NBSP}zł)`
+          : " (bez zmian)"
+        : "";
+      addNote(
+        "best-card-note--draft",
+        `Scenariusz: ${scenario.label} — projekt nieuchwalony (stan na ${
+          scenario.statusDate
+        }).${
+          change
+            ? ` Wg obowiązujących przepisów ten wariant: ${formatPLN(change.lawTotal)}${changeText}.`
+            : ""
+        }`,
+        `${getScenarioShortLabel()} (nieuchwalony)${
+          change ? `: wg przepisów ${formatPLN(change.lawTotal)}${changeText}` : ""
+        }.`,
+      );
     }
     if (status && status.forecast.length) {
-      const note = document.createElement("span");
-      note.className = "best-card-note best-card-note--forecast";
-      note.textContent = `Wynik zależy od wartości prognozowanych: ${status.forecast
+      const names = status.forecast
         .map((key) => {
           const info = TAX_CONSTANT_LABELS[key] || { label: key };
           return info.short || info.label;
         })
-        .join(", ")} — zob. „Założenia”.`;
-      DOM.bestCardSavings.appendChild(note);
+        .join(", ");
+      addNote(
+        "best-card-note--forecast",
+        `Wynik zależy od wartości prognozowanych: ${names} — zob. „Założenia”.`,
+        `Prognoza: ${names}.`,
+      );
     }
   }
 
@@ -6352,7 +6484,11 @@
         "  ",
         `podstawa: dochód opodatkowany skalą po odliczeniach${
           best.joint ? ", liczona odrębnie dla każdego z małżonków" : ""
-        }${hasIpBox ? getLevyIpBoxText(best) : ""}`,
+        }${hasIpBox ? getLevyIpBoxText(best) : ""}${
+          hasIpBox && TAX_CONSTANTS.SOLIDARITY_INCLUDES_IP_BOX
+            ? ` = ${formatNumberPL(best.levyBase)}`
+            : ""
+        }`,
       );
     }
     const taxParts = [];
@@ -6736,10 +6872,21 @@
     }${formatNumberPL(best.taxes)}\n`;
   }
 
+  /* Warunek prawa do ryczałtu (projekt UD458) ma znaczenie tylko przy
+     przychodzie > 0 i zaznaczonej stawce ryczałtu. */
+  function isEligibilityRelevant(result) {
+    return !!(
+      result &&
+      result.ryczaltEligibility &&
+      result.inputs.revenue > 0 &&
+      getCheckedRateIds().length > 0
+    );
+  }
+
   /* Projekt UD458: prawo do ryczałtu (limit przychodu z roku poprzedniego). */
   function getRyczaltEligibilityText(result) {
     const elig = result && result.ryczaltEligibility;
-    if (!elig) return "";
+    if (!elig || !isEligibilityRelevant(result)) return "";
     const Y = result.year;
     const limit = `${formatWholePL(elig.limitEur)} € × ${formatFxPL(
       elig.rate,
@@ -6920,7 +7067,7 @@
         .map((id) => RYCZALT_RATE_LABELS[id])
         .join(", ")}\n`;
     }
-    if (result.ryczaltEligibility) {
+    if (isEligibilityRelevant(result)) {
       text += `Przychód z ${result.year - 1} r. (limit prawa do ryczałtu, projekt UD458): ${
         inputs.prevYearRevenue !== null
           ? formatNumberPL(inputs.prevYearRevenue)
@@ -7052,9 +7199,17 @@
     const items = getNonFinalConstants();
     if (!items.length) return "";
     const ranking = buildRanking(result);
-    let text = `\n${SEPARATOR_LINE}\n=== WARTOŚCI PROGNOZOWANE ===\n${SEPARATOR_LINE}\n\n`;
+    let text = `\n${SEPARATOR_LINE}\n=== WARTOŚCI PROGNOZOWANE I PROJEKTOWANE ===\n${SEPARATOR_LINE}\n\n`;
     text += `Część wartości roku ${result.year} nie jest ostateczna. Wyniki zależne od nich\n`;
-    text += `są oznaczone w rankingu [prognoza] / [projekt].\n\n`;
+    text += `są oznaczone w rankingu [prognoza] / [projekt]; prognozy składek ZUS\n`;
+    text += `dotyczą wszystkich wariantów (nie są powtarzane przy każdym wyniku).\n\n`;
+    const zusKeys = getZusForecastKeys(result.schedule, result.ctx.zusEnabled);
+    const changedByDraft = ranking.entries
+      .filter((entry) => {
+        const change = getDraftChange(entry.id, result);
+        return change && Math.abs(change.delta) > 0.004;
+      })
+      .map((entry) => entry.label);
     items.forEach((item) => {
       const dependent = ranking.entries
         .filter((entry) => {
@@ -7066,7 +7221,17 @@
       text += `  źródło: ${item.source}\n`;
       if (item.finalBy) text += `  ostateczna: ${item.finalBy}\n`;
       if (item.status === "forecast") {
-        text += `  zależne wyniki: ${dependent.length ? dependent.join(", ") : "brak"}\n`;
+        text += `  zależne wyniki: ${
+          zusKeys.includes(item.key)
+            ? "wszystkie warianty (składki ZUS)"
+            : dependent.length
+              ? dependent.join(", ")
+              : "brak"
+        }\n`;
+      } else if (item.status === "draft") {
+        text += `  zmienione wyniki (cały scenariusz): ${
+          changedByDraft.length ? changedByDraft.join(", ") : "brak"
+        }\n`;
       }
     });
     return text;
@@ -7105,8 +7270,9 @@
         TAX_CONSTANTS.RYCZALT_HIGH_RATE_THRESHOLD_EUR,
       )} € w roku = ${formatNumberPL(threshold)} (próg roczny, bez proporcji)\n`;
     }
-    const elig = result.ryczaltEligibility;
-    if (elig) text += `- ${getRyczaltEligibilityText(result).trim()}\n`;
+    if (isEligibilityRelevant(result)) {
+      text += `- ${getRyczaltEligibilityText(result).trim()}\n`;
+    }
     text += `\nZałożenia (elementy niepotwierdzone — brak tekstu projektu):\n`;
     scenario.unconfirmed.forEach((item, index) => {
       text += `  ${index + 1}) ${item}\n`;
@@ -7123,15 +7289,17 @@
     ids.forEach((id) => {
       const change = getDraftChange(id, result);
       if (!change) return;
-      text += `  ${VARIANT_LABELS[id] || id}: ${formatPLN(
-        result.variants[id].total,
-      )} (obowiązujące: ${formatPLN(change.lawTotal)}; zmiana ${formatSignedAmountPL(
-        change.delta,
-      )} zł)${
-        result.variants[id].best.form === "ryczalt" && isRyczaltUnavailable(result)
-          ? " — ryczałt niedostępny wg projektu"
-          : ""
-      }\n`;
+      const unavailable =
+        result.variants[id].best.form === "ryczalt" && isRyczaltUnavailable(result);
+      text += unavailable
+        ? `  ${VARIANT_LABELS[id] || id}: niedostępny wg projektu (kwota orientacyjna ${formatPLN(
+            result.variants[id].total,
+          )}); obowiązujące przepisy: ${formatPLN(change.lawTotal)}\n`
+        : `  ${VARIANT_LABELS[id] || id}: ${formatPLN(
+            result.variants[id].total,
+          )} (obowiązujące: ${formatPLN(change.lawTotal)}; zmiana ${formatSignedAmountPL(
+            change.delta,
+          )} zł)\n`;
     });
     text += `Źródła: ${scenario.sources.join(" ; ")}\n`;
     return text;
@@ -7944,7 +8112,7 @@
         createInfoTextSection(
           "Wartości prognozowane i projektowane",
           [
-            yearInfo.summary ||
+            getYearSummary(Y) ||
               "Część wartości nie jest jeszcze ostateczna.",
             "Wyniki, które od nich zależą, mają przy kwocie oznaczenie „prognoza” (albo „projekt” w scenariuszu) z listą tych wartości; to samo jest w eksporcie (sekcja „Wartości prognozowane”).",
             ...nonFinal.map(
@@ -8376,6 +8544,10 @@
       if (hasForecast) {
         option.classList.add("has-forecast");
         text.title = "Część wartości to prognozy";
+        const srText = document.createElement("span");
+        srText.className = "sr-only";
+        srText.textContent = " (część wartości to prognozy)";
+        text.appendChild(srText);
       }
       option.append(input, text);
       DOM.yearSwitch.appendChild(option);
@@ -8401,13 +8573,51 @@
     }
   }
 
+  /* Opis roku (karta roku, baner, „Założenia”): zakres, w którym prognozy
+     staną się ostateczne, liczony z metadanych (finalByMonth) – zawsze
+     zgodny z terminami przy poszczególnych wartościach. */
+  function formatMonthRoman(yyyymm) {
+    const [y, m] = yyyymm.split("-").map(Number);
+    return `${ROMAN_MONTHS[m - 1]} ${y}`;
+  }
+
+  function getYearSummary(year) {
+    const info = TAX_YEAR_INFO[year] || {};
+    if (!info.summary) return null;
+    const months = Object.values(taxYears.meta(year))
+      .filter((m) => m.status === "forecast" && m.finalByMonth)
+      .map((m) => m.finalByMonth)
+      .sort();
+    let range = "po ogłoszeniu aktów (terminy w „Założeniach”)";
+    if (months.length) {
+      const from = formatMonthRoman(months[0]);
+      const to = formatMonthRoman(months[months.length - 1]);
+      range = from === to ? `w ${from}` : `między ${from} a ${to}`;
+    }
+    return info.summary.replace("{okres}", range);
+  }
+
+  /* Podpowiedź przy przełączniku roku: gdy wybrany jest rok przyszły
+     (np. od 1.11 domyślnie następny), łatwy powrót do roku rozliczanego. */
+  function renderYearHint() {
+    const Y = getActiveYear();
+    const today = new Date();
+    const show = Y > today.getFullYear() && taxYears.has(Y - 1);
+    document.querySelectorAll("[data-year-hint]").forEach((hint) => {
+      hint.hidden = !show;
+      if (!show) return;
+      const button = hint.querySelector("button");
+      setText(button, `Rozliczasz rok ${Y - 1}? Przełącz na ${Y - 1}.`);
+      button.dataset.year = String(Y - 1);
+    });
+  }
+
   /* Teksty i atrybuty zależne od roku (nagłówek, pola dat, etykiety). */
   function renderYearUi() {
     const Y = getActiveYear();
     const C = TAX_CONSTANTS;
     const scenario = getActiveScenario();
     const scenarios = taxYears.scenariosFor(Y);
-    const yearInfo = TAX_YEAR_INFO[Y] || {};
     document.title = `Kalkulator podatkowy ${Y}`;
     if (DOM.yearSwitch) {
       DOM.yearSwitch.querySelectorAll('input[name="taxYear"]').forEach((input) => {
@@ -8447,9 +8657,11 @@
     });
 
     // karta roku: prognozy i przełącznik scenariusza
-    const hasCard = !!(yearInfo.summary || scenarios.length);
+    const yearSummary = getYearSummary(Y);
+    const hasCard = !!(yearSummary || scenarios.length);
     if (DOM.yearCard) DOM.yearCard.hidden = !hasCard;
-    setText(DOM.yearNotice, yearInfo.summary || "");
+    setText(DOM.yearNotice, yearSummary || "");
+    renderYearHint();
     if (DOM.reformField) DOM.reformField.hidden = !scenarios.length;
     if (scenarios.length) {
       setText(DOM.reformLabel, scenarios[0].label);
@@ -8467,7 +8679,7 @@
 
     // baner nad wynikami
     if (DOM.yearBanner) {
-      const show = !!(scenario || yearInfo.summary);
+      const show = !!(scenario || yearSummary);
       DOM.yearBanner.hidden = !show;
       DOM.yearBanner.dataset.kind = scenario ? "draft" : "forecast";
       setText(DOM.yearBannerTag, scenario ? "projekt" : "prognoza");
@@ -8475,7 +8687,7 @@
         DOM.yearBannerText,
         scenario
           ? `Scenariusz: ${scenario.label} — projekt nieuchwalony, stan na ${scenario.statusDate}. Nie jest to obowiązujące prawo; elementy niepotwierdzone opisano w „Założeniach”.`
-          : yearInfo.summary || "",
+          : yearSummary || "",
       );
       if (DOM.yearBannerLink) {
         const topic = scenario ? "info-reform" : "info-forecast";
@@ -8485,12 +8697,24 @@
     }
   }
 
-  /* Opis pod polem „Przychód z roku poprzedniego” (wynik warunku). */
+  /* Opis pod polem „Przychód z roku poprzedniego” (wynik warunku) – werdykt
+     tylko przy przychodzie > 0 i zaznaczonej stawce ryczałtu; inaczej
+     sam limit. */
   function renderEligibilityHint(result) {
     if (!DOM.prevYearRevenueHint) return;
     const elig = result && result.ryczaltEligibility;
     if (!elig) {
       setText(DOM.prevYearRevenueHint, "");
+      return;
+    }
+    if (!isEligibilityRelevant(result)) {
+      setText(
+        DOM.prevYearRevenueHint,
+        `Limit: ${formatWholePL(elig.limitEur)} € × ${formatFxPL(elig.rate)} = ${formatPLN(
+          elig.limit,
+        )} (kurs NBP — prognoza do 1.10.${result.year - 1}). Warunek sprawdzamy, gdy wpiszesz przychód i zaznaczysz stawkę ryczałtu.`,
+      );
+      DOM.prevYearRevenueHint.dataset.state = "";
       return;
     }
     const Y = result.year;
@@ -8533,7 +8757,21 @@
   ================================================== */
   buildYearSwitch();
   renderYearUi();
-  if (initialYearState.invalidParam) updateYearUrl({ removeYear: true });
+  // adres kanoniczny: poprawny ?rok=RRRR zostaje, błędny jest usuwany;
+  // &projekt=1 zostaje tylko, gdy scenariusz faktycznie działa (bez
+  // parametrów – bez zapisu adresu, rok z reguły roku domyślnego)
+  if (initialYearState.hasParams) {
+    updateYearUrl({
+      removeYear:
+        initialYearState.invalidParam || !initialYearState.hasYearParam,
+    });
+  }
+  document.querySelectorAll("[data-year-hint] button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const year = Number(button.dataset.year);
+      if (taxYears.has(year)) setTaxYear(year, null);
+    });
+  });
   if (DOM.reformToggle) {
     DOM.reformToggle.addEventListener("change", () => {
       const scenarios = taxYears.scenariosFor(getActiveYear());

@@ -70,7 +70,11 @@ and statuses (full ZUS 2052,15 / month, small ZUS 469,85, minimum health
 (UD458 + UD116)” (scale 12/24/32% for B = 140 000 and 200 000, joint
 taxation, ryczałt 17% over 1 312 500 zł, ryczałt limit 1 093 750 zł and the
 new-business exception, 5% levy including IP BOX), the year switch
-(`?rok=`, `&projekt=1`) and the default-year rule.
+(`?rok=`, `&projekt=1`) and the default-year rule; the review fixes
+(forecast badges only for values that differ between variants, ZUS forecasts
+once on the ZUS card, canonical `?rok=`/`&projekt=` address, unavailable
+ryczałt without a draft delta, eligibility text only when relevant, the
+year hint „Rozliczasz rok 2026? Przełącz na 2026.”).
 
 ### 4. `family.test.js` (no snapshots)
 

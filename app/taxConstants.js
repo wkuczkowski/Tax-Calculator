@@ -7,7 +7,9 @@
  *   "forecast" (prognoza albo nasze wyliczenie – akt jeszcze nie wydany),
  *   "draft" (wartość z projektu ustawy);
  * - source: akt, obwieszczenie albo metoda wyliczenia;
- * - finalBy: kiedy wartość stanie się ostateczna (dla forecast / draft).
+ * - finalBy: kiedy wartość stanie się ostateczna (dla forecast / draft);
+ * - finalByMonth: najpóźniejszy spodziewany miesiąc (RRRR-MM) – z niego UI
+ *   buduje zakres „staną się ostateczne między … a …” (prognozy).
  * Scenariusze (TAX_SCENARIOS) to nakładki na stałe jednego roku, np.
  * „Projekt zmian 2027 (UD458 + UD116)” – domyślnie wyłączone.
  *
@@ -455,33 +457,35 @@ const TAX_CONSTANTS_META_BY_YEAR = {
     MIN_WAGE: finalMeta("rozporządzenie RM z 14.09.2026, Dz.U. 2026 poz. 1213"),
     AVG_SALARY_Q4_PREV: forecastMeta(
       "szacunek ok. 9 720 zł: IV kw. 2025 (9 228,64 zł, M.P. 2026 poz. 117) × dynamika r/r z II kw. 2026 (9 396,33 / 8 919,94; M.P. 2026 poz. 720 i M.P. 2025 poz. 688) = 9 721,52, zaokrąglone (widełki 9 650–9 800)",
-      "obwieszczenie Prezesa GUS ok. 20–22.01.2027",
+      "obwieszczenie Prezesa GUS ok. 20–22.01.2027", { finalByMonth: "2027-01" },
     ),
     LINEAR_HEALTH_DEDUCTION_LIMIT: forecastMeta(
       "wyliczenie z art. 30c ust. 2b ustawy o PIT: 14 100 × 300 990 / 282 600 = 15 017,55 → w górę do 100 zł",
-      "obwieszczenie Ministra Finansów do 31.12.2026",
+      "obwieszczenie Ministra Finansów do 31.12.2026", { finalByMonth: "2026-12" },
     ),
     HEALTH_MIN_MONTHLY_JANUARY: finalMeta("art. 81 ust. 2b u.ś.o.z. (rok składkowy 2026/27: 9% × 4 806 zł)"),
     ZUS_FORECAST_AVG_SALARY: forecastMeta(
       "projekt ustawy budżetowej na 2027 r. (RM 28.08.2026), art. 24",
-      "obwieszczenie MRPiPS o kwocie ograniczenia podstawy (ok. XI 2026)",
+      "obwieszczenie MRPiPS o kwocie ograniczenia podstawy (ok. XI 2026)", { finalByMonth: "2026-11" },
     ),
     ZUS_FULL_BASE: forecastMeta(
       "art. 18 ust. 8 u.s.u.s. (60% × 10 033 zł – prognozowane wynagrodzenie z projektu budżetu)",
-      "obwieszczenie MRPiPS (ok. XI 2026)",
+      "obwieszczenie MRPiPS (ok. XI 2026)", { finalByMonth: "2026-11" },
     ),
     ZUS_PREF_BASE: finalMeta("art. 18a ust. 1 u.s.u.s. (30% × 4 950 zł)"),
     ZUS_RATE_ACCIDENT: forecastMeta(
       "art. 28 ust. 1 ustawy wypadkowej: 1,67% obowiązuje do 03.2027; od 04.2027 przyjęto bez zmian",
-      "ewentualne rozporządzenie MRPiPS przed 1.04.2027",
+      "ewentualne rozporządzenie MRPiPS przed 1.04.2027", { finalByMonth: "2027-03" },
     ),
     ZUS_RATE_FP: forecastMeta(
       "projekt ustawy budżetowej na 2027 r., art. 25",
       "ustawa budżetowa na 2027 r. (zwykle I–II 2027)",
+      { finalByMonth: "2027-02" },
     ),
     ZUS_RATE_FS: forecastMeta(
       "projekt ustawy budżetowej na 2027 r., art. 26",
       "ustawa budżetowa na 2027 r. (zwykle I–II 2027)",
+      { finalByMonth: "2027-02" },
     ),
   },
 };
@@ -494,8 +498,9 @@ const TAX_YEAR_INFO = {
   },
   2027: {
     acts: "ustawa o PIT (Dz.U. 2026 poz. 592), ustawa o ryczałcie (Dz.U. 2025 poz. 843), u.ś.o.z. (Dz.U. 2025 poz. 1461), u.s.u.s. (Dz.U. 2026 poz. 199), Prawo przedsiębiorców (Dz.U. 2025 poz. 1480), ustawa o rynku pracy (Dz.U. 2025 poz. 620), minimalne wynagrodzenie 2027 (Dz.U. 2026 poz. 1213); prognozy: projekt ustawy budżetowej na 2027 r.",
+    // {okres} – zakres z metadanych (finalByMonth prognoz roku), wstawia UI
     summary:
-      "Rok 2027: obowiązujące przepisy z kwotami na 2027 r. Część kwot to prognozy (oznaczone „prognoza”) — staną się ostateczne między XI 2026 a I 2027.",
+      "Rok 2027: obowiązujące przepisy z kwotami na 2027 r. Część kwot to prognozy (oznaczone „prognoza”) — staną się ostateczne {okres}.",
   },
 };
 
@@ -554,7 +559,7 @@ const TAX_SCENARIOS = {
       RYCZALT_HIGH_RATE: draftMeta("projekt UD458", "ogłoszenie ustawy w Dz.U. (cel: ok. 30.11.2026)"),
       EUR_PLN_RATE: forecastMeta(
         "art. 4 ust. 2 ustawy o ryczałcie; przyjęto ostatni znany kurs średni NBP 4,3750 (tabela 187/A/NBP/2026 z 25.09.2026)",
-        "kurs średni NBP z 1.10.2026",
+        "kurs średni NBP z 1.10.2026", { finalByMonth: "2026-10" },
       ),
     },
     // Elementy przyjęte bez tekstu projektu (docs/prawo/research-2027-reformy.md, N1–N8)

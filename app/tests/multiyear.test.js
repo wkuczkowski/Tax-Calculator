@@ -153,32 +153,43 @@ describe("Wyniki 2027 – obowiązujące przepisy (liczone ręcznie)", () => {
     });
   });
 
-  it("oznaczenia prognoz: wiersz, karta najlepszego wyniku, eksport (sekcja „Wartości prognozowane”); 2026 bez oznaczeń", () => {
+  it("oznaczenia prognoz: przy wierszu tylko wartości różnicujące warianty, prognozy ZUS raz (karta ZUS, baner, eksport); 2026 bez oznaczeń", () => {
     const y2027 = withCalc({ year: 2027 }, (calc) => {
       calc.setRevenue(200000);
       calc.setCosts(20000);
       calc.toggleRyczaltRate("ryczalt12");
       calc.calculate();
       const row = calc.document.querySelector('.results-row[data-variant="ryczalt12"] .row-status');
+      const scaleRow = calc.document.querySelector('.results-row[data-variant="taxScale"] .row-status');
+      const zusNote = calc.document.getElementById("zusForecastNote");
       const text = calc.readBreakdown();
       return {
         badge: row.hidden ? "" : row.querySelector(".row-status-btn").textContent,
-        rowLists: row.textContent.includes("Przeciętne wynagrodzenie w IV kw.") && row.textContent.includes("Podstawa pełnego ZUS"),
-        bestNote: calc.document.getElementById("bestCardSavings").textContent.includes("Wynik zależy od wartości prognozowanych"),
+        // ryczałt: przeciętne wynagrodzenie z IV kw.; prognozy ZUS nie przy wierszu
+        rowLists: row.textContent.includes("Przeciętne wynagrodzenie w IV kw.") && !row.textContent.includes("Podstawa pełnego ZUS"),
+        scaleBadge: !scaleRow.hidden,
+        zusNote: !zusNote.hidden && zusNote.textContent.includes("podstawa pełnego ZUS") && zusNote.textContent.includes("Fundusz Pracy"),
         header: text.startsWith("KALKULATOR PODATKOWY 2027"),
-        section: text.includes("=== WARTOŚCI PROGNOZOWANE ==="),
+        section: text.includes("=== WARTOŚCI PROGNOZOWANE I PROJEKTOWANE ==="),
+        zusDependents: text.includes("zależne wyniki: wszystkie warianty (składki ZUS)"),
         marker: text.includes("[prognoza: "),
         bannerHidden: calc.document.getElementById("yearBanner").hidden,
+        notice: calc.document.getElementById("yearNotice").textContent,
       };
     });
     expect(y2027).toEqual({
       badge: "prognoza",
       rowLists: true,
-      bestNote: true,
+      scaleBadge: false,
+      zusNote: true,
       header: true,
       section: true,
+      zusDependents: true,
       marker: true,
       bannerHidden: false,
+      // zakres z metadanych: od XI 2026 (podstawa ZUS) do III 2027 (wypadkowa)
+      notice:
+        "Rok 2027: obowiązujące przepisy z kwotami na 2027 r. Część kwot to prognozy (oznaczone „prognoza”) — staną się ostateczne między XI 2026 a III 2027.",
     });
     const y2026 = withCalc({ year: 2026 }, (calc) => {
       calc.setRevenue(200000);
@@ -407,6 +418,94 @@ describe("Przełącznik roku, adres (?rok=) i rok domyślny", () => {
       const state2027 = calc.document.getElementById("bestCard").dataset.state;
       expect([invalid2026, state2027]).toEqual(["invalid", "ranked"]);
       expect(calc.readOutputs().healthMonths).toBe("10");
+    });
+  });
+});
+
+describe("Poprawki z recenzji trybu wielu lat (F2–F11)", () => {
+  const norm = (text) => text.replace(/[\u00a0\u202f]/g, " ");
+
+  it("adres: tylko ?rok=RRRR, &projekt=1 tylko gdy działa (adres kanoniczny)", () => {
+    const search = (url) =>
+      withCalc({ url }, (calc) => [calc.window.taxYears.active(), calc.window.location.search]);
+    expect(search("http://localhost/?rok=2027.0")[1]).toBe("");
+    expect(search("http://localhost/?rok=0x7EB")[1]).toBe("");
+    expect(search("http://localhost/?rok=2026&projekt=1")).toEqual([
+      { year: 2026, scenario: null },
+      "?rok=2026",
+    ]);
+    expect(search("http://localhost/?rok=2027&projekt=true")).toEqual([
+      { year: 2027, scenario: null },
+      "?rok=2027",
+    ]);
+    expect(search("http://localhost/?rok=2027&projekt=1")).toEqual([
+      { year: 2027, scenario: "reform2027" },
+      "?rok=2027&projekt=1",
+    ]);
+  });
+
+  it("kurs EUR przy wyniku tylko w pobliżu limitów; ryczałt niedostępny bez „projekt: ±X”, z kwotą wg przepisów", () => {
+    const eur = (revenue) =>
+      withCalc({ year: 2027, reform: true }, (calc) => {
+        calc.setRevenue(revenue);
+        calc.toggleRyczaltRate("ryczalt12");
+        calc.calculate();
+        return norm(calc.document.querySelector('.results-row[data-variant="ryczalt12"] .row-status').textContent).includes("Kurs EUR");
+      });
+    // 100 000: daleko od 1 093 750 i 1 312 500 zł; 1 100 000: ±5% limitu prawa do ryczałtu
+    expect([eur(100000), eur(1100000)]).toEqual([false, true]);
+    withCalc({ year: 2027, reform: true }, (calc) => {
+      calc.setRevenue(1500000);
+      calc.setCosts(100000);
+      calc.toggleRyczaltRate("ryczalt12");
+      calc.calculate();
+      const status = norm(calc.document.querySelector('.results-row[data-variant="ryczalt12"] .row-status').textContent);
+      expect(status.includes("wobec obowiązujących przepisów")).toBe(false);
+      expect(status.includes("Wg obowiązujących przepisów 2027 r.: 219 645,03 zł")).toBe(true);
+      const text = norm(calc.readBreakdown());
+      expect(text.includes("Ryczałt 12%: niedostępny wg projektu (kwota orientacyjna 228 818,14 zł); obowiązujące przepisy: 219 645,03 zł")).toBe(true);
+      expect(text.includes("zmienione wyniki (cały scenariusz): ")).toBe(true);
+    });
+  });
+
+  it("prawo do ryczałtu: bez werdyktu przy przychodzie 0 albo bez stawki ryczałtu (UI i eksport); etykieta pola w liście błędów", () => {
+    withCalc({ year: 2027, reform: true }, (calc) => {
+      calc.calculate();
+      const hint = calc.document.getElementById("prevYearRevenueHint").textContent;
+      expect(hint.includes("Warunek spełniony")).toBe(false);
+      calc.setRevenue(200000);
+      calc.calculate();
+      expect(calc.readBreakdown().includes("Prawo do ryczałtu")).toBe(false);
+      calc.setPrevYearRevenue("abc");
+      calc.calculate();
+      const errors = calc.document.getElementById("bestCardSavings").textContent;
+      expect(errors.includes("Przychód z działalności w 2026 r. (limit prawa do ryczałtu)")).toBe(true);
+    });
+  });
+
+  it("podpowiedź przy przełączniku roku: w 2027 „Rozliczasz rok 2026? Przełącz na 2026.” przełącza rok", () => {
+    withCalc({ year: 2027, today: "2026-11-02" }, (calc) => {
+      const hint = calc.document.querySelector(".year-hint--card");
+      expect(hint.hidden).toBe(false);
+      expect(hint.textContent.trim()).toBe("Rozliczasz rok 2026? Przełącz na 2026.");
+      hint.querySelector("button").click();
+      expect(calc.window.taxYears.active().year).toBe(2026);
+      expect(calc.document.querySelector(".year-hint--top").hidden).toBe(true);
+      // kropka „prognozy” przy roku ma tekst dla czytników ekranu
+      const opt = calc.document.querySelector(".year-opt.has-forecast .sr-only");
+      expect(opt.textContent).toBe(" (część wartości to prognozy)");
+    });
+  });
+
+  it("skala + IP BOX w projekcie: linia daniny pokazuje sumę podstawy", () => {
+    withCalc({ year: 2027, reform: true }, (calc) => {
+      calc.setZusEnabled(false);
+      calc.setRevenue(2000000);
+      calc.setCosts(200000);
+      calc.setIpBox(50);
+      calc.calculate();
+      const text = norm(calc.readBreakdown());
+      expect(text.includes("+ dochód kwalifikowany IP BOX 900 000,00 zł (projekt UD116) = 1 800 000,00 zł")).toBe(true);
     });
   });
 });

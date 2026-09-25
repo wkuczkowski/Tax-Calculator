@@ -64,11 +64,17 @@
         </div>
         <!-- Przełącznik roku podatkowego (opcje z taxYears.list() wstawia
              script.js; stan w adresie: ?rok=2027) -->
-        <div
-          class="year-switch"
-          id="yearSwitch"
-          role="radiogroup"
-          aria-label="Rok podatkowy"></div>
+        <div class="year-switch-wrap">
+          <span class="year-switch-label" aria-hidden="true">Rok podatkowy</span>
+          <div
+            class="year-switch"
+            id="yearSwitch"
+            role="radiogroup"
+            aria-label="Rok podatkowy"></div>
+          <p class="year-hint year-hint--top" data-year-hint hidden>
+            <button type="button" class="link-btn"></button>
+          </p>
+        </div>
         <nav class="topbar-actions" aria-label="Akcje narzędzia">
           <button type="button" class="ghost-btn" id="resetBtn">
             <svg
@@ -140,6 +146,9 @@
         <fieldset class="card card-year" id="yearCard" hidden>
           <legend class="card-legend">Rok <span data-year-text>2027</span></legend>
           <p class="card-hint year-notice" id="yearNotice"></p>
+          <p class="card-hint year-hint year-hint--card" data-year-hint hidden>
+            <button type="button" class="link-btn"></button>
+          </p>
 
           <div class="field" id="reformField" hidden>
             <div class="field-head field-head-toggle">
@@ -1689,6 +1698,7 @@
               aria-label="Składki społeczne w miesiącach 2026"></ol>
             <ul class="zus-legend" id="zusLegend" aria-label="Legenda"></ul>
             <p class="zus-summary-note" id="zusScheduleSummary"></p>
+            <p class="zus-summary-note zus-forecast-note" id="zusForecastNote" hidden></p>
             <div class="rates-total-row">
               <span>Składki społeczne + FP/FS (rocznie)</span>
               <span id="zusSocialTotal"></span>

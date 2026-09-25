@@ -2704,15 +2704,53 @@ input.error {
    tryb wielu lat: przełącznik roku, karta roku, baner, oznaczenia
    „prognoza” / „projekt”, tabela stałych w „Założeniach”
    -------------------------------------------------------------------------- */
+/* przełącznik roku – wyraźny (etykieta „Rok podatkowy”, większe opcje);
+   pod nim podpowiedź powrotu do roku rozliczanego (recenzja F10) */
+.year-switch-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  flex-shrink: 0;
+}
+.year-switch-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 .year-switch {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  margin-right: auto;
-  background: var(--surface-alt);
-  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border: 1.5px solid var(--ink-3);
   border-radius: 999px;
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
+}
+.year-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-3);
+}
+.year-hint[hidden] {
+  display: none;
+}
+.year-hint .link-btn {
+  font-size: inherit;
+  white-space: normal;
+  text-align: left;
+}
+.year-hint--top {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 1px);
+  white-space: nowrap;
 }
 .year-opt {
   position: relative;
@@ -2727,10 +2765,10 @@ input.error {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--ink-3);
   border-radius: 999px;
@@ -2950,6 +2988,13 @@ input.error {
 }
 
 @media (max-width: 600px) {
+  .year-switch-wrap {
+    margin-right: 0;
+  }
+  .year-switch-label,
+  .year-hint--top {
+    display: none !important;
+  }
   .year-switch {
     margin-right: 0;
   }
@@ -3121,4 +3166,40 @@ input.error {
       "months months"
       "checks checks";
   }
+}
+
+/* karta najlepszego wyniku: notki w dwóch długościach – na telefonie krótsze */
+.best-card-note .note-short {
+  display: none;
+}
+@media (max-width: 600px) {
+  .best-card-note .note-long {
+    display: none;
+  }
+  .best-card-note .note-short {
+    display: inline;
+  }
+}
+
+/* prognozy parametrów ZUS – raz, na karcie składek (nie przy wierszach) */
+.zus-forecast-note[hidden] {
+  display: none;
+}
+.zus-forecast-note {
+  color: var(--warn-ink);
+}
+.zus-forecast-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: var(--warn-soft);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.zus-forecast-note .tip-more {
+  color: var(--primary);
 }

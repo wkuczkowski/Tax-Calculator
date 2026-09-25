@@ -58,6 +58,10 @@ node tools/refmodel/genCases.mjs --check  # czy cases.json/expected.json odpowia
 node tools/refmodel/genCases.mjs          # przegeneruj (potem przejrzyj `git diff`)
 ```
 
+### Rok podatkowy
+
+Aplikacja obsługuje lata 2026 i 2027 (przełącznik roku, `?rok=`). Loader testów otwiera stronę domyślnie z `?rok=2026`, więc skrypty w tym katalogu porównują rok 2026 niezależnie od bieżącej daty. Model obejmuje dziś tylko 2026; rozszerzenie o 2027 (stałe z [`docs/prawo/research-2027.md`](../../docs/prawo/research-2027.md), scenariusz z [`research-2027-reformy.md`](../../docs/prawo/research-2027-reformy.md)) ma przygotować niezależny weryfikator. Loader przyjmuje `loadCalculator({ year: 2027 })` i `{ year: 2027, reform: true }` (scenariusz „Projekt zmian 2027”); pole przychodu z 2026 r. ustawia `setPrevYearRevenue()`.
+
 ### Inna wersja aplikacji: `APP_DIR`
 
 Domyślnie skrypty ładują aplikację z `app/` w tym repo (do 2026 r. katalog nazywał się `2026/`; stary adres przekierowuje). Zmienna `APP_DIR` wskazuje inny katalog aplikacji. Musi on zawierać `index.html`, `script.js`, `taxConstants.js` i `tests/helpers/loadCalculator.js`. Przykłady użycia:

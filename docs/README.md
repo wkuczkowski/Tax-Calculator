@@ -14,7 +14,7 @@ Każdy dokument zaczyna się krótkim nagłówkiem. Podaje w nim datę, status (
 
 | Plik | Status | Co zawiera |
 |---|---|---|
-| [`decyzje-implementacyjne.md`](decyzje/decyzje-implementacyjne.md) | **dokument żywy: rejestr decyzji** | Każda decyzja interpretacyjna i implementacyjna z uzasadnieniem, w grupach: kalendarz składek (D), wakacje składkowe (W), składka zdrowotna (H), optymalizacja odliczeń, inne dochody (O), poprawki z recenzji (R), runda końcowa (F), świadome uproszczenia. **Uzupełniaj przy każdej zmianie logiki**, w tym samym commicie. |
+| [`decyzje-implementacyjne.md`](decyzje/decyzje-implementacyjne.md) | **dokument żywy: rejestr decyzji** | Każda decyzja interpretacyjna i implementacyjna z uzasadnieniem, w grupach: kalendarz składek (D), wakacje składkowe (W), składka zdrowotna (H), optymalizacja odliczeń, inne dochody (O), poprawki z recenzji (R), runda końcowa (F), świadome uproszczenia, interfejs (UI), tryb wielu lat i scenariusz projektu 2027 (Y). **Uzupełniaj przy każdej zmianie logiki**, w tym samym commicie. |
 | [`specyfikacja-zus.md`](decyzje/specyfikacja-zus.md) | specyfikacja (zamknięta) | Wymagania dla składek ZUS i innych dochodów: pola wejściowe, reguły liczenia, optymalizacja odliczeń, wyświetlanie. ADDENDUM A1–A10 zawiera decyzje podjęte po porównaniu z modelem referencyjnym. |
 | [`specyfikacja-wielu-lat.md`](decyzje/specyfikacja-wielu-lat.md) | specyfikacja (wiążąca) | Tryb wielu lat (2026 + 2027): stałe per rok z metadanymi (status, źródło, termin), przełącznik roku i rok domyślny, wartości 2027, scenariusz „Projekt zmian 2027 (UD458 + UD116)”, oznaczenia prognoz, testy. |
 

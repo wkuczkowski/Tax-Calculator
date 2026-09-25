@@ -25,7 +25,7 @@ export default [
         "error",
         {
           varsIgnorePattern:
-            "^(TAX_CONSTANTS|TAX_BAND_12|TAX_BAND_32|PIT_RATE_SOLIDARITY|EFFECTIVE_LINEAR_RATE|EFFECTIVE_LINEAR_RATE_SOLIDARITY|EFFECTIVE_IPBOX_PLUS_HEALTH|taxMath)$",
+            "^(TAX_CONSTANTS|TAX_CONSTANTS_BY_YEAR|TAX_CONSTANTS_META_BY_YEAR|TAX_CONSTANT_LABELS|TAX_CONSTANT_GROUPS|TAX_STATUS_LABELS|TAX_YEAR_INFO|TAX_SCENARIOS|taxYears|taxMath)$",
         },
       ],
     },
@@ -36,12 +36,14 @@ export default [
     languageOptions: {
       globals: {
         TAX_CONSTANTS: "readonly",
-        TAX_BAND_12: "readonly",
-        TAX_BAND_32: "readonly",
-        PIT_RATE_SOLIDARITY: "readonly",
-        EFFECTIVE_LINEAR_RATE: "readonly",
-        EFFECTIVE_LINEAR_RATE_SOLIDARITY: "readonly",
-        EFFECTIVE_IPBOX_PLUS_HEALTH: "readonly",
+        TAX_CONSTANTS_BY_YEAR: "readonly",
+        TAX_CONSTANTS_META_BY_YEAR: "readonly",
+        TAX_CONSTANT_LABELS: "readonly",
+        TAX_CONSTANT_GROUPS: "readonly",
+        TAX_STATUS_LABELS: "readonly",
+        TAX_YEAR_INFO: "readonly",
+        TAX_SCENARIOS: "readonly",
+        taxYears: "readonly",
         taxMath: "readonly",
       },
     },

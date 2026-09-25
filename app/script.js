@@ -592,16 +592,22 @@
     check("spouseIncome", isSpouseIncomeNeeded(), () =>
       validateInput(DOM.spouseIncomeInput.value, "spouseIncome"),
     );
-    // karta „Rodzina” (pola widoczne tylko, gdy mają znaczenie – F1)
-    check("familyShare", true, validateFamilyShare);
+    // karta „Rodzina” (pola widoczne tylko, gdy mają znaczenie – F1);
+    // zwinięta karta – bez sprawdzania widoczności każdego pola
+    const familyOpen = !!(DOM.familyBody && !DOM.familyBody.hidden);
+    check("familyShare", familyOpen, validateFamilyShare);
     ["spouseLinearIncome", "spouseContrib", "otherContrib"].forEach(
       (fieldName) => {
-        check(fieldName, true, () =>
+        check(fieldName, familyOpen, () =>
           validateInput(document.getElementById(fieldName).value, fieldName),
         );
       },
     );
-    check("fourPlusUsed", DOM.fourPlus && DOM.fourPlus.checked, validateFourPlusUsed);
+    check(
+      "fourPlusUsed",
+      familyOpen && DOM.fourPlus && DOM.fourPlus.checked,
+      validateFourPlusUsed,
+    );
     // przychód z roku poprzedniego – tylko w scenariuszu z limitem ryczałtu
     check("prevYearRevenue", isPrevYearRevenueActive(), () =>
       validateInput(DOM.prevYearRevenueInput.value, "prevYearRevenue"),
@@ -1965,18 +1971,14 @@
     DOM.ipBoxRange.style.setProperty("--ipbox-fill", safe + "%");
   }
 
+  // stan przełączników z zapamiętanych list pól (bez selektorów – funkcje
+  // wołane wielokrotnie przy każdym przeliczeniu)
   function isIpBoxEnabled() {
-    const checked = document.querySelector(
-      'input[name="ipBoxEnabled"]:checked',
-    );
-    return !!checked && checked.value === "yes";
+    return getCheckedValue(DOM.ipBoxEnabledRadios, "no") === "yes";
   }
 
   function isJointTaxationEnabled() {
-    const checked = document.querySelector(
-      'input[name="jointTaxation"]:checked',
-    );
-    return !!checked && checked.value === "yes";
+    return getCheckedValue(DOM.jointTaxationRadios, "no") === "yes";
   }
 
   function clearIpBoxResultFields() {
@@ -2001,8 +2003,9 @@
   }
 
   function readChildren() {
-    if (!DOM.childrenList) return [];
-    return Array.from(DOM.childrenList.querySelectorAll(".child-row")).map(
+    // bez selektorów przy pustej liście (przeliczenie przy każdym znaku)
+    if (!DOM.childrenList || !DOM.childrenList.firstElementChild) return [];
+    return Array.from(DOM.childrenList.children).map(
       (row) => ({
         months: Math.min(
           Math.max(Number(row.querySelector("select").value) || 12, 1),
@@ -2184,8 +2187,8 @@
     // niedostępne, zaznaczone „małżeństwo” (zostaje po wyłączeniu wspólnego)
     DOM.familyStatusRadios.forEach((radio) => {
       const disabled = joint && radio.value !== "married";
-      radio.disabled = disabled;
-      const option = radio.closest(".seg-opt");
+      if (radio.disabled !== disabled) radio.disabled = disabled;
+      const option = radio.parentElement;
       if (option) option.classList.toggle("is-disabled", disabled);
       if (joint && radio.value === "married") radio.checked = true;
     });
@@ -2345,14 +2348,23 @@
      A row carrying both .joint-taxation-card and .ipbox-card is visible only
      when BOTH toggles are on. The shared .show class encodes the final
      answer so CSS stays simple. */
+  // wiersze warunkowe są stałe – wyszukiwane raz
+  let conditionalRows = null;
+  let jointOnlyBadges = null;
   function updateConditionalRowsVisibility() {
     const ipBoxOn = isIpBoxEnabled();
     const jointOn = isJointTaxationEnabled();
     const singleOn =
       getEffectiveFamilyStatus() === "single" && readChildren().length > 0;
-    document
-      .querySelectorAll(".joint-taxation-card, .ipbox-card, .single-parent-card")
-      .forEach((row) => {
+    if (!conditionalRows) {
+      conditionalRows = Array.from(
+        document.querySelectorAll(
+          ".joint-taxation-card, .ipbox-card, .single-parent-card",
+        ),
+      );
+      jointOnlyBadges = Array.from(document.querySelectorAll("[data-joint-only]"));
+    }
+    conditionalRows.forEach((row) => {
         const requiresJoint = row.classList.contains("joint-taxation-card");
         const requiresIpBox = row.classList.contains("ipbox-card");
         const requiresSingle = row.classList.contains("single-parent-card");
@@ -2364,7 +2376,7 @@
       });
     // przy rozliczeniu wspólnym i wariancie „samotny rodzic” wiersze
     // indywidualne dostają etykietę tekstową
-    document.querySelectorAll("[data-joint-only]").forEach((badge) => {
+    jointOnlyBadges.forEach((badge) => {
       badge.hidden = !(jointOn || singleOn);
     });
   }
@@ -3867,7 +3879,7 @@
   }
 
   function ensureRowFamily(container, id) {
-    let tip = container.querySelector(".row-family");
+    let tip = ROW_FAMILY_TIPS.get(container);
     if (tip) return tip;
     tip = document.createElement("span");
     tip.className = "tip row-status row-family";
@@ -3889,13 +3901,14 @@
     tip.append(button, pop);
     const note = container.querySelector(".row-note");
     container.insertBefore(tip, note || null);
+    ROW_FAMILY_TIPS.set(container, tip);
     return tip;
   }
 
   function renderRowFamily(container, id, items) {
     if (!container) return;
     // bez danych rodziny nie tworzymy elementu (DOM jak przed kartą „Rodzina”)
-    let tip = container.querySelector(".row-family");
+    let tip = ROW_FAMILY_TIPS.get(container);
     if (!items.length && !tip) return;
     tip = ensureRowFamily(container, id);
     const pop = tip.querySelector(".row-note-pop");
@@ -4167,8 +4180,13 @@
     return parts.join("; ");
   }
 
+  // elementy oznaczeń przy wierszach – zapamiętane (bez selektorów przy
+  // każdym przeliczeniu)
+  const ROW_STATUS_TIPS = new WeakMap();
+  const ROW_FAMILY_TIPS = new WeakMap();
+
   function ensureRowStatus(container, id) {
-    let tip = container.querySelector(".row-status:not(.row-family)");
+    let tip = ROW_STATUS_TIPS.get(container);
     if (tip) return tip;
     tip = document.createElement("span");
     tip.className = "tip row-status";
@@ -4188,6 +4206,7 @@
     tip.append(button, pop);
     const note = container.querySelector(".row-note");
     container.insertBefore(tip, note || null);
+    ROW_STATUS_TIPS.set(container, tip);
     return tip;
   }
 
@@ -4438,11 +4457,16 @@
      Ranking (z wyniku obliczeń – jedno źródło dla karty, kolejności
      wierszy i eksportu)
   ================================================== */
+  let rateCheckboxes = null;
   function getCheckedRateIds() {
+    if (!rateCheckboxes) {
+      rateCheckboxes = {};
+      DOM.ryczaltCheckboxes.forEach((checkbox) => {
+        rateCheckboxes[checkbox.dataset.target] = checkbox;
+      });
+    }
     return RYCZALT_VARIANT_IDS.filter((rateId) => {
-      const checkbox = document.querySelector(
-        `input[type="checkbox"][data-target="${rateId}"]`,
-      );
+      const checkbox = rateCheckboxes[rateId];
       return checkbox && checkbox.checked;
     });
   }

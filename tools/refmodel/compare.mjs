@@ -24,23 +24,8 @@ export const KNOWN_DIFFS = {
   'L-385': 'RC2: wiele stawek, suma przydziałów ≠ przychód – aplikacja liczy próg zdrowotnej i proporcje od pełnego przychodu, model od sumy przydziałów (docs/weryfikacja/porownanie-z-modelem-referencyjnym.md)',
 };
 export const KNOWN_DIFFS_2027 = {};
-// Family grid vs app 4c0ee3d. "W TOKU POPRAWKI" = the app is being changed to the literal art. 27f ust. 9
-// pkt 2 (health not deducted in PIT-28/36L counts toward the refund cap; legal review 25.09.2026, RD6 → literal).
-// When the fix lands these should stop reproducing (the script then prints "no longer reproduces").
-const FIX_HEALTH_CAP = 'W TOKU POPRAWKI (limit zwrotu, art. 27f ust. 9 pkt 2): model wlicza nieodliczone 50% zdrowotnej ryczałtowca i zdrowotną liniowca ponad kwotę odliczoną w PIT-36L; aplikacja 4c0ee3d – nie (RD6, ostrożnie).';
-export const KNOWN_DIFFS_FAMILY = {
-  'FC-100': FIX_HEALTH_CAP,
-  'FC-109': FIX_HEALTH_CAP,
-  'FC-110': FIX_HEALTH_CAP,
-  'FE-151': FIX_HEALTH_CAP + ' Tu składka ryczałtowca (bez PIT-36/37) podnosi łączny limit małżonków (ust. 10).',
-  'FE-155': FIX_HEALTH_CAP + ' Łączny limit małżonków (ust. 10).',
-  'FH-186': FIX_HEALTH_CAP,
-  'FI-195': FIX_HEALTH_CAP,
-  'FI-205': FIX_HEALTH_CAP,
-  'FN-245': FIX_HEALTH_CAP,
-  'FC-103': FIX_HEALTH_CAP + ' Tu różnica wymaga obu odstępstw RD6: także składek społecznych ponad dochód liniowy (model: w limicie – nieodliczone w PIT-36L, art. 27f ust. 9 pkt 1 + art. 26 ust. 13a; aplikacja: 0). Po poprawce zdrowotnej wynik będzie ten sam (limit pokryty); różnica interpretacyjna zostaje ukryta.',
-  'FC-106': FIX_HEALTH_CAP + ' Jak FC-103 (liniowy, składki ponad dochód liniowy).',
-};
+// Family grid: empty since a0a67be (the app reads the art. 27f ust. 9 refund cap literally, like the model).
+export const KNOWN_DIFFS_FAMILY = {};
 
 const RY = { '2': 'ryczalt2', '3': 'ryczalt3', '5.5': 'ryczalt5_5', '8.5': 'ryczalt8_5', '8.5-12.5': 'ryczalt8_5_12_5', '10': 'ryczalt10', '12': 'ryczalt12', '14': 'ryczalt14', '15': 'ryczalt15', '17': 'ryczalt17' };
 const ARGS = process.argv.slice(2);

@@ -3,7 +3,7 @@
 //
 // Built from the statutes, docs/decyzje/specyfikacja-zus.md (SPEC_ZUS), docs/prawo/research-zus-2026.md
 // and docs/prawo/audyt-logiki-2026.md WITHOUT looking at the calculator implementation
-// (2026/script.js, taxConstants.js). Keep it that way: change this file only from the law and the
+// (app/script.js, app/taxConstants.js). Keep it that way: change this file only from the law and the
 // documented decisions, never by copying app code – otherwise the comparison proves nothing.
 //
 // Abbreviations used in comments:

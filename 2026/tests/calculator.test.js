@@ -1085,3 +1085,285 @@ describe("Walidacja przy otwartym oknie eksportu", () => {
     expect(title).toBe("Popraw dane");
   });
 });
+
+describe("Interfejs wyników – linia składników, wyliczenia, uwagi (UI)", () => {
+  const MONEY = /[−+-]?\d+(?:[\u00a0 ]\d{3})*,\d{2}/;
+  const toNumber = (text) =>
+    Number(text.replace(/[\u00a0 ]/g, "").replace("−", "-").replace(",", "."));
+  /* Składniki linii pod wynikiem (bez sposobu odliczenia i wakacji)
+     muszą sumować się do wyniku wiersza. */
+  function detailSum(detail) {
+    return (
+      Math.round(
+        detail
+          .split(" · ")
+          .filter((part) => !/^(składki społeczne|wakacje)/.test(part))
+          .map((part) => toNumber(part.match(MONEY)[0]))
+          .reduce((a, b) => a + b, 0) * 100,
+      ) / 100
+    );
+  }
+  function scenario() {
+    const calc = loadCalculator();
+    calc.setRevenue(180000);
+    calc.setCosts(20000);
+    calc.setOtherIncome(60000);
+    calc.setStartDate("2025-09-15");
+    calc.setZusPath("ulga");
+    calc.setHoliday(true);
+    calc.toggleRyczaltRate("ryczalt8_5");
+    calc.toggleRyczaltRate("ryczalt12");
+    calc.setIpBox(30);
+    calc.calculate();
+    return calc;
+  }
+  const rowOf = (calc, id) =>
+    calc.document.querySelector(`.results-row[data-variant="${id}"]`);
+
+  it("linia składników: czytelne etykiety i suma równa wynikowi", () => {
+    const calc = scenario();
+    const out = {};
+    for (const id of ["taxScale", "taxScaleIpBox", "taxLinear", "taxLinearIpBox", "ryczalt8_5", "ryczalt12"]) {
+      const detail = rowOf(calc, id).querySelector("[data-detail]").textContent;
+      out[id] = detailSum(detail) === calc.readVariantData(id).total;
+    }
+    const ry = rowOf(calc, "ryczalt8_5").querySelector("[data-detail]").textContent;
+    const ry12 = rowOf(calc, "ryczalt12").querySelector("[data-detail]").textContent;
+    calc.close();
+    expect(out).toEqual({
+      taxScale: true,
+      taxScaleIpBox: true,
+      taxLinear: true,
+      taxLinearIpBox: true,
+      ryczalt8_5: true,
+      ryczalt12: true,
+    });
+    expect(ry.includes("zmiana PIT")).toBe(false);
+    expect(ry.includes("PIT od innych dochodów: −437,93 (składki odliczone od skali)")).toBe(true);
+    expect(ry12.includes("PIT od innych dochodów: +0,00 (bez zmian)")).toBe(true);
+    expect(ry.includes("wakacje składkowe: 06.2026")).toBe(true);
+  });
+
+  it("„Pokaż wyliczenie” rozwija tylko wyliczenie danego wariantu (tekst jak w eksporcie)", () => {
+    const calc = scenario();
+    const button = rowOf(calc, "taxLinear").querySelector(".row-breakdown-toggle");
+    button.click();
+    const pre = calc.document.getElementById("rowBreakdown-taxLinear");
+    const text = pre.textContent;
+    const openCount = calc.document.querySelectorAll(".row-breakdown:not([hidden])").length;
+    const variantPart = text.split("\n--- INNE DOCHODY")[0];
+    const exportText = calc.readBreakdown();
+    const expanded = button.getAttribute("aria-expanded");
+    button.click();
+    const out = {
+      startsWithTitle: text.startsWith("--- PODATEK LINIOWY ---"),
+      inExport: exportText.includes(variantPart),
+      openCount,
+      expanded,
+      hiddenAfter: pre.hidden,
+    };
+    calc.close();
+    expect(out).toEqual({
+      startsWithTitle: true,
+      inExport: true,
+      openCount: 1,
+      expanded: "true",
+      hiddenAfter: true,
+    });
+  });
+
+  it("uwagi „i”: wakacje, składki bez dzielenia; brak uwag przed wpisaniem danych", () => {
+    const empty = loadCalculator();
+    const visibleBefore = empty.document.querySelectorAll(".row-note:not([hidden])").length;
+    empty.close();
+    const calc = scenario();
+    const note = rowOf(calc, "ryczalt8_5").querySelector(".row-note");
+    const text = note.textContent;
+    const linearIpBox = rowOf(calc, "taxLinearIpBox").querySelector(".row-note").textContent;
+    const topics = Array.from(note.querySelectorAll("a[data-info-topic]")).map(
+      (a) => a.dataset.infoTopic,
+    );
+    const targetsExist = topics.every((topic) => {
+      calc.document.getElementById("infoFab").click();
+      return !!calc.document.getElementById(topic);
+    });
+    calc.close();
+    expect(visibleBefore).toBe(0);
+    expect(note.hidden).toBe(false);
+    expect(text.includes("Wakacje składkowe przyjęte za 06.2026")).toBe(true);
+    expect(text.includes("inny sposób: +")).toBe(true);
+    expect(linearIpBox.includes("nie od dochodu kwalifikowanego IP BOX")).toBe(true);
+    expect(targetsExist).toBe(true);
+  });
+
+  it("uwagi „i”: ujemny wynik wspólnego rozliczenia i niepełny podział „Wiele stawek”", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(50000);
+    calc.setCosts(50000);
+    calc.setZusEnabled(false);
+    calc.setJointTaxation(true, 200000);
+    calc.toggleRyczaltRate("ryczalt12");
+    calc.enableMultipleRates(true);
+    calc.setRateRevenue("ryczalt12", 20000);
+    calc.calculate();
+    const joint = rowOf(calc, "taxScaleJoint").querySelector(".row-note");
+    const total = calc.document.querySelector("#ratesTotal .row-note");
+    const out = {
+      negative: calc.readVariantData("taxScaleJoint").total < 0,
+      jointNote: !joint.hidden && joint.textContent.includes("Wynik ujemny"),
+      allocationNote: !total.hidden && total.textContent.includes("Nieprzypisane 30"),
+      ratePartToggleHidden: rowOf(calc, "ryczalt12").querySelector(".row-breakdown-toggle").hidden,
+    };
+    calc.close();
+    expect(out).toEqual({
+      negative: true,
+      jointNote: true,
+      allocationNote: true,
+      ratePartToggleHidden: true,
+    });
+  });
+
+  it("błędne dane: brak uwag i przycisków wyliczenia", () => {
+    const calc = scenario();
+    calc.setCosts("-1");
+    calc.calculate();
+    const visible = Array.from(
+      calc.document.querySelectorAll(".row-note, .row-breakdown-toggle"),
+    ).filter((el) => !el.hidden).length;
+    calc.close();
+    expect(visible).toBe(0);
+  });
+
+  it("pełne obliczenia: spis treści i tekst identyczny z eksportem", () => {
+    const calc = scenario();
+    calc.document.getElementById("breakdownDetails").open = true;
+    calc.calculate();
+    const pre = calc.document.getElementById("breakdownPre").textContent;
+    const links = Array.from(
+      calc.document.querySelectorAll("#breakdownToc a"),
+    ).map((a) => a.textContent);
+    const anchorsOk = Array.from(
+      calc.document.querySelectorAll("#breakdownToc a"),
+    ).every((a) => !!calc.document.getElementById(a.getAttribute("href").slice(1)));
+    const exportText = calc.readBreakdown();
+    // zamknięcie przed close(): zdarzenie „toggle” w jsdom jest asynchroniczne
+    calc.document.getElementById("breakdownDetails").open = false;
+    calc.close();
+    const strip = (t) => t.replace(/Data sporządzenia: .*/, "");
+    expect(strip(pre) === strip(exportText)).toBe(true);
+    expect(anchorsOk).toBe(true);
+    expect(links.includes("Ranking (od najniższego obciążenia)")).toBe(true);
+    expect(links.includes("Podatek liniowy z IP BOX")).toBe(true);
+  });
+});
+
+describe("Formularz – opcje ZUS, monit ryczałtu, etykiety (UI)", () => {
+  it("ścieżka bez daty: aria-disabled i notka „wymaga daty rozpoczęcia”", () => {
+    const calc = loadCalculator();
+    calc.setRevenue(100000);
+    calc.calculate();
+    const radio = calc.document.querySelector('input[name="zusPath"][value="ulga"]');
+    const note = calc.document.getElementById("zusPathNote-ulga");
+    const before = {
+      aria: radio.getAttribute("aria-disabled"),
+      describedBy: radio.getAttribute("aria-describedby"),
+      noteVisible: !note.hidden,
+      noteText: note.textContent,
+    };
+    calc.setStartDate("2026-02-01");
+    const after = {
+      aria: radio.getAttribute("aria-disabled"),
+      describedBy: radio.getAttribute("aria-describedby"),
+      noteVisible: !note.hidden,
+    };
+    calc.close();
+    expect(before).toEqual({
+      aria: "true",
+      describedBy: "zusPathNote-ulga zusPathHint",
+      noteVisible: true,
+      noteText: "wymaga daty rozpoczęcia",
+    });
+    expect(after).toEqual({ aria: null, describedBy: "zusPathHint", noteVisible: false });
+  });
+
+  it("„Więcej opcji ZUS”: zwinięta sekcja nie blokuje wyników, skrót pokazuje zmienione opcje", () => {
+    const calc = loadCalculator();
+    const toggle = calc.document.getElementById("zusMoreToggle");
+    const body = calc.document.getElementById("zusMore");
+    const expandedDefault = toggle.getAttribute("aria-expanded");
+    calc.setRevenue(100000);
+    calc.setCosts(0);
+    calc.setStartDate("2026-03-16");
+    calc.setBirthDate("2026-05-01");
+    calc.calculate();
+    const blocked = calc.document.getElementById("bestCardTitle").textContent;
+    toggle.click();
+    calc.setSickness(false);
+    const out = {
+      expandedDefault,
+      blocked,
+      collapsed: toggle.getAttribute("aria-expanded") === "false" && body.hidden,
+      after: calc.document.getElementById("bestCardTitle").textContent,
+      birthError: calc.document.getElementById("zusBirthDate-error").textContent,
+      summary: calc.document.getElementById("zusMoreSummary").textContent,
+    };
+    calc.close();
+    expect(out).toEqual({
+      expandedDefault: "true",
+      blocked: "Popraw dane",
+      collapsed: true,
+      after: "Skala podatkowa",
+      birthError: "",
+      summary: "bez chorobowej · ur. 01.05.2026 (do sprawdzenia)",
+    });
+  });
+
+  it("monit o stawkę ryczałtu: widoczny na starcie, znika po wyborze stawki (bez autowyboru)", () => {
+    const calc = loadCalculator();
+    const prompt = calc.document.getElementById("ryczaltPrompt");
+    const initial = !prompt.hidden;
+    const anyChecked = Array.from(
+      calc.document.querySelectorAll('.checkbox-group input[type="checkbox"]'),
+    ).some((cb) => cb.checked);
+    calc.toggleRyczaltRate("ryczalt12");
+    const afterSelect = !prompt.hidden;
+    calc.toggleRyczaltRate("ryczalt12", false);
+    const afterUnselect = !prompt.hidden;
+    calc.close();
+    expect({ initial, anyChecked, afterSelect, afterUnselect }).toEqual({
+      initial: true,
+      anyChecked: false,
+      afterSelect: false,
+      afterUnselect: false,
+    });
+  });
+
+  it("sekcja „Opcje” i przypis pod porównaniem w kolumnie wyników", () => {
+    const calc = loadCalculator();
+    const legends = Array.from(calc.document.querySelectorAll(".card-legend")).map(
+      (el) => el.textContent.trim(),
+    );
+    const footnote = calc.document.getElementById("resultsFootnote");
+    const out = {
+      opcje: legends.includes("Opcje"),
+      zalozeniaLegend: legends.includes("Założenia"),
+      footnoteInResults: !!footnote.closest("#resultsSection"),
+      oldFootnote: !!calc.document.querySelector(".panel-inputs .footnote"),
+      // krótkie dymki (1–2 zdania) z linkiem do tematu w „Założeniach”
+      tooltipsShort: Array.from(
+        calc.document.querySelectorAll(".field-tooltip-bubble"),
+      ).every((el) => {
+        const text = el.textContent.replace(/\s+/g, " ").trim();
+        return text.length <= 230 && !!el.querySelector("a[data-info-topic]");
+      }),
+    };
+    calc.close();
+    expect(out).toEqual({
+      opcje: true,
+      zalozeniaLegend: false,
+      footnoteInResults: true,
+      oldFootnote: false,
+      tooltipsShort: true,
+    });
+  });
+});

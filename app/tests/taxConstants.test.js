@@ -26,16 +26,19 @@ describe("TAX_CONSTANTS", () => {
     expect(calc.window.TAX_CONSTANTS).toMatchSnapshot();
   });
 
-  it("derived constants match the recorded baseline", () => {
-    expect({
-      TAX_BAND_12: calc.window.TAX_BAND_12,
-      TAX_BAND_32: calc.window.TAX_BAND_32,
-      PIT_RATE_SOLIDARITY: calc.window.PIT_RATE_SOLIDARITY,
-      EFFECTIVE_LINEAR_RATE: calc.window.EFFECTIVE_LINEAR_RATE,
-      EFFECTIVE_LINEAR_RATE_SOLIDARITY:
-        calc.window.EFFECTIVE_LINEAR_RATE_SOLIDARITY,
-      EFFECTIVE_IPBOX_PLUS_HEALTH: calc.window.EFFECTIVE_IPBOX_PLUS_HEALTH,
-    }).toMatchSnapshot();
+  /* Dawne stałe pochodne (TAX_BAND_12, PIT_RATE_SOLIDARITY…) opisywały
+     skalę dwuprzedziałową i nie były używane w obliczeniach – zastąpiła je
+     tabela przedziałów PIT_SCALE_BANDS w stałych każdego roku. */
+  it("skala 2026: przedziały z art. 27 ust. 1 (12% do 120 000, 32% ponad)", () => {
+    const C = calc.window.TAX_CONSTANTS;
+    expect(calc.window.taxYears.active()).toEqual({ year: 2026, scenario: null });
+    expect(C.PIT_SCALE_BANDS).toEqual([
+      { from: 0, rate: 0.12 },
+      { from: 120000, rate: 0.32 },
+    ]);
+    expect(C.TAX_DECREASING_AMOUNT).toBe(3600);
+    expect(C.SOLIDARITY_RATE).toBe(0.04);
+    expect(C.SOLIDARITY_INCLUDES_IP_BOX).toBe(false);
   });
 });
 

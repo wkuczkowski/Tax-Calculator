@@ -508,35 +508,62 @@ input[type="number"] {
   outline-offset: 3px;
   border-radius: 999px;
 }
-.field-tooltip-bubble {
-  position: absolute;
-  bottom: calc(100% + 8px);
+/* dymek (toggletip): pozycję liczy script.js (position: fixed – nad
+   przyciskiem albo pod całym polem, zawsze w oknie) */
+.tip {
+  display: inline-flex;
+  align-items: center;
+}
+.field-tooltip-bubble,
+.row-note-pop {
+  position: fixed;
+  top: 0;
   left: 0;
-  width: 280px;
-  max-width: min(280px, calc(100vw - 32px));
-  padding: 8px 10px;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 9px 11px;
   background: var(--ink);
   color: var(--surface-alt);
-  font-size: 12px;
-  line-height: 1.4;
+  font-family: var(--body);
+  font-size: 12.5px;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.45;
   border-radius: var(--r-sm);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   text-align: left;
-  transform: translateY(2px);
-  transition:
-    opacity var(--t-fast),
-    visibility var(--t-fast),
-    transform var(--t-fast);
-  z-index: 20;
-  box-shadow: var(--shadow-md);
+  white-space: normal;
+  /* widoczność zmienia się od razu (bez przejścia): link „Więcej” jest
+     osiągalny klawiszem Tab dokładnie wtedy, gdy dymek jest otwarty */
+  transition: opacity 140ms var(--ease);
+  z-index: 60;
+  box-shadow: var(--shadow-lg);
 }
-.field-tooltip:hover .field-tooltip-bubble,
-.field-tooltip:focus-visible .field-tooltip-bubble {
+.field-tooltip-bubble.is-open,
+.row-note-pop.is-open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  pointer-events: auto;
+}
+.tip-more {
+  color: #bcd3f0;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.tip-more:hover,
+.tip-more:focus-visible {
+  color: #fff;
+}
+.tip-more:focus-visible {
+  outline: 2px solid #bcd3f0;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* --------------------------------------------------------------------------
@@ -895,15 +922,33 @@ input.error {
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(31, 58, 95, 0.18);
 }
-/* opcja niedostępna (np. ulga na start bez daty rozpoczęcia) */
-.seg-opt.is-disabled span {
+/* opcja niedostępna (np. ulga na start bez daty rozpoczęcia):
+   wyszarzona, z notką „wymaga daty rozpoczęcia” */
+.seg-opt.is-disabled > span {
   cursor: not-allowed;
   color: var(--ink-4);
-  text-decoration: line-through;
-  text-decoration-color: var(--ink-5);
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(21, 22, 26, 0.035) 6px 12px
+  );
 }
-.seg-opt.is-disabled:hover span {
+.seg-opt.is-disabled:hover > span {
   color: var(--ink-4);
+}
+.seg-opt-note {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: 0;
+  color: var(--ink-3);
+  white-space: normal;
+}
+.seg-opt-note[hidden] {
+  display: none;
 }
 .seg-opt.is-disabled input:checked + span {
   box-shadow: inset 0 0 0 1px var(--warn);
@@ -919,9 +964,10 @@ input.error {
   grid-template-columns: repeat(3, 1fr);
   max-width: none;
 }
-.seg.seg-3 .seg-opt span {
+.seg.seg-3 .seg-opt > span {
   padding: 7px 6px;
   white-space: nowrap;
+  height: 100%;
 }
 .seg.seg-compact {
   width: auto;
@@ -969,6 +1015,68 @@ input.error {
   margin-top: 0;
   overflow: visible;
   pointer-events: auto;
+}
+
+/* „Więcej opcji ZUS” – sekcja zwijana */
+.zus-more {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.zus-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.zus-more-toggle:hover .zus-more-title {
+  color: var(--primary);
+}
+.zus-more-title {
+  flex: 0 0 auto;
+}
+.zus-more-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zus-more-summary[data-custom="true"] {
+  color: var(--primary);
+}
+.zus-more-toggle[aria-expanded="true"] .zus-more-summary {
+  visibility: hidden;
+}
+.zus-more-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+  transition: transform var(--t-med);
+}
+.zus-more-toggle[aria-expanded="true"] .zus-more-chevron {
+  transform: rotate(180deg);
+}
+.zus-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.zus-more-body[hidden] {
+  display: none;
 }
 
 .zus-birth-row {
@@ -1328,12 +1436,16 @@ input.error {
   color: var(--ink-2);
 }
 
+/* Przełącznik: <label class="toggle-switch"> (albo span wewnątrz <label>),
+   więc kliknięcie w samą grafikę (.slider) przełącza pole – wcześniej span
+   bez etykiety nie reagował, działał tylko tekst etykiety obok. */
 .toggle-switch {
   position: relative;
   display: inline-block;
   width: 38px;
   height: 22px;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .toggle-switch input {
   position: absolute;
@@ -1376,15 +1488,6 @@ input.error {
   box-shadow: 0 0 0 4px rgba(31, 58, 95, 0.18);
 }
 
-/* --------------------------------------------------------------------------
-   footnote
-   -------------------------------------------------------------------------- */
-.footnote {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  line-height: 1.55;
-  padding: 0 6px;
-}
 
 /* --------------------------------------------------------------------------
    results panel
@@ -1605,7 +1708,9 @@ input.error {
   grid-template-areas:
     "label amount"
     "detail detail"
-    "bar bar";
+    "bar bar"
+    "tag tools"
+    "breakdown breakdown";
   align-items: center;
   gap: 4px 18px;
   padding: 14px 22px;
@@ -1732,6 +1837,11 @@ input.error {
   color: var(--ink-2);
   background: var(--surface-sunken);
 }
+.variant-badge--single {
+  color: var(--ink-2);
+  background: var(--surface-sunken);
+  letter-spacing: 0.02em;
+}
 .variant-badge--solo {
   color: var(--ink-2);
   background: var(--surface-sunken);
@@ -1746,6 +1856,8 @@ input.error {
 }
 
 .results-row-tag {
+  grid-area: tag;
+  justify-self: start;
   display: inline-block;
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1825,6 +1937,149 @@ input.error {
 }
 .results-row.is-best .results-row-bar > span {
   background: var(--best-bar);
+}
+
+/* „Pokaż wyliczenie” – obliczenia jednego wariantu w wierszu */
+.row-breakdown-toggle {
+  grid-area: tools;
+  justify-self: end;
+  align-self: center;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 58, 95, 0.3);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.row-breakdown-toggle::after {
+  content: " ▸";
+}
+.row-breakdown-toggle[aria-expanded="true"]::after {
+  content: " ▾";
+}
+.row-breakdown-toggle:hover {
+  text-decoration-color: currentColor;
+}
+.row-breakdown-toggle[hidden],
+.row-breakdown[hidden] {
+  display: none;
+}
+.rates-total > .row-breakdown-toggle {
+  align-self: flex-end;
+}
+.row-breakdown {
+  grid-area: breakdown;
+  margin: 6px 0 2px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* „i” przy wierszu: uwagi o uproszczeniach / interpretacjach */
+.row-note[hidden] {
+  display: none;
+}
+.row-note-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line-3);
+  background: var(--surface);
+  color: var(--primary);
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  align-self: center;
+  padding: 0;
+}
+.row-note-btn:hover,
+.row-note-btn[aria-expanded="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.row-note-title {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.row-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row-note-item {
+  display: block;
+  padding-left: 10px;
+  position: relative;
+}
+.row-note-item::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+}
+
+.panel-results[data-state="invalid"] .row-breakdown-toggle,
+.panel-results[data-state="invalid"] .row-note {
+  display: none;
+}
+
+/* monit o stawkę ryczałtu i przypis pod porównaniem */
+.results-prompt {
+  margin: 0;
+  padding: 12px 22px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  background: var(--surface-alt);
+}
+.results-prompt[hidden] {
+  display: none;
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.results-footnote {
+  margin: -6px 0 0;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.results-footnote a {
+  color: var(--primary);
+  font-weight: 500;
+  text-underline-offset: 3px;
+  white-space: nowrap;
 }
 
 /* multi-rate total */
@@ -1907,6 +2162,15 @@ input.error {
   display: grid !important;
 }
 
+/* wiersze „samotny rodzic” (status w karcie „Rodzina” i co najmniej jedno
+   dziecko); z .ipbox-card – także wymaga IP BOX (logika AND jak wyżej) */
+.single-parent-card {
+  display: none !important;
+}
+.single-parent-card.show {
+  display: grid !important;
+}
+
 /* --------------------------------------------------------------------------
    breakdown <details>
    -------------------------------------------------------------------------- */
@@ -1949,6 +2213,50 @@ input.error {
 }
 .breakdown[open] .breakdown-chevron {
   transform: rotate(180deg);
+}
+
+.breakdown-toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 22px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.breakdown-toc[hidden] {
+  display: none;
+}
+.breakdown-toc-title {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.breakdown-toc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.breakdown-toc-list li.is-sub {
+  font-size: 11.5px;
+}
+.breakdown-toc-list li.is-sub::before {
+  content: "↳ ";
+  color: var(--ink-4);
+}
+.breakdown-toc-list a {
+  color: var(--primary);
+  text-underline-offset: 3px;
+}
+.breakdown-anchor {
+  scroll-margin-top: 84px;
+  outline: none;
+}
+.breakdown-anchor:focus-visible {
+  background: var(--primary-soft);
 }
 
 .breakdown-pre {
@@ -2142,6 +2450,22 @@ input.error {
   line-height: 1.55;
   margin: 0 0 8px;
 }
+.info-section,
+.info-section-text {
+  scroll-margin-top: 12px;
+}
+.info-section.is-target > h4,
+.info-section-text.is-target {
+  background: var(--warn-soft);
+  box-shadow: 0 0 0 4px var(--warn-soft);
+  border-radius: 2px;
+  transition: background 600ms var(--ease);
+}
+.info-section:focus,
+.info-section-text:focus {
+  outline: none;
+}
+
 .info-section-text:last-child {
   margin-bottom: 0;
 }
@@ -2289,19 +2613,6 @@ input.error {
   .card {
     padding: 18px 16px 16px;
   }
-  /* tooltip anchored to the whole field head, never wider than the field */
-  .field-head {
-    position: relative;
-  }
-  .field-tooltip {
-    position: static;
-  }
-  .field-tooltip-bubble {
-    left: 0;
-    right: 0;
-    width: auto;
-    max-width: none;
-  }
   .results-block-head,
   .results-row,
   .rates-total,
@@ -2310,6 +2621,8 @@ input.error {
     padding-right: 16px;
   }
   .breakdown summary,
+  .breakdown-toc,
+  .results-prompt,
   .breakdown-pre {
     padding-left: 16px;
     padding-right: 16px;
@@ -2385,4 +2698,525 @@ input.error {
   .results-row.is-rate-part::after {
     left: 16px;
   }
+}
+
+/* --------------------------------------------------------------------------
+   tryb wielu lat: przełącznik roku, karta roku, baner, oznaczenia
+   „prognoza” / „projekt”, tabela stałych w „Założeniach”
+   -------------------------------------------------------------------------- */
+/* przełącznik roku – wyraźny (etykieta „Rok podatkowy”, większe opcje);
+   pod nim podpowiedź powrotu do roku rozliczanego (recenzja F10) */
+.year-switch-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  flex-shrink: 0;
+}
+.year-switch-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.year-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1.5px solid var(--ink-3);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+.year-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-3);
+}
+.year-hint[hidden] {
+  display: none;
+}
+.year-hint .link-btn {
+  font-size: inherit;
+  white-space: normal;
+  text-align: left;
+}
+.year-hint--top {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 1px);
+  white-space: nowrap;
+}
+.year-opt {
+  position: relative;
+}
+.year-opt input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.year-opt span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast);
+}
+.year-opt:hover span {
+  color: var(--ink);
+}
+.year-opt input:checked + span {
+  background: var(--ink);
+  color: var(--surface-alt);
+}
+.year-opt input:focus-visible + span {
+  outline: 2px solid var(--primary-2);
+  outline-offset: 2px;
+}
+/* rok z wartościami prognozowanymi – kropka (opis w title) */
+.year-opt.has-forecast span::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.card-year {
+  border-color: #e3cf97;
+  background: linear-gradient(0deg, var(--surface), var(--surface)) padding-box;
+}
+.card-year[hidden],
+.card-year .field[hidden] {
+  display: none;
+}
+.year-notice {
+  color: var(--warn-ink);
+}
+.year-notice:empty {
+  display: none;
+}
+
+.year-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #e3cf97;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.year-banner[hidden] {
+  display: none;
+}
+.year-banner[data-kind="draft"] {
+  border-color: #e6c1b9;
+  border-left-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error);
+}
+.year-banner-tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.65);
+}
+.year-banner-text {
+  flex: 1 1 240px;
+}
+.year-banner-link {
+  color: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+/* oznaczenie wyniku: „prognoza” / „projekt” / „niedostępny” (dymek) */
+.row-status[hidden] {
+  display: none;
+}
+.row-note-btn.row-status-btn {
+  width: auto;
+  height: auto;
+  padding: 1px 6px 2px;
+  border-radius: var(--r-xs);
+  border-color: #e3cf97;
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.row-note-btn.row-status-btn:hover,
+.row-note-btn.row-status-btn[aria-expanded="true"] {
+  border-color: var(--warn);
+  background: #f3e3b8;
+}
+.row-status[data-kind="draft"] .row-status-btn,
+.row-status[data-kind="unavailable"] .row-status-btn {
+  border-color: #e6c1b9;
+  background: var(--error-soft);
+  color: var(--error);
+}
+.panel-results[data-state="invalid"] .row-status {
+  display: none;
+}
+
+/* ryczałt niedostępny wg projektu: kwota orientacyjna, poza rankingiem */
+.results-row.is-unavailable input[type="text"],
+.rates-total.is-unavailable #ratesTotalValue {
+  color: var(--ink-4);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.results-row.is-unavailable .results-row-bar {
+  visibility: hidden;
+}
+
+.best-card-note--draft {
+  color: var(--error);
+}
+.best-card-note--forecast {
+  color: var(--warn-ink);
+}
+
+/* „Założenia”: tabela stałych roku */
+.info-constants-group {
+  margin-bottom: 16px;
+}
+.info-constants-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin: 0 0 6px;
+}
+.const-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.const-table th,
+.const-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.const-table thead th {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.const-table tbody th {
+  font-weight: 400;
+  color: var(--ink-2);
+  width: 34%;
+}
+.const-value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--ink);
+  width: 22%;
+}
+.const-source {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.const-final-by {
+  display: block;
+  margin-top: 2px;
+  color: var(--warn-ink);
+}
+.const-table tr[data-status="draft"] .const-final-by {
+  color: var(--error);
+}
+.status-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--best-soft);
+  color: var(--best);
+}
+.status-badge[data-status="forecast"] {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.status-badge[data-status="draft"] {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+@media (max-width: 600px) {
+  .year-switch-wrap {
+    margin-right: 0;
+  }
+  .year-switch-label,
+  .year-hint--top {
+    display: none !important;
+  }
+  .year-switch {
+    margin-right: 0;
+  }
+  .year-opt span {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+  .const-table thead {
+    display: none;
+  }
+  .const-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .const-table th,
+  .const-table td {
+    border: 0;
+    padding: 0;
+    width: auto;
+  }
+  .const-table tbody th,
+  .const-source {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Karta „Rodzina” (ulga na dzieci, samotny rodzic, ulga 4+)
+   -------------------------------------------------------------------------- */
+.card-family .family-toggle {
+  padding: 2px 0;
+}
+.family-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 6px;
+}
+.family-body[hidden],
+.family-spouse[hidden],
+.card-family .field[hidden] {
+  display: none;
+}
+.family-status .seg-opt > span {
+  white-space: normal;
+  line-height: 1.25;
+}
+.family-spouse {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-alt);
+}
+.family-spouse-note {
+  margin: 0;
+}
+.family-spouse-note .link-btn {
+  margin-left: 4px;
+  font-size: inherit;
+}
+.children-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.children-list:empty {
+  display: none;
+}
+.child-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "title months remove"
+    "checks checks checks";
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-alt);
+}
+.child-title {
+  grid-area: title;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.child-months {
+  grid-area: months;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+/* „prawo do ulgi …: miesiące” w osobnym wierszu, „od __ do __” razem
+   (karta jest wąska także na komputerze) */
+.child-months-text {
+  flex-basis: 100%;
+}
+.child-months select {
+  font: inherit;
+  font-family: var(--mono);
+  padding: 3px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  color: var(--ink);
+}
+/* „Usuń” – cel dotyku co najmniej 24 × 24 px (WCAG 2.5.8), na telefonie 44 px */
+.child-remove {
+  grid-area: remove;
+  justify-self: end;
+  font-size: 12.5px;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.child-checks {
+  grid-area: checks;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.child-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.child-check input {
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+}
+.children-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+.family-share {
+  max-width: 140px;
+}
+
+/* oznaczenie „rodzina” przy wyniku (ulga na dzieci, preferencje, 4+) */
+.row-note-btn.row-status-btn.row-family-btn {
+  border-color: #b9cfe6;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.row-note-btn.row-status-btn.row-family-btn:hover,
+.row-note-btn.row-status-btn.row-family-btn[aria-expanded="true"] {
+  border-color: var(--primary-2);
+  background: #dbe6f3;
+}
+.row-family[hidden] {
+  display: none;
+}
+.panel-results[data-state="invalid"] .row-family {
+  display: none;
+}
+@media (max-width: 600px) {
+  .child-remove {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .child-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title remove"
+      "months months"
+      "checks checks";
+  }
+}
+
+/* karta najlepszego wyniku: notki w dwóch długościach – na telefonie krótsze */
+.best-card-note .note-short {
+  display: none;
+}
+@media (max-width: 600px) {
+  .best-card-note .note-long {
+    display: none;
+  }
+  .best-card-note .note-short {
+    display: inline;
+  }
+}
+
+/* prognozy parametrów ZUS – raz, na karcie składek (nie przy wierszach) */
+.zus-forecast-note[hidden] {
+  display: none;
+}
+.zus-forecast-note {
+  color: var(--warn-ink);
+}
+.zus-forecast-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: var(--warn-soft);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.zus-forecast-note .tip-more {
+  color: var(--primary);
 }

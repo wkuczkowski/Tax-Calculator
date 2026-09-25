@@ -1,6 +1,6 @@
-# 2026 Test Suite
+# Test Suite (`app/`)
 
-This folder contains regression tests for the `2026` tax calculator.
+This folder contains regression tests for the tax calculator in `app/` (until September 2026 the directory was `2026/`).
 
 The goal is simple: lock in today's calculator behavior so future refactors or legal-value updates can be compared against a known baseline.
 
@@ -26,9 +26,9 @@ These are DOM-based regression tests.
 
 They load the real:
 
-- `2026/index.html`
-- `2026/taxConstants.js`
-- `2026/script.js`
+- `app/index.html`
+- `app/taxConstants.js`
+- `app/script.js`
 
 Then they simulate user input and snapshot the final visible output fields.
 
@@ -59,6 +59,72 @@ Covered scenarios include:
 
 `taxConstants.test.js` also contains explicit unit assertions for
 `taxMath.buildSocialSchedule()` (month-by-month social contributions).
+
+### 3. `multiyear.test.js` (no snapshots)
+
+Explicit, hand-computed assertions for the multi-year mode: 2027 constants
+and statuses (full ZUS 2052,15 / month, small ZUS 469,85, minimum health
+5346,00 / year, ryczałt health 524,88 / 874,80 / 1574,64, linear limit
+15 100), ZUS starts carried over from 2025/2026, forecast badges and the
+„Wartości prognozowane” export section, the scenario „Projekt zmian 2027
+(UD458 + UD116)” (scale 12/24/32% for B = 140 000 and 200 000, joint
+taxation, ryczałt 17% over 1 312 500 zł, ryczałt limit 1 093 750 zł and the
+new-business exception, 5% levy including IP BOX), the year switch
+(`?rok=`, `&projekt=1`) and the default-year rule; the review fixes
+(forecast badges only for values that differ between variants, ZUS forecasts
+once on the ZUS card, canonical `?rok=`/`&projekt=` address, unavailable
+ryczałt without a draft delta, eligibility text only when relevant, the
+year hint „Rozliczasz rok 2026? Przełącz na 2026.”).
+
+### 4. `family.test.js` (no snapshots)
+
+Explicit, hand-computed assertions for the „Rodzina” card: child relief
+amounts month by month (1112,04 / 2224,08 / 4224,12 / 6924,12 / 9624,12;
+a third child for 6 months → 3224,10), the contribution estimate for other
+income, results without children identical to the page without the card,
+the single parent example from the research (skala – samotny rodzic
+22 112,04 vs liniowy 27 916,33), the cautious 56 000 zł limit for a single
+parent on liniowy, the one-child limit edge 112 000,00 / 112 000,01, the
+refund cap and the deduction-method optimizer that takes it into account,
+joint taxation with children, the spouse on liniowy/ryczałt (joint variants
+unavailable) and the 4+ exemption (85 528 zł, amount already used,
+8,5% / 12,5% with the uncertain alternative amount). Fix round: child
+periods as months from–to (disjoint 6 + 6 months → one-child limit), the
+literal refund cap (the review's case: 4 children, etat 12 000, revenue
+120 000 → ryczałt 5,5% 35 042,84 beats skala 36 014,81), a spouse who is not
+the children's parent, collapsed sections that block with invalid in-effect
+values, the joint-baseline explanation and typographic minus signs.
+Helpers: `setFamilyStatus("married" | "single" | "other")`,
+`addChild({ from, to, months, disabled, adult })` (months from–to, default
+the full year 1–12; `{ months: m }` without `from` = the last m months of the
+year, as before), `setFamilyShare(percent)`, `setSpouseIncome(value)`,
+`setSpouseLinRycz(on)`, `setSpouseIsParent(on)`, `setSpouseLinearIncome(value)`,
+`setSpouseContrib(value)`, `setOtherContrib(value)`, `setFourPlus(on, used)`.
+
+Snapshot note (family change): only `TAX_CONSTANTS > matches the recorded
+baseline` changes (new „Ulgi rodzinne” constants). Review and run
+`npm run test:update`.
+
+### 5. `toggles.test.js` (no snapshots)
+
+Every toggle switch flips its checkbox (and recalculates) when the switch
+graphic (`.slider`) itself is clicked, not only its text label.
+
+### Year of the tested page
+
+`loadCalculator()` opens the page with `?rok=2026` by default, so the older
+tests (and `tools/refmodel`) keep testing 2026 whatever today's date is.
+Options: `loadCalculator({ year: 2027 })`, `{ year: 2027, reform: true }`,
+`{ year: null, today: "2026-11-01" }` (no `?rok=`, fixed date → default-year
+rule), `{ url: "http://localhost/?rok=…" }`. Helpers: `setYear(2027)`,
+`setReform(true)`, `setPrevYearRevenue(value)`.
+
+Snapshot note (multi-year change): `TAX_CONSTANTS > matches the recorded
+baseline` changes (new keys such as `PIT_SCALE_BANDS`,
+`SOLIDARITY_INCLUDES_IP_BOX`; removed `TAX_THRESHOLD_12`, `PIT_RATE_12`,
+`PIT_RATE_32`) and `TAX_CONSTANTS > derived constants match the recorded
+baseline` was replaced by explicit assertions (its snapshot is obsolete).
+All calculator snapshots are unchanged. Review and run `npm run test:update`.
 
 Note: social contributions are ON by default, so every older snapshot changed
 when this feature landed. Review the diff and run `npm run test:update`.
@@ -172,6 +238,6 @@ That is expected and desired. It tells you both:
 
 ## Notes
 
-- The tests are written for the `2026` calculator only.
+- The snapshot tests cover the 2026 tax year; 2027 is covered by explicit assertions in `multiyear.test.js`.
 - They are regression tests, not legal validation by themselves.
 - If a snapshot changes unexpectedly, always review the diff before updating it.

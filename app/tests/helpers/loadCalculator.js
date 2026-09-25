@@ -14,6 +14,8 @@ const RESULT_IDS = [
   "income",
   "taxScale",
   "taxScaleIpBox",
+  "taxScaleSingle",
+  "taxScaleIpBoxSingle",
   "taxScaleJoint",
   "taxScaleIpBoxJoint",
   "taxLinear",
@@ -48,10 +50,12 @@ const RYCZALT_KEYS = [
  * external <script> tags, and inlining taxConstants.js + script.js so the
  * calculator's IIFE runs against the test DOM.
  *
- * A bootstrap script after them re-publishes the const-declared globals
- * (TAX_CONSTANTS, taxMath, derived constants) onto window so tests can
- * inspect them. Browsers don't auto-attach top-level `const` to window,
- * so this exposure is only for tests - it does not change runtime behavior.
+ * A bootstrap script after them re-publishes the top-level globals
+ * (TAX_CONSTANTS – the active constant set, via a getter because it changes
+ * with the year switch; taxYears, taxMath, per-year constants and scenarios)
+ * onto window so tests can inspect them. Browsers don't auto-attach
+ * top-level `const`/`let` to window, so this exposure is only for tests - it
+ * does not change runtime behavior.
  */
 function buildDocumentSource() {
   const html = readFileSync(HTML_PATH, "utf8");
@@ -63,14 +67,16 @@ function buildDocumentSource() {
     .replace(/<script\s+src="script\.js"\s*><\/script>/i, "");
 
   const exposeGlobals = `
-    window.TAX_CONSTANTS = TAX_CONSTANTS;
+    Object.defineProperty(window, "TAX_CONSTANTS", {
+      configurable: true,
+      get: () => TAX_CONSTANTS,
+    });
     window.taxMath = taxMath;
-    window.TAX_BAND_12 = TAX_BAND_12;
-    window.TAX_BAND_32 = TAX_BAND_32;
-    window.PIT_RATE_SOLIDARITY = PIT_RATE_SOLIDARITY;
-    window.EFFECTIVE_LINEAR_RATE = EFFECTIVE_LINEAR_RATE;
-    window.EFFECTIVE_LINEAR_RATE_SOLIDARITY = EFFECTIVE_LINEAR_RATE_SOLIDARITY;
-    window.EFFECTIVE_IPBOX_PLUS_HEALTH = EFFECTIVE_IPBOX_PLUS_HEALTH;
+    window.taxYears = taxYears;
+    window.TAX_CONSTANTS_BY_YEAR = TAX_CONSTANTS_BY_YEAR;
+    window.TAX_CONSTANTS_META_BY_YEAR = TAX_CONSTANTS_META_BY_YEAR;
+    window.TAX_CONSTANT_LABELS = TAX_CONSTANT_LABELS;
+    window.TAX_SCENARIOS = TAX_SCENARIOS;
   `;
 
   const injected = `
@@ -84,12 +90,41 @@ function buildDocumentSource() {
 /**
  * Boots a fresh calculator instance in a new JSDOM window.
  * Returns an ergonomic API for driving inputs and reading outputs.
+ *
+ * Options:
+ * - year: tax year put in the address (?rok=…). Default 2026, so existing
+ *   tests and tools/refmodel keep testing 2026 regardless of today's date.
+ *   null = no ?rok= parameter (the default-year rule applies).
+ * - reform: true adds &projekt=1 (scenario „Projekt zmian 2027”).
+ * - today: "RRRR-MM-DD" – fixed date for the page (Date / Date.now), to test
+ *   the default-year rule; default: the real date.
+ * - url: full address (overrides year / reform).
  */
-export function loadCalculator() {
+export function loadCalculator(options = {}) {
+  const { year = 2026, reform = false, today = null } = options;
+  const params = new URLSearchParams();
+  if (year !== null && year !== undefined) params.set("rok", String(year));
+  if (reform) params.set("projekt", "1");
+  const query = params.toString();
+  const url = options.url || `http://localhost/${query ? `?${query}` : ""}`;
   const dom = new JSDOM(buildDocumentSource(), {
     runScripts: "dangerously",
-    url: "http://localhost/",
+    url,
     pretendToBeVisual: true,
+    beforeParse(window) {
+      if (!today) return;
+      const RealDate = window.Date;
+      const fixed = new RealDate(`${today}T12:00:00`).getTime();
+      class FixedDate extends RealDate {
+        constructor(...args) {
+          super(...(args.length ? args : [fixed]));
+        }
+        static now() {
+          return fixed;
+        }
+      }
+      window.Date = FixedDate;
+    },
   });
   const { window } = dom;
   const { document } = window;
@@ -236,6 +271,105 @@ export function loadCalculator() {
     checkRadio("zusSex", value);
   }
 
+  /** Przełącznik roku w nagłówku (2026 | 2027). */
+  function setYear(year) {
+    checkRadio("taxYear", String(year));
+  }
+
+  /** Scenariusz „Projekt zmian 2027 (UD458 + UD116)” (tylko 2027). */
+  function setReform(on = true) {
+    setChecked("#reformToggle", on);
+  }
+
+  /** Przychód z roku poprzedniego (limit ryczałtu w scenariuszu). */
+  function setPrevYearRevenue(value) {
+    const el = $("#prevYearRevenue");
+    el.value = String(value);
+  }
+
+  /* ---------- Karta „Rodzina” ---------- */
+
+  /** Status: "married" | "single" | "other". */
+  function setFamilyStatus(status) {
+    checkRadio("familyStatus", status);
+  }
+
+  /** Dodaje dziecko: { from = 1, to = 12, disabled, adult } (miesiące od–do);
+   *  { months: m } = ostatnie m miesięcy roku. */
+  function addChild({ from, to, months, disabled = false, adult = false } = {}) {
+    $("#addChildBtn").click();
+    const rows = document.querySelectorAll("#childrenList .child-row");
+    const row = rows[rows.length - 1];
+    let f = from === undefined ? 1 : from;
+    let t = to === undefined ? 12 : to;
+    if (months !== undefined && from === undefined) {
+      f = 13 - months;
+      t = 12;
+    }
+    const set = (field, value) => {
+      const select = row.querySelector(`select[data-field="${field}"]`);
+      if (select.value !== String(value)) {
+        select.value = String(value);
+        fire(select, "change");
+      }
+    };
+    set("to", t);
+    set("from", f);
+    const setBox = (field, on) => {
+      const box = row.querySelector(`input[data-field="${field}"]`);
+      if (box.checked !== on) {
+        box.checked = on;
+        fire(box, "change");
+      }
+    };
+    setBox("disabled", !!disabled);
+    setBox("adult", !!adult);
+    return row;
+  }
+
+  /** Udział podatnika w uldze na dzieci w % (status „inna”). */
+  function setFamilyShare(percent) {
+    const el = $("#familyShare");
+    el.value = String(percent);
+    fire(el, "input");
+  }
+
+  /** Dochód małżonka (pole w karcie „Opcje”; także bez rozliczenia wspólnego). */
+  function setSpouseIncome(value) {
+    const el = $("#spouseIncome");
+    el.removeAttribute("readonly");
+    el.value = String(value);
+    fire(el, "input");
+  }
+
+  /** „Małżonek jest rodzicem dzieci” (domyślnie włączone). */
+  function setSpouseIsParent(on = true) {
+    setChecked("#spouseIsParent", on);
+  }
+
+  function setSpouseLinRycz(on = true) {
+    setChecked("#spouseLinRycz", on);
+  }
+
+  function setSpouseLinearIncome(value) {
+    $("#spouseLinearIncome").value = String(value);
+  }
+
+  function setSpouseContrib(value) {
+    $("#spouseContrib").value = String(value);
+  }
+
+  /** Składki od innych dochodów (limit zwrotu ulgi); "" = szacunek. */
+  function setOtherContrib(value) {
+    $("#otherContrib").value = String(value);
+  }
+
+  /** Ulga dla rodzin 4+ i limit wykorzystany na innych przychodach. */
+  function setFourPlus(on = true, used = "") {
+    setChecked("#fourPlus", on);
+    $("#fourPlusUsed").value = String(used);
+  }
+
   function calculate() {
     $("#calculateButton").click();
   }
@@ -357,6 +491,19 @@ export function loadCalculator() {
     setHoliday,
     setBirthDate,
     setSex,
+    setYear,
+    setReform,
+    setPrevYearRevenue,
+    setFamilyStatus,
+    addChild,
+    setFamilyShare,
+    setSpouseIncome,
+    setSpouseLinRycz,
+    setSpouseIsParent,
+    setSpouseLinearIncome,
+    setSpouseContrib,
+    setOtherContrib,
+    setFourPlus,
     calculate,
     readOutputs,
     readBreakdown,

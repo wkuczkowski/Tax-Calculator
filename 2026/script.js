@@ -153,16 +153,40 @@
     ...RYCZALT_VARIANT_IDS,
   ];
 
+  /* Wiersze wyników są stałe (tylko zmieniają kolejność) – odwołania
+     zapamiętane raz zamiast querySelector przy każdym przeliczeniu. */
+  const RESULT_ROWS = new Map();
+  function getResultRow(id) {
+    if (!RESULT_ROWS.has(id)) {
+      RESULT_ROWS.set(
+        id,
+        document.querySelector(`.results-row[data-variant="${id}"]`),
+      );
+    }
+    return RESULT_ROWS.get(id);
+  }
+
   /* ==================================================
      Utility Functions
   ================================================== */
+  /* Formatery tworzone raz (konstruktor Intl.NumberFormat jest kosztowny,
+     a kwoty formatujemy setki razy przy każdym przeliczeniu). */
+  const PLN_FORMAT = new Intl.NumberFormat("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const AMOUNT_FORMAT = new Intl.NumberFormat("pl-PL", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const WHOLE_FORMAT = new Intl.NumberFormat("pl-PL", {
+    maximumFractionDigits: 0,
+  });
+
   function formatPLN(value) {
-    return new Intl.NumberFormat("pl-PL", {
-      style: "currency",
-      currency: "PLN",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
+    return PLN_FORMAT.format(value);
   }
   function selectInputValue(e) {
     e.target.select();
@@ -1837,9 +1861,7 @@
   /* Kwota do chipu miesiąca: pełne złote (dokładne kwoty – w etykiecie
      dostępnej, w tabeli w szczegółach i w eksporcie). */
   function formatChipAmount(value) {
-    return new Intl.NumberFormat("pl-PL", {
-      maximumFractionDigits: 0,
-    }).format(Math.round(value));
+    return WHOLE_FORMAT.format(Math.round(value));
   }
 
   function renderZusStatus(result) {
@@ -1944,7 +1966,7 @@
   ================================================== */
   function updateRevenueTags(revenue, allocatedRevenues) {
     RYCZALT_VARIANT_IDS.forEach((id) => {
-      const row = document.querySelector(`.results-row[data-variant="${id}"]`);
+      const row = getResultRow(id);
       if (!row) return;
       const tagEl = row.querySelector("[data-revenue-tag]");
       if (!tagEl) return;
@@ -2085,7 +2107,7 @@
   function renderRowDetails(result) {
     const { inputs, variants } = result;
     COMPARISON_VARIANT_IDS.forEach((id) => {
-      const row = document.querySelector(`.results-row[data-variant="${id}"]`);
+      const row = getResultRow(id);
       if (!row) return;
       const detail = ensureRowDetail(row);
       const isRatePart =
@@ -2404,7 +2426,7 @@
   function getRowContainer(id) {
     return id === "ratesTotal"
       ? document.getElementById("ratesTotal")
-      : document.querySelector(`.results-row[data-variant="${id}"]`);
+      : getResultRow(id);
   }
 
   /* Uwagi i wyliczenia przy wierszach po każdym poprawnym przeliczeniu. */
@@ -2544,14 +2566,14 @@
     const units = [];
     PIT_VARIANT_IDS.forEach((id, index) => {
       if (!variants[id]) return;
-      const row = container.querySelector(`.results-row[data-variant="${id}"]`);
+      const row = getResultRow(id);
       if (row) units.push({ rows: [row], value: variants[id].total, index });
     });
     const rateIds = getCheckedRateIds();
     if (inputs.isMultipleRates) {
       const ranked = ranking.entries.some((entry) => entry.id === "ratesTotal");
       const rows = rateIds
-        .map((id) => container.querySelector(`.results-row[data-variant="${id}"]`))
+        .map((id) => getResultRow(id))
         .filter(Boolean);
       const totalBlock = document.getElementById("ratesTotal");
       if (totalBlock) rows.push(totalBlock);
@@ -2563,7 +2585,7 @@
       });
     } else {
       rateIds.forEach((id) => {
-        const row = container.querySelector(`.results-row[data-variant="${id}"]`);
+        const row = getResultRow(id);
         if (row && variants[id]) {
           units.push({
             rows: [row],
@@ -2582,7 +2604,7 @@
 
   function getRowForVariant(id) {
     if (id === "ratesTotal") return document.getElementById("ratesTotal");
-    return document.querySelector(`.results-row[data-variant="${id}"]`);
+    return getResultRow(id);
   }
 
   /* ==================================================
@@ -3346,19 +3368,11 @@
      zawsze odpowiadają kwotom pokazanym w wynikach.
   ================================================== */
   function formatNumberPL(value) {
-    return (
-      new Intl.NumberFormat("pl-PL", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value) + " zł"
-    );
+    return AMOUNT_FORMAT.format(value) + " zł";
   }
 
   function formatAmountPL(value) {
-    return new Intl.NumberFormat("pl-PL", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
+    return AMOUNT_FORMAT.format(value);
   }
 
   function formatPercentPL(value) {
